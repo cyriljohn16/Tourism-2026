@@ -1,0 +1,565 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Register Room</title>
+    <style>
+        /* Basic styling for better appearance */
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+            background-color: #f4f7fc;
+        }
+        h1 {
+            color: #333;
+        }
+        ul {
+            list-style-type: none;
+            padding: 0;
+        }
+        li {
+            padding: 8px;
+            border-bottom: 1px solid #ddd;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .no-rooms {
+            color: #666;
+            font-style: italic;
+        }
+        .register-btn {
+            padding: 5px 10px;
+            background-color: #28a745;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-right: 5px;
+        }
+        .register-btn:hover {
+            background-color: #218838;
+        }
+        .delete-btn {
+            padding: 5px 10px;
+            background-color: #dc3545;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .delete-btn:hover {
+            background-color: #c82333;
+        }
+        /* Modal styles for guest registration */
+        .modal {
+            display: none; 
+            position: fixed; 
+            z-index: 2; 
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            overflow: auto;
+            background-color: rgba(0,0,0,0.4);
+        }
+        .modal-content {
+            background-color: #fefefe;
+            margin: 10% auto;
+            padding: 20px;
+            border: 1px solid #888;
+            width: 350px;
+            border-radius: 8px;
+            position: relative;
+            text-align: left;
+        }
+        .close-button {
+            position: absolute;
+            top: 10px;
+            right: 15px;
+            color: #aaa;
+            font-size: 28px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+        .close-button:hover {
+            color: black;
+        }
+        .add-room-btn {
+            margin-top: 20px;
+            padding: 10px 20px;
+            background-color: #007BFF;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            display: block;
+        }
+        .add-room-btn:hover {
+            background-color: #0056b3;
+        }
+        input[type="date"],
+        input[type="number"],
+        input[type="text"] {
+            width: 95%;
+            padding: 8px;
+            margin: 8px 0;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+        label {
+            font-weight: bold;
+        }
+        .back-btn {
+            padding: 8px 15px;
+            background-color: #6c757d;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-bottom: 20px;
+        }
+        .back-btn:hover {
+            background-color: #5a6268;
+        }
+        .error-message {
+            color: #dc3545;
+            font-size: 14px;
+            margin-top: 5px;
+            display: none;
+        }
+        .date-error {
+            border-color: #dc3545 !important;
+        }
+    </style>
+</head>
+<body>
+       <!-- Back Button -->
+       <a href="{% url 'admin_app:accommodation_dashboard' %}">
+        <button class="back-btn">Back</button>
+    </a>
+    <h1>Registered Rooms</h1>
+    {% if hotel_rooms %}
+        <ul id="roomsList">
+            {% for room in hotel_rooms %}
+                <li>
+                    <span>Room: {{ room.room_name }} - Capacity: {{ room.person_limit }} - Available: {{ room.current_availability }}</span>
+                    <div>
+                        <!-- Register button with a data attribute holding the room id -->
+                        <button class="register-btn" data-room-id="{{ room.room_id }}">Register</button>
+                        <!-- Delete button -->
+                        <button class="delete-btn" data-room-id="{{ room.room_id }}">Delete</button>
+                    </div>
+                </li>
+            {% endfor %}
+        </ul>
+    {% else %}
+        <p class="no-rooms" id="noRoomsMsg">No rooms have been registered yet.</p>
+    {% endif %}
+
+    <!-- Button to open the "Add Room" modal (existing functionality) -->
+    <button class="add-room-btn" id="openAddRoomModalBtn">Add Room</button>
+    <!-- Add Room Modal (existing) -->
+    <div id="addRoomModal" class="modal">
+        <div class="modal-content">
+            <span class="close-button" id="closeAddRoomModalBtn">&times;</span>
+            <h2>Add New Room</h2>
+            <form id="addRoomForm" method="post">
+                {% csrf_token %}
+                <label for="roomName">Room Name:</label><br>
+                <input type="text" id="roomName" name="room_name" placeholder="Enter room name" required>
+                <br>
+                <button type="submit" class="add-room-btn">Add Room</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Register Guest Modal -->
+    <div id="registerGuestModal" class="modal">
+        <div class="modal-content">
+            <span class="close-button" id="closeRegisterModalBtn">&times;</span>
+            <h2>Register Guest for Room</h2>
+            <div id="entriesCounter" style="margin-bottom: 15px; color: #28a745; display: none;"></div>
+            <form id="registerGuestForm" method="post">
+                {% csrf_token %}
+                <!-- Hidden field for room id -->
+                <input type="hidden" id="regRoomId" name="room_id">
+                
+                <label for="checkedIn">Checked In:</label>
+                <input type="date" id="checkedIn" name="checked_in" required>
+                <div id="checkedInError" class="error-message">Please select a check-in date</div>
+                
+                <label for="checkedOut">Checked Out:</label>
+                <input type="date" id="checkedOut" name="checked_out" required>
+                <div id="checkedOutError" class="error-message">Please select a check-out date</div>
+                
+                <label for="nights">No. of Nights:</label>
+                <input type="number" id="nights" name="no_of_nights" readonly placeholder="Auto-calculated" required>
+                <div id="nightsError" class="error-message">Nights will be calculated automatically</div>
+
+                <label for="numGuests">Number of Guests:</label>
+                <input type="number" id="numGuests" name="num_guests" placeholder="Enter number of guests" required>
+                
+                <label for="regMonth">Month:</label>
+                <select id="regMonth" name="month" required>
+                    <option value="" selected disabled>--Select Month--</option>
+                    <option value="January">January</option>
+                    <option value="February">February</option>
+                    <option value="March">March</option>
+                    <option value="April">April</option>
+                    <option value="May">May</option>
+                    <option value="June">June</option>
+                    <option value="July">July</option>
+                    <option value="August">August</option>
+                    <option value="September">September</option>
+                    <option value="October">October</option>
+                    <option value="November">November</option>
+                    <option value="December">December</option>
+                </select>
+                <div style="display: flex; justify-content: space-between; margin-top: 15px;">
+                    <button type="submit" class="add-room-btn">Submit Registration</button>
+                    <button type="button" id="addAnotherEntryBtn" class="add-room-btn" style="background-color: #5cb85c;">Add Another Entry</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Include jQuery -->
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    
+    <!-- Include CSRF Token Setup for AJAX POST -->
+    <script>
+        function getCookie(name) {
+            let cookieValue = null;
+            if (document.cookie && document.cookie !== '') {
+                let cookies = document.cookie.split(';');
+                for (let i = 0; i < cookies.length; i++) {
+                    let cookie = cookies[i].trim();
+                    // Does this cookie string begin with the name we want?
+                    if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                        cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                        break;
+                    }
+                }
+            }
+            return cookieValue;
+        }
+
+        // Set up jQuery AJAX to include the CSRF token in the header.
+        $.ajaxSetup({
+            beforeSend: function(xhr, settings) {
+                if (!(/^http:.*/.test(settings.url) || /^https:.*/.test(settings.url))) {
+                    // Only send the token to relative URLs i.e. locally.
+                    xhr.setRequestHeader("X-CSRFToken", getCookie('csrftoken'));
+                }
+            }
+        });
+    </script>
+    
+    <script>
+        // Existing Add Room modal logic
+        var addRoomModal = document.getElementById("addRoomModal");
+        var openAddRoomModalBtn = document.getElementById("openAddRoomModalBtn");
+        var closeAddRoomModalBtn = document.getElementById("closeAddRoomModalBtn");
+
+        openAddRoomModalBtn.onclick = function() {
+            addRoomModal.style.display = "block";
+        };
+        closeAddRoomModalBtn.onclick = function() {
+            addRoomModal.style.display = "none";
+        };
+        window.onclick = function(event) {
+            if (event.target == addRoomModal) {
+                addRoomModal.style.display = "none";
+            }
+            if (event.target == registerGuestModal) {
+                registerGuestModal.style.display = "none";
+            }
+        };
+
+        // Handle the add room form submission via AJAX.
+        $("#addRoomForm").submit(function(e) {
+            e.preventDefault();
+            var roomName = $("#roomName").val();
+            $.ajax({
+                type: "POST",
+                url: "{% url 'accom_app:add_room_ajax' %}",
+                data: {
+                    csrfmiddlewaretoken: "{{ csrf_token }}",
+                    room_name: roomName
+                },
+                success: function(response) {
+                    if(response.status === "success") {
+                        var newRoomHTML = "<li>" +
+                            "<span>Room: " + response.room_name + " - Capacity: " + response.person_limit + " - Available: " + response.person_limit + "</span>" +
+                            "<div>" +
+                            "<button class='register-btn' data-room-id='" + response.room_id + "'>Register</button> " +
+                            "<button class='delete-btn' data-room-id='" + response.room_id + "'>Delete</button>" +
+                            "</div>" +
+                            "</li>";
+                        if($("#roomsList").length) {
+                            $("#roomsList").append(newRoomHTML);
+                        } else {
+                            $("#noRoomsMsg").remove();
+                            $("body").append("<ul id='roomsList'>" + newRoomHTML + "</ul>");
+                        }
+                        addRoomModal.style.display = "none";
+                        $("#roomName").val(""); // Clear input field
+                    } else {
+                        alert("Error: " + response.message);
+                    }
+                },
+                error: function(xhr, status, error) {
+                    alert("An error occurred: " + error);
+                }
+            });
+        });
+        
+        // Handle room deletion via AJAX
+        $(document).on("click", ".delete-btn", function() {
+            var roomId = $(this).data("room-id");
+            if(confirm("Are you sure you want to delete this room? This will also delete all guest registrations for this room.")) {
+                $.ajax({
+                    type: "POST",
+                    url: "{% url 'accom_app:delete_room_ajax' %}",
+                    data: {
+                        csrfmiddlewaretoken: "{{ csrf_token }}",
+                        room_id: roomId
+                    },
+                    success: function(response) {
+                        if(response.status === "success") {
+                            // Remove the room from the list
+                            $(".delete-btn[data-room-id='" + roomId + "']").closest("li").remove();
+                            
+                            // If no rooms left, show the no rooms message
+                            if($("#roomsList li").length === 0) {
+                                $("#roomsList").after("<p class='no-rooms' id='noRoomsMsg'>No rooms have been registered yet.</p>");
+                                $("#roomsList").remove();
+                            }
+                            
+                            alert("Room deleted successfully!");
+                        } else {
+                            alert("Error: " + response.message);
+                        }
+                    },
+                    error: function(xhr, status, error) {
+                        alert("An error occurred: " + error);
+                    }
+                });
+            }
+        });
+
+        // --- Register Guest Modal Logic ---
+        var registerGuestModal = document.getElementById("registerGuestModal");
+        var closeRegisterModalBtn = document.getElementById("closeRegisterModalBtn");
+        var entriesAdded = 0; // Track entries added in current session
+
+        // When any "Register" button is clicked, open the guest registration modal.
+        $(document).on("click", ".register-btn", function() {
+            var roomId = $(this).data("room-id");
+            $("#regRoomId").val(roomId);  // Set the hidden input field with room id.
+            
+            // Reset form and errors
+            $("#registerGuestForm")[0].reset();
+            $(".error-message").hide();
+            $("input").removeClass("date-error");
+            
+            // Do not set default dates - leave them blank
+            $("#checkedIn").val("");
+            $("#checkedOut").val("");
+            
+            // Clear nights calculation
+            $("#nights").val("");
+            
+            // Set current month as default
+            var today = new Date();
+            var currentMonth = [
+                "January", "February", "March", "April", "May", "June", 
+                "July", "August", "September", "October", "November", "December"
+            ][today.getMonth()];
+            $("#regMonth").val(currentMonth);
+            
+            // Reset entries counter for new session
+            entriesAdded = 0;
+            $("#entriesCounter").hide();
+            
+            registerGuestModal.style.display = "block";
+        });
+
+        closeRegisterModalBtn.onclick = function() {
+            registerGuestModal.style.display = "none";
+        };
+
+        // Validate both dates whenever either date changes
+        function validateDates() {
+            var checkInVal = $("#checkedIn").val();
+            var checkOutVal = $("#checkedOut").val();
+            
+            // Reset validation UI
+            $("#checkedIn, #checkedOut").removeClass("date-error");
+            $("#checkedInError, #checkedOutError, #nightsError").hide();
+            
+            // If either date is missing, clear nights field and return
+            if (!checkInVal || !checkOutVal) {
+                $("#nights").val("");
+                return true;
+            }
+            
+            var checkInDate = new Date(checkInVal);
+            var checkOutDate = new Date(checkOutVal);
+            
+            // Calculate nights between dates
+            var timeDiff = checkOutDate - checkInDate;
+            var nightCount = Math.floor(timeDiff / (1000 * 3600 * 24));
+            
+            // Set the nights value
+            $("#nights").val(nightCount);
+            
+            return true;
+        }
+
+        // Auto-calculate number of nights when dates change
+        $("#checkedIn, #checkedOut").change(validateDates);
+
+        // Handle the "Add Another Entry" button click
+        $("#addAnotherEntryBtn").click(function() {
+            // Make sure all required fields are filled
+            var checkInVal = $("#checkedIn").val();
+            var checkOutVal = $("#checkedOut").val();
+            var numGuests = parseInt($("#numGuests").val());
+            var month = $("#regMonth").val();
+            
+            // Reset error messages
+            $(".error-message").hide();
+            
+            // Validate fields
+            var isValid = true;
+            
+            if (!checkInVal) {
+                $("#checkedInError").text("Please select a check-in date").show();
+                isValid = false;
+            }
+            
+            if (!checkOutVal) {
+                $("#checkedOutError").text("Please select a check-out date").show();
+                isValid = false;
+            }
+            
+            if (!numGuests || numGuests < 1) {
+                $("#numGuestsError").text("Number of guests must be at least 1").show();
+                isValid = false;
+            }
+            
+            if (!month) {
+                isValid = false;
+            }
+            
+            if (!isValid) {
+                return false;
+            }
+            
+            // Run validateDates to ensure nights is calculated
+            validateDates();
+            
+            // If validation passes, submit the form via AJAX but keep modal open
+            $.ajax({
+                type: "POST",
+                url: "{% url 'accom_app:register_room_guest_ajax' %}",
+                data: $("#registerGuestForm").serialize(),
+                success: function(response) {
+                    if(response.status === "success") {
+                        // Increment the entries counter
+                        entriesAdded++;
+                        $("#entriesCounter").text("Entries added in this session: " + entriesAdded).show();
+                        
+                        alert("Guest registration added successfully! You can add another entry or close the form.");
+                        
+                        // Clear form for next entry but keep room_id and month
+                        var roomId = $("#regRoomId").val();
+                        var currentMonth = $("#regMonth").val();
+                        
+                        // Reset form and errors
+                        $("#registerGuestForm")[0].reset();
+                        $(".error-message").hide();
+                        $("input").removeClass("date-error");
+                        
+                        // Restore room_id and month
+                        $("#regRoomId").val(roomId);
+                        $("#regMonth").val(currentMonth);
+                        
+                        // Clear dates and nights
+                        $("#checkedIn").val("");
+                        $("#checkedOut").val("");
+                        $("#nights").val("");
+                    } else {
+                        alert("Error: " + response.message);
+                    }
+                },
+                error: function(xhr, status, error) {
+                    var errorMsg = "An error occurred";
+                    if (xhr.responseJSON && xhr.responseJSON.message) {
+                        errorMsg = xhr.responseJSON.message;
+                    }
+                    alert("Error: " + errorMsg);
+                }
+            });
+        });
+
+        // Handle the register guest form submission via AJAX.
+        $("#registerGuestForm").submit(function(e) {
+            e.preventDefault();
+            
+            // Make sure both dates are provided
+            var checkInVal = $("#checkedIn").val();
+            var checkOutVal = $("#checkedOut").val();
+            
+            if (!checkInVal) {
+                $("#checkedInError").text("Please select a check-in date").show();
+                return false;
+            }
+            
+            if (!checkOutVal) {
+                $("#checkedOutError").text("Please select a check-out date").show();
+                return false;
+            }
+            
+            // Run validateDates to calculate nights
+            validateDates();
+            
+            // Validate number of guests
+            var numGuests = parseInt($("#numGuests").val());
+            if (!numGuests || numGuests < 1) {
+                $("#numGuestsError").text("Number of guests must be at least 1").show();
+                return false;
+            }
+            
+            // If all validation passes, submit the form
+            $.ajax({
+                type: "POST",
+                url: "{% url 'accom_app:register_room_guest_ajax' %}",
+                data: $(this).serialize(),
+                success: function(response) {
+                    if(response.status === "success") {
+                        // Increment the entries counter before closing
+                        entriesAdded++;
+                        
+                        alert("Guest registration added successfully!");
+                        registerGuestModal.style.display = "none";
+                        $("#registerGuestForm")[0].reset();
+                    } else {
+                        alert("Error: " + response.message);
+                    }
+                },
+                error: function(xhr, status, error) {
+                    var errorMsg = "An error occurred";
+                    if (xhr.responseJSON && xhr.responseJSON.message) {
+                        errorMsg = xhr.responseJSON.message;
+                    }
+                    alert("Error: " + errorMsg);
+                }
+            });
+        });
+    </script>
+</body>
+</html>

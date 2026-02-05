@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+{% load static %}
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Employee Registration</title>
+    <style>
+        :root {
+            /* Brand Colors */
+            --primary-color: #875a34;    /* Main brand color */
+            --primary-light: #e99c59;   /* Lighter version for accents */
+            --primary-dark: #6d4827;    /* Darker version for hover states */
+            --secondary-color: #8c6e5d; /* Secondary brand color */
+            
+            /* Status Colors */
+            --success-color: #34a853;   /* Green for success states */
+            --warning-color: #fbbc05;   /* Yellow for warnings */
+            --error-color: #ea4335;     /* Red for errors */
+            --info-color: #4285f4;      /* Blue for information */
+            
+            /* Neutral Colors */
+            --bg-color: #f4f7fc;        /* Light background */
+            --text-dark: #333;          /* Dark text */
+            --text-medium: #666;        /* Medium text */
+            --text-light: #9e9e9e;      /* Light text */
+            --white: #fff;              /* White */
+        }
+        
+        body {
+            background: var(--bg-color);
+            font-family: 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            color: var(--text-dark);
+        }
+        .container {
+            max-width: 500px;
+            margin: 50px auto;
+            background: var(--white);
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            padding: 20px;
+        }
+        h2 {
+            text-align: center;
+            margin-bottom: 20px;
+            color: var(--text-dark);
+        }
+        form {
+            display: flex;
+            flex-direction: column;
+        }
+        label {
+            margin-top: 10px;
+            font-weight: bold;
+            color: var(--text-dark);
+        }
+        input[type="text"],
+        input[type="email"],
+        input[type="number"],
+        input[type="password"],
+        select {
+            padding: 10px;
+            margin-top: 5px;
+            border: 1px solid var(--text-light);
+            border-radius: 4px;
+            outline: none;
+            font-family: inherit;
+        }
+        input[type="text"]:focus,
+        input[type="email"]:focus,
+        input[type="number"]:focus,
+        input[type="password"]:focus,
+        select:focus {
+            border-color: var(--primary-light);
+            box-shadow: 0 0 0 2px rgba(233, 156, 89, 0.2);
+        }
+        input[type="file"] {
+            margin-top: 8px;
+        }
+        button {
+            margin-top: 20px;
+            padding: 12px 15px;
+            background-color: var(--primary-color);
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: background-color 0.2s;
+        }
+        button:hover {
+            background-color: var(--primary-dark);
+        }
+        p {
+            margin-top: 15px;
+            text-align: center;
+            color: var(--text-medium);
+        }
+        p a {
+            color: var(--primary-color);
+            text-decoration: none;
+        }
+        p a:hover {
+            text-decoration: underline;
+            color: var(--primary-dark);
+        }
+        /* Add some styling for error messages if you want */
+        .errorlist {
+            color: var(--error-color);
+            margin-top: 5px;
+            font-size: 0.9em;
+        }
+        .success-message {
+            color: var(--success-color);
+            text-align: center;
+            padding: 10px;
+            margin-bottom: 15px;
+            background-color: rgba(52, 168, 83, 0.1);
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2>Employee Registration</h2>
+
+        {% if messages %}
+            {% for message in messages %}
+                <div class="success-message">{{ message }}</div>
+            {% endfor %}
+        {% endif %}
+
+        <form method="post" enctype="multipart/form-data">
+            {% csrf_token %}
+
+            <!-- Display form errors at the top if you'd like -->
+            {% if form.non_field_errors %}
+                <div class="errorlist">{{ form.non_field_errors }}</div>
+            {% endif %}
+
+            <!-- FIRST NAME -->
+            <label for="first_name">First Name:</label>
+            {% if form.first_name.errors %}
+                <div class="errorlist">{{ form.first_name.errors }}</div>
+            {% endif %}
+            <input type="text" name="first_name" id="first_name" value="{{ form.first_name.value|default:''  }}" required>
+
+            <!-- LAST NAME -->
+            <label for="last_name">Last Name:</label>
+            {% if form.last_name.errors %}
+                <div class="errorlist">{{ form.last_name.errors }}</div>
+            {% endif %}
+            <input type="text" name="last_name" id="last_name" value="{{ form.last_name.value|default:''  }}" required>
+
+            <!-- MIDDLE NAME -->
+            <label for="middle_name">Middle Name:</label>
+            {% if form.middle_name.errors %}
+                <div class="errorlist">{{ form.middle_name.errors }}</div>
+            {% endif %}
+            <input type="text" name="middle_name" id="middle_name" value="{{ form.middle_name.value|default:''  }}">
+
+            <!-- USERNAME -->
+            <label for="username">Username:</label>
+            {% if form.username.errors %}
+                <div class="errorlist">{{ form.username.errors }}</div>
+            {% endif %}
+            <input type="text" name="username" id="username" value="{% if form.username.value == 'default_username' %} {% else %}{{ form.username.value|default:'' }}{% endif %}" required>
+
+            <!-- AGE -->
+            <label for="age">Age:</label>
+            {% if form.age.errors %}
+                <div class="errorlist">{{ form.age.errors }}</div>
+            {% endif %}
+            <input type="number" name="age" id="age" value="{{ form.age.value|default:''  }}" required>
+
+            <!-- PHONE NUMBER -->
+            <label for="phone_number">Phone Number:</label>
+            {% if form.phone_number.errors %}
+                <div class="errorlist">{{ form.phone_number.errors }}</div>
+            {% endif %}
+            <input type="text" name="phone_number" id="phone_number" value="{{ form.phone_number.value|default:''  }}" required>
+
+            <!-- EMAIL -->
+            <label for="email">Email:</label>
+            {% if form.email.errors %}
+                <div class="errorlist">{{ form.email.errors }}</div>
+            {% endif %}
+            <input type="email" name="email" id="email" value="{{ form.email.value|default:''  }}" required>
+
+            <!-- SEX -->
+            <label for="sex">Sex:</label>
+            {% if form.sex.errors %}
+                <div class="errorlist">{{ form.sex.errors }}</div>
+            {% endif %}
+            <select name="sex" id="sex" required>
+                <option value="">-- Select --</option>
+                <option value="M" {% if form.sex.value == 'M' %} selected {% endif %}>Male</option>
+                <option value="F" {% if form.sex.value == 'F' %} selected {% endif %}>Female</option>
+            </select>
+
+            <!-- PROFILE PICTURE -->
+            <label for="profile_picture">Profile Picture:</label>
+            {% if form.profile_picture.errors %}
+                <div class="errorlist">{{ form.profile_picture.errors }}</div>
+            {% endif %}
+            <input type="file" name="profile_picture" id="profile_picture" accept="image/*">
+
+            <!-- PASSWORD1 -->
+            <label for="password1">Password:</label>
+            {% if form.password1.errors %}
+                <div class="errorlist">{{ form.password1.errors }}</div>
+            {% endif %}
+            <input type="password" name="password1" id="password1" required>
+
+            <!-- PASSWORD2 -->
+            <label for="password2">Confirm Password:</label>
+            {% if form.password2.errors %}
+                <div class="errorlist">{{ form.password2.errors }}</div>
+            {% endif %}
+            <input type="password" name="password2" id="password2" required>
+
+            <button type="submit">Register</button>
+        </form>
+
+        <p>Already registered? <a href="{% url 'admin_app:login' %}">Login here</a>.</p>
+    </div>
+</body>
+</html>

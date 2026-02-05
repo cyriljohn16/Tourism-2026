@@ -1,0 +1,1054 @@
+<!DOCTYPE html>
+{% load static %}
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Employee Dashboard</title>
+  <link rel="stylesheet" href="{% static 'css/navigation.css' %}">
+  <style>
+      body { 
+        font-family: 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+        background-color: #f4f7fc;
+        margin: 0;
+        padding: 0;
+        color: #333;
+        line-height: 1.5;
+      }
+      .dashboard-container { display: flex; min-height: 100vh; }
+      .content { 
+        flex: 1; 
+        padding: 32px; 
+        box-sizing: border-box;
+      }
+      .container { 
+        background: #fff; 
+        padding: 30px; 
+        border-radius: 12px; 
+        box-shadow: 0 8px 24px rgba(0,0,0,0.05);
+        transition: transform 0.3s ease, box-shadow 0.3s ease;
+      }
+      .container:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 12px 28px rgba(0,0,0,0.08);
+      }
+      h1 { 
+        color: #333; 
+        margin-bottom: 20px; 
+        position: relative;
+        display: inline-block;
+      }
+      h1:after {
+        content: '';
+        position: absolute;
+        width: 40%;
+        height: 3px;
+        background: linear-gradient(90deg, #8c6e5d, #e99c59);
+        bottom: -8px;
+        left: 0;
+        border-radius: 2px;
+      }
+      h2 { 
+        color: #333; 
+        font-size: 18px; 
+        margin: 20px 0 15px; 
+        padding-bottom: 10px;
+        border-bottom: 1px solid #eee;
+      }
+
+      .assigned-tours-container {
+        display: flex;
+        flex-direction: column;
+        gap: 20px;
+      }
+      
+      .tour-card {
+        background-color: white;
+        border-radius: 16px;
+        padding: 24px;
+        display: flex;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+        transition: all 0.3s ease;
+        border-left: 4px solid #8c6e5d;
+        overflow: hidden;
+        position: relative;
+      }
+      
+      .tour-card:hover {
+        transform: translateY(-6px);
+        box-shadow: 0 10px 25px rgba(0,0,0,0.08);
+      }
+      
+      .tour-card:after {
+        content: '';
+        position: absolute;
+        top: 0;
+        right: 0;
+        width: 100px;
+        height: 100%;
+        background: linear-gradient(90deg, rgba(255,255,255,0), rgba(233, 156, 89, 0.03));
+        z-index: 1;
+      }
+      
+      .tour-left-info {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        padding-right: 24px;
+        border-right: 1px solid #eee;
+        min-width: 170px;
+        width: 170px;
+        position: relative;
+        z-index: 2;
+      }
+      
+      .tour-name-number {
+        font-weight: bold;
+        font-size: 20px;
+        color: #333;
+        transition: color 0.3s ease;
+      }
+      
+      .tour-card:hover .tour-name-number {
+        color: #8c6e5d;
+      }
+      
+      .tour-day-indicator {
+        background: linear-gradient(135deg, #e99c59, #d4804c);
+        color: white;
+        padding: 5px 12px;
+        border-radius: 30px;
+        font-size: 14px;
+        font-weight: bold;
+        display: inline-block;
+        margin-top: 5px;
+        margin-bottom: 5px;
+        box-shadow: 0 2px 8px rgba(233, 156, 89, 0.3);
+        animation: pulse 3s infinite;
+      }
+      
+      @keyframes pulse {
+        0% { box-shadow: 0 0 0 0 rgba(233, 156, 89, 0.4); }
+        70% { box-shadow: 0 0 0 10px rgba(233, 156, 89, 0); }
+        100% { box-shadow: 0 0 0 0 rgba(233, 156, 89, 0); }
+      }
+      
+      .day-number {
+        font-weight: bold;
+      }
+      
+      .tour-capacity,
+      .tour-date {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        font-size: 14px;
+        color: #666;
+        transition: transform 0.3s ease;
+      }
+      
+      .tour-card:hover .tour-capacity,
+      .tour-card:hover .tour-date {
+        transform: translateX(5px);
+      }
+      
+      .person-icon, .calendar-icon {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 24px;
+        height: 24px;
+        background-color: #f5f0ed;
+        border-radius: 50%;
+        color: #8c6e5d;
+      }
+      
+      .view-itinerary-btn {
+        background-color: #8c6e5d;
+        color: white;
+        border: none;
+        padding: 8px 16px;
+        border-radius: 30px;
+        cursor: pointer;
+        font-size: 14px;
+        font-weight: 500;
+        transition: all 0.3s ease;
+        margin-top: 8px;
+        box-shadow: 0 2px 5px rgba(140, 110, 93, 0.2);
+        position: relative;
+        overflow: hidden;
+      }
+      
+      .view-itinerary-btn:hover {
+        background-color: #755c4c;
+        box-shadow: 0 4px 10px rgba(140, 110, 93, 0.3);
+        transform: translateY(-2px);
+      }
+      
+      .view-itinerary-btn:after {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: -100%;
+        width: 100%;
+        height: 100%;
+        background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
+        transition: 0.4s;
+      }
+      
+      .view-itinerary-btn:hover:after {
+        left: 100%;
+      }
+      
+      .tour-timeline {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding-left: 24px;
+        flex: 1;
+        position: relative;
+        z-index: 2;
+      }
+      
+      .timeline-item {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 8px;
+        min-width: 100px;
+        position: relative;
+        z-index: 3;
+        transition: transform 0.3s ease;
+      }
+      
+      .tour-card:hover .timeline-item {
+        transform: translateY(-3px);
+      }
+      
+      .time-label {
+        font-weight: bold;
+        color: #333;
+        background-color: #f5f0ed;
+        padding: 4px 10px;
+        border-radius: 15px;
+        font-size: 13px;
+      }
+      
+      .location {
+        color: #666;
+        font-size: 13px;
+      }
+      
+      .timeline-progress {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        padding: 0 20px;
+        position: relative;
+      }
+      
+      .timeline-line {
+        height: 3px;
+        background-color: #e0e0e0;
+        width: 100%;
+        position: relative;
+        border-radius: 3px;
+      }
+      
+      .timeline-progress-fill {
+        position: absolute;
+        top: 0;
+        left: 0;
+        height: 3px;
+        background: linear-gradient(90deg, #8c6e5d, #e99c59);
+        transition: width 1s ease;
+        z-index: 1;
+        border-radius: 3px;
+      }
+      
+      .timeline-marker {
+        position: absolute;
+        top: -9px;
+        width: 20px;
+        height: 20px;
+        border-radius: 50%;
+        background-color: #8c6e5d;
+        cursor: pointer;
+        z-index: 3;
+        transition: all 0.5s ease;
+        box-shadow: 0 0 0 4px rgba(140, 110, 93, 0.1);
+      }
+      
+      .timeline-marker:hover {
+        transform: scale(1.2);
+        box-shadow: 0 0 0 6px rgba(140, 110, 93, 0.15);
+      }
+      
+      .employee-progress {
+        position: absolute;
+        top: -9px;
+        width: 20px;
+        height: 20px;
+        border-radius: 50%;
+        background-color: #e6ccb2;
+        cursor: pointer;
+        z-index: 2;
+        transition: all 0.5s ease;
+        box-shadow: 0 0 0 4px rgba(230, 204, 178, 0.2);
+      }
+      
+      .employee-progress:hover {
+        transform: scale(1.2);
+        box-shadow: 0 0 0 6px rgba(230, 204, 178, 0.25);
+      }
+      
+      .timeline-text {
+        margin-top: 16px;
+        font-size: 13px;
+        color: #666;
+        text-align: center;
+        background-color: #f9f9f9;
+        padding: 5px 10px;
+        border-radius: 15px;
+        transition: all 0.3s ease;
+        border: 1px solid #eee;
+      }
+      
+      .tour-card:hover .timeline-text {
+        background-color: #f5f0ed;
+        border-color: #e6ccb2;
+      }
+      
+      .modal {
+        display: none;
+        position: fixed;
+        z-index: 1000;
+        left: 0;
+        top: 0;
+        width: 100%;
+        height: 100%;
+        overflow: auto;
+        background-color: rgba(0,0,0,0.4);
+        animation: fadeIn 0.3s;
+      }
+      
+      .modal-content {
+        background-color: #fefefe;
+        margin: 5vh auto;
+        padding: 25px;
+        border-radius: 12px;
+        box-shadow: 0 4px 30px rgba(0,0,0,0.15);
+        width: 80%;
+        max-width: 800px;
+        max-height: 90vh;
+        overflow-y: auto;
+        animation: slideDown 0.3s;
+        border-top: 5px solid #8c6e5d;
+      }
+      
+      .modal-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        border-bottom: 1px solid #eee;
+        padding-bottom: 15px;
+        margin-bottom: 20px;
+      }
+      
+      .modal-header h2 {
+        margin: 0;
+        color: #333;
+        font-size: 24px;
+        border: none;
+        padding: 0;
+      }
+      
+      .close-modal {
+        color: #aaa;
+        font-size: 28px;
+        font-weight: bold;
+        cursor: pointer;
+        transition: color 0.2s ease;
+      }
+      
+      .close-modal:hover {
+        color: #333;
+      }
+      
+      .itinerary-days {
+        display: flex;
+        gap: 10px;
+        margin-bottom: 20px;
+        flex-wrap: wrap;
+      }
+      
+      .day-btn {
+        background-color: #f5f5f5;
+        border: none;
+        padding: 10px 18px;
+        border-radius: 30px;
+        cursor: pointer;
+        font-weight: 500;
+        transition: all 0.3s ease;
+        box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+      }
+      
+      .day-btn:hover {
+        background-color: #e6e6e6;
+        transform: translateY(-2px);
+        box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+      }
+      
+      .day-btn.active {
+        background: linear-gradient(135deg, #8c6e5d, #a58778);
+        color: white;
+        box-shadow: 0 4px 10px rgba(140, 110, 93, 0.3);
+      }
+      
+      .itinerary-list {
+        display: flex;
+        flex-direction: column;
+        gap: 15px;
+      }
+      
+      .itinerary-item {
+        display: flex;
+        padding: 18px;
+        border-radius: 12px;
+        background-color: #f9f9f9;
+        position: relative;
+        transition: all 0.3s ease;
+        border-left: 3px solid transparent;
+      }
+      
+      .itinerary-item:hover {
+        background-color: #f5f0ed;
+        transform: translateX(5px);
+        box-shadow: 0 4px 10px rgba(0,0,0,0.05);
+      }
+      
+      .itinerary-item.completed {
+        background-color: #f0f7f0;
+        border-left: 4px solid #8c6e5d;
+      }
+      
+      .itinerary-time {
+        min-width: 80px;
+        font-weight: bold;
+        color: #333;
+        background-color: #f5f0ed;
+        padding: 5px 10px;
+        border-radius: 20px;
+        text-align: center;
+        font-size: 13px;
+        margin-right: 10px;
+        box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+      }
+      
+      .itinerary-content {
+        flex: 1;
+        padding: 0 15px;
+      }
+      
+      .itinerary-event {
+        font-weight: bold;
+        margin-bottom: 5px;
+        color: #555;
+        font-size: 16px;
+        transition: color 0.3s ease;
+      }
+      
+      .itinerary-item:hover .itinerary-event {
+        color: #8c6e5d;
+      }
+      
+      .itinerary-details {
+        color: #666;
+        font-size: 14px;
+        line-height: 1.5;
+      }
+      
+      .itinerary-checkmark {
+        position: absolute;
+        top: 15px;
+        right: 15px;
+      }
+      
+      .checkbox-container {
+        display: inline-block;
+        position: relative;
+        padding-left: 30px;
+        cursor: pointer;
+        font-size: 16px;
+        user-select: none;
+      }
+      
+      .checkbox-container input {
+        position: absolute;
+        opacity: 0;
+        cursor: pointer;
+        height: 0;
+        width: 0;
+      }
+      
+      .checkmark {
+        position: absolute;
+        top: 0;
+        left: 0;
+        height: 22px;
+        width: 22px;
+        background-color: #fff;
+        border: 2px solid #8c6e5d;
+        border-radius: 4px;
+        transition: all 0.2s ease;
+      }
+      
+      .checkbox-container:hover input ~ .checkmark {
+        background-color: #f0f0f0;
+        transform: scale(1.05);
+      }
+      
+      .checkbox-container input:checked ~ .checkmark {
+        background-color: #8c6e5d;
+      }
+      
+      .checkmark:after {
+        content: "";
+        position: absolute;
+        display: none;
+        animation: checkmark 0.2s ease forwards;
+      }
+      
+      @keyframes checkmark {
+        0% {
+          opacity: 0;
+          transform: scale(0);
+        }
+        100% {
+          opacity: 1;
+          transform: scale(1);
+        }
+      }
+      
+      .checkbox-container input:checked ~ .checkmark:after {
+        display: block;
+      }
+      
+      .checkbox-container .checkmark:after {
+        left: 7px;
+        top: 3px;
+        width: 5px;
+        height: 10px;
+        border: solid white;
+        border-width: 0 2px 2px 0;
+        transform: rotate(45deg);
+      }
+      
+      .no-tours-message {
+        text-align: center;
+        padding: 40px;
+        background-color: #f9f9f9;
+        border-radius: 12px;
+        color: #666;
+        font-size: 16px;
+        border: 1px dashed #ddd;
+        margin: 20px 0;
+      }
+      
+      /* Progress Summary Styles */
+      .progress-summary {
+        margin-bottom: 25px;
+        padding: 20px;
+        background-color: #f9f9f9;
+        border-radius: 12px;
+        border: 1px solid #eee;
+        transition: all 0.3s ease;
+      }
+      
+      .progress-summary:hover {
+        background-color: #f5f0ed;
+        border-color: #e6ccb2;
+        transform: translateY(-3px);
+        box-shadow: 0 5px 15px rgba(0,0,0,0.05);
+      }
+      
+      .progress-bar-container {
+        margin-top: 15px;
+      }
+      
+      .progress-bar-outer {
+        width: 100%;
+        height: 14px;
+        background-color: #e0e0e0;
+        border-radius: 7px;
+        overflow: hidden;
+        box-shadow: inset 0 1px 3px rgba(0,0,0,0.1);
+      }
+      
+      .progress-bar-inner {
+        height: 100%;
+        background: linear-gradient(90deg, #8c6e5d, #e99c59);
+        border-radius: 7px;
+        transition: width 0.8s cubic-bezier(0.22, 1, 0.36, 1);
+        box-shadow: 0 1px 5px rgba(140, 110, 93, 0.3);
+      }
+      
+      .progress-percentage-label {
+        text-align: center;
+        font-size: 16px;
+        margin-top: 12px;
+        font-weight: 500;
+        color: #8c6e5d;
+        transition: transform 0.3s ease;
+      }
+      
+      .progress-summary:hover .progress-percentage-label {
+        transform: scale(1.05);
+      }
+      
+      .error-message {
+        background-color: #f8d7da;
+        color: #721c24;
+        padding: 20px;
+        border-radius: 10px;
+        margin: 20px 0;
+        text-align: center;
+        border: 1px solid #f5c6cb;
+        box-shadow: 0 3px 10px rgba(0,0,0,0.05);
+      }
+      
+      .error-message p {
+        margin: 10px 0;
+      }
+      
+      .progress-percentage {
+        position: absolute;
+        top: -24px;
+        left: 50%;
+        transform: translateX(-50%);
+        font-size: 11px;
+        font-weight: bold;
+        color: #fff;
+        background-color: #8c6e5d;
+        padding: 3px 8px;
+        border-radius: 10px;
+        box-shadow: 0 3px 6px rgba(0,0,0,0.1);
+        white-space: nowrap;
+        opacity: 0;
+        transition: opacity 0.3s ease, transform 0.3s ease;
+      }
+      
+      .employee-progress:hover .progress-percentage {
+        opacity: 1;
+        transform: translateX(-50%) translateY(-5px);
+      }
+      
+      @keyframes fadeIn {
+        from {opacity: 0;}
+        to {opacity: 1;}
+      }
+      
+      @keyframes slideDown {
+        from {transform: translateY(-50px); opacity: 0;}
+        to {transform: translateY(0); opacity: 1;}
+      }
+      
+      @media (max-width: 768px) {
+        .tour-card {
+          flex-direction: column;
+        }
+        
+        .tour-left-info {
+          border-right: none;
+          border-bottom: 1px solid #eee;
+          width: 100%;
+          padding-bottom: 15px;
+          margin-bottom: 15px;
+          min-width: 100%;
+        }
+        
+        .tour-timeline {
+          padding-left: 0;
+        }
+      }
+  </style>
+</head>
+<body>
+  <div class="dashboard-container">
+    <div class="navigation">
+      {% include 'components/employee_navigation.html' %}
+    </div>
+    <div class="content">
+      <div class="container">
+        <h1>Welcome to Employee Dashboard</h1>
+        <p>View and manage your assigned tours.</p>
+        
+        <h2>Your Assigned Tours</h2>
+        <div class="assigned-tours-container">
+          {% for assignment in assignments %}
+          <div class="tour-card" data-assignment-id="{{ assignment.id }}" data-tour-id="{{ assignment.schedule.sched_id }}">
+            <div class="tour-left-info">
+              <div class="tour-name-number">{{ assignment.schedule.tour.tour_name }}</div>
+              <div class="tour-day-indicator">
+                Day <span class="day-number" id="day-number-{{ assignment.schedule.sched_id }}">1</span>
+              </div>
+              <div class="tour-capacity">
+                <span class="person-icon">👥</span>
+                <span class="capacity-text">{{ assignment.schedule.slots_booked }}/{% with total_slots=assignment.schedule.slots_booked|add:assignment.schedule.slots_available %}{{ total_slots }}{% endwith %} slots</span>
+              </div>
+              <div class="tour-date">
+                <span class="calendar-icon">📅</span>
+                <span class="date-text"><strong>Start:</strong> {{ assignment.schedule.start_time|date:"F d, Y" }}</span>
+              </div>
+              <div class="tour-date">
+                <span class="calendar-icon">🏁</span>
+                <span class="date-text"><strong>End:</strong> {{ assignment.schedule.end_time|date:"F d, Y" }}</span>
+              </div>
+              <button class="view-itinerary-btn" data-tour-id="{{ assignment.schedule.sched_id }}">View Itinerary</button>
+            </div>
+            
+            <div class="tour-timeline">
+              <div class="timeline-item">
+                <div class="time-label">{{ assignment.schedule.start_time|time:"h:i A" }}</div>
+                <div class="location">{{ assignment.schedule.start_location|default:"Start" }}</div>
+              </div>
+              
+              <div class="timeline-progress">
+                <div class="timeline-line"></div>
+                <div class="timeline-progress-fill" style="width: 50%;"></div>
+                <div class="timeline-marker" style="left: 50%;" data-tour-id="{{ assignment.schedule.sched_id }}"></div>
+                <div class="employee-progress" style="left: 25%;" data-assignment-id="{{ assignment.id }}" title="Checklist Progress: 0%">
+                  <span class="progress-percentage">0%</span>
+                </div>
+                <div class="timeline-text">{% with duration=assignment.schedule.start_time|timesince:assignment.schedule.end_time %}
+                  Duration: {{ duration }} (Ends: {{ assignment.schedule.end_time|date:"F d, Y" }})
+                {% endwith %}</div>
+              </div>
+              
+              <div class="timeline-item">
+                <div class="time-label">{{ assignment.schedule.end_time|time:"h:i A" }}</div>
+                <div class="location">{{ assignment.schedule.end_location|default:"End" }}</div>
+              </div>
+            </div>
+          </div>
+          {% empty %}
+          <div class="no-tours-message">
+            <p>You have no assigned tours at the moment</p>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+  </div>
+  
+  <!-- Itinerary Modal with Checklist -->
+  <div id="itinerary-modal" class="modal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2 id="itinerary-tour-name">Tour Itinerary</h2>
+        <span class="close-modal" data-modal="itinerary-modal">&times;</span>
+      </div>
+      <div class="modal-body">
+        <div class="progress-summary">
+          <div class="progress-bar-container">
+            <div class="progress-bar-outer">
+              <div class="progress-bar-inner" id="itinerary-progress-bar" style="width: 0%"></div>
+            </div>
+            <div class="progress-percentage-label" id="itinerary-progress-percentage">0% Complete</div>
+          </div>
+        </div>
+        <div class="itinerary-days" id="itinerary-days">
+          <!-- Day buttons will be added here dynamically -->
+        </div>
+        <div class="itinerary-list" id="itinerary-list">
+          <!-- Itinerary items will be added here dynamically -->
+        </div>
+      </div>
+    </div>
+  </div>
+  
+  <script>
+    document.addEventListener('DOMContentLoaded', function() {
+      // Handle itinerary view button clicks
+      document.querySelectorAll('.view-itinerary-btn').forEach(button => {
+        button.addEventListener('click', function() {
+          const tourId = this.getAttribute('data-tour-id');
+          const tourCard = this.closest('.tour-card');
+          const assignmentId = tourCard.getAttribute('data-assignment-id');
+          
+          // Fetch itinerary data from the server
+          fetch('/admin_app/employee/get-itinerary/' + tourId + '/', {
+            method: 'GET',
+            headers: {
+              'X-Requested-With': 'XMLHttpRequest',
+              'X-CSRFToken': getCookie('csrftoken'),
+              'Accept': 'application/json',
+              'Content-Type': 'application/json'
+            },
+            credentials: 'same-origin' // Include cookies for authentication
+          })
+            .then(response => {
+              if (response.redirected) {
+                // Handle redirect (likely to login page)
+                throw new Error('You need to be logged in to view this itinerary');
+              }
+              if (!response.ok) {
+                if (response.headers.get('content-type')?.includes('application/json')) {
+                  return response.json().then(data => {
+                    throw new Error(data.error || `Server error: ${response.status}`);
+                  });
+                } else {
+                  throw new Error(`Server returned ${response.status}: Not a valid JSON response`);
+                }
+              }
+              return response.json();
+            })
+            .then(data => {
+              if (data.success) {
+                // Set the tour name in the modal
+                document.getElementById('itinerary-tour-name').textContent = data.tour_name;
+                
+                // Generate day buttons
+                const daysContainer = document.getElementById('itinerary-days');
+                daysContainer.innerHTML = '';
+                
+                for (let i = 1; i <= data.duration_days; i++) {
+                  const dayBtn = document.createElement('button');
+                  dayBtn.className = 'day-btn';
+                  dayBtn.textContent = `Day ${i}`;
+                  dayBtn.setAttribute('data-day', i);
+                  
+                  if (i === 1) {
+                    dayBtn.classList.add('active');
+                  }
+                  
+                  dayBtn.addEventListener('click', function() {
+                    // Remove active class from all buttons
+                    document.querySelectorAll('.day-btn').forEach(btn => btn.classList.remove('active'));
+                    // Add active class to clicked button
+                    this.classList.add('active');
+                    
+                    // Show events for the selected day
+                    showEventsForDay(data.events, parseInt(this.getAttribute('data-day')), assignmentId);
+                  });
+                  
+                  daysContainer.appendChild(dayBtn);
+                }
+                
+                // Show events for day 1 by default
+                showEventsForDay(data.events, 1, assignmentId);
+                
+                // Open the modal
+                document.getElementById('itinerary-modal').style.display = 'block';
+              } else {
+                alert('Error loading itinerary: ' + data.error);
+              }
+            })
+            .catch(error => {
+              console.error('Error:', error);
+              
+              // Show a user-friendly error message
+              const errorMessage = error.message || 'Failed to load itinerary';
+              
+              // Create an error modal or update the existing modal with error information
+              document.getElementById('itinerary-tour-name').textContent = 'Error Loading Itinerary';
+              document.getElementById('itinerary-days').innerHTML = '';
+              document.getElementById('itinerary-list').innerHTML = `
+                <div class="error-message">
+                  <p>${errorMessage}</p>
+                  <p>Please try again or contact support if the problem persists.</p>
+                </div>
+              `;
+              
+              // Reset the progress bar
+              updateProgressBarInModal(0);
+              
+              // Still show the modal so the user can see the error
+              document.getElementById('itinerary-modal').style.display = 'block';
+            });
+        });
+      });
+      
+      // Function to show events for a specific day
+      function showEventsForDay(events, day, assignmentId) {
+        const itineraryList = document.getElementById('itinerary-list');
+        itineraryList.innerHTML = '';
+        
+        // Filter events for the selected day
+        const dayEvents = events.filter(event => event.day_number === day);
+        
+        if (dayEvents.length === 0) {
+          itineraryList.innerHTML = '<p>No events scheduled for this day.</p>';
+          return;
+        }
+        
+        // Sort events by time
+        dayEvents.sort((a, b) => {
+          const timeA = new Date(`2000-01-01T${a.event_time}`);
+          const timeB = new Date(`2000-01-01T${b.event_time}`);
+          return timeA - timeB;
+        });
+        
+        // Calculate completion percentage for this day
+        const completedEvents = dayEvents.filter(event => event.is_completed).length;
+        const completionPercentage = (completedEvents / dayEvents.length) * 100;
+        
+        // Create event list items with checkboxes
+        dayEvents.forEach(event => {
+          const eventItem = document.createElement('div');
+          eventItem.className = 'itinerary-item';
+          if (event.is_completed) {
+            eventItem.classList.add('completed');
+          }
+          eventItem.setAttribute('data-event-id', event.id);
+          
+          // Format time
+          const eventTime = new Date(`2000-01-01T${event.event_time}`);
+          const formattedTime = eventTime.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+          
+          eventItem.innerHTML = `
+            <div class="itinerary-time">${formattedTime}</div>
+            <div class="itinerary-content">
+              <div class="itinerary-event">${event.event_name}</div>
+              <div class="itinerary-details">${event.event_description || 'No description available.'}</div>
+            </div>
+            <div class="itinerary-checkmark">
+              <label class="checkbox-container">
+                <input type="checkbox" class="event-checkbox" data-event-id="${event.id}" data-assignment-id="${assignmentId}" ${event.is_completed ? 'checked' : ''}>
+                <span class="checkmark"></span>
+              </label>
+            </div>
+          `;
+          
+          itineraryList.appendChild(eventItem);
+        });
+        
+        // Update progress bar for the day
+        updateProgressBarInModal(completionPercentage);
+        
+        // Add event listeners to checkboxes
+        document.querySelectorAll('.event-checkbox').forEach(checkbox => {
+          checkbox.addEventListener('change', function() {
+            const eventId = this.getAttribute('data-event-id');
+            const assignmentId = this.getAttribute('data-assignment-id');
+            const isCompleted = this.checked;
+            
+            console.log('Updating event:', eventId, 'in assignment:', assignmentId, 'to completed:', isCompleted);
+            
+            // Update event status on the server
+            fetch('/admin_app/employee/update-event-status/', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json',
+                'X-Requested-With': 'XMLHttpRequest',
+                'X-CSRFToken': getCookie('csrftoken')
+              },
+              credentials: 'same-origin', // Include cookies for authentication
+              body: JSON.stringify({
+                event_id: eventId,
+                assignment_id: assignmentId,
+                is_completed: isCompleted
+              })
+            })
+            .then(response => {
+              if (!response.ok) {
+                return response.json().then(data => {
+                  throw new Error(data.error || `Server error: ${response.status}`);
+                });
+              }
+              return response.json();
+            })
+            .then(data => {
+              if (data.success) {
+                // Update progress marker on timeline
+                updateEmployeeProgress(assignmentId, data.completion_percentage);
+                
+                // Update progress bar in modal
+                updateProgressBarInModal(data.completion_percentage);
+                
+                // Toggle completed class on the item
+                const eventItem = this.closest('.itinerary-item');
+                if (eventItem) {
+                  if (isCompleted) {
+                    eventItem.classList.add('completed');
+                  } else {
+                    eventItem.classList.remove('completed');
+                  }
+                }
+              } else {
+                alert('Error updating event status: ' + data.error);
+                // Revert checkbox state
+                this.checked = !isCompleted;
+              }
+            })
+            .catch(error => {
+              console.error('Error:', error);
+              alert('An error occurred while updating the event status: ' + error.message);
+              // Revert checkbox state
+              this.checked = !isCompleted;
+            });
+          });
+        });
+      }
+      
+      // Function to update employee progress marker
+      function updateEmployeeProgress(assignmentId, percentage) {
+        const progressMarker = document.querySelector(`.employee-progress[data-assignment-id="${assignmentId}"]`);
+        if (progressMarker) {
+          progressMarker.style.left = `${percentage}%`;
+          progressMarker.title = `Checklist Progress: ${Math.round(percentage)}%`;
+          
+          // Update the percentage text
+          const percentageText = progressMarker.querySelector('.progress-percentage');
+          if (percentageText) {
+            percentageText.textContent = `${Math.round(percentage)}%`;
+          }
+        }
+      }
+      
+      // Function to update progress bar in the modal
+      function updateProgressBarInModal(percentage) {
+        const progressBar = document.getElementById('itinerary-progress-bar');
+        const percentageLabel = document.getElementById('itinerary-progress-percentage');
+        
+        if (progressBar && percentageLabel) {
+          progressBar.style.width = `${percentage}%`;
+          percentageLabel.textContent = `${Math.round(percentage)}% Complete`;
+        }
+      }
+      
+      // Helper function to get CSRF token
+      function getCookie(name) {
+        let cookieValue = null;
+        if (document.cookie && document.cookie !== '') {
+          const cookies = document.cookie.split(';');
+          for (let i = 0; i < cookies.length; i++) {
+            const cookie = cookies[i].trim();
+            if (cookie.substring(0, name.length + 1) === (name + '=')) {
+              cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+              break;
+            }
+          }
+        }
+        return cookieValue;
+      }
+      
+      // Close modals
+      document.querySelectorAll('.close-modal').forEach(button => {
+        button.addEventListener('click', function() {
+          const modalId = this.getAttribute('data-modal');
+          document.getElementById(modalId).style.display = 'none';
+        });
+      });
+      
+      // Close modal when clicking outside the content
+      window.addEventListener('click', function(event) {
+        if (event.target.classList.contains('modal')) {
+          event.target.style.display = 'none';
+        }
+      });
+    });
+  </script>
+</body>
+</html>

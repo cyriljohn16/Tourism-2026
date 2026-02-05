@@ -1,0 +1,761 @@
+<!DOCTYPE html>
+{% load static %}
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tour Calendar</title>
+  <link rel="stylesheet" href="{% static 'css/navigation.css' %}">
+  <style>
+    body {
+      font-family: 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      background-color: #f4f7fc;
+      margin: 0;
+      padding: 0;
+      color: #333;
+      line-height: 1.5;
+    }
+    
+    .dashboard-container {
+      display: flex;
+      min-height: 100vh;
+    }
+    
+    /* Main Content */
+    .content {
+      flex: 1;
+      padding: 32px;
+      box-sizing: border-box;
+    }
+    
+    /* Calendar Container */
+    .calendar-container {
+      margin-top: 30px;
+      background-color: white;
+      border-radius: 8px;
+      padding: 20px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+    }
+    
+    .calendar-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 20px;
+    }
+    
+    .month-selector {
+      display: flex;
+      align-items: center;
+    }
+    
+    .month-title {
+      font-size: 24px;
+      font-weight: bold;
+      margin: 0 15px;
+    }
+    
+    .month-nav {
+      cursor: pointer;
+      padding: 5px 10px;
+      background-color: #f0f0f0;
+      border-radius: 4px;
+      user-select: none;
+    }
+    
+    .month-nav:hover {
+      background-color: #e0e0e0;
+    }
+    
+    /* Calendar Grid */
+    .calendar-grid {
+      display: grid;
+      grid-template-columns: repeat(7, 1fr);
+      gap: 10px;
+    }
+    
+    .calendar-day-header {
+      text-align: center;
+      font-weight: bold;
+      padding: 10px;
+      background-color: #f9f9f9;
+      border-radius: 4px;
+    }
+    
+    .calendar-day {
+      height: 80px;
+      border-radius: 8px;
+      background-color: #f9f9f9;
+      padding: 10px;
+      cursor: pointer;
+      transition: background-color 0.2s;
+      position: relative;
+    }
+    
+    .calendar-day:hover {
+      background-color: #f0f0f0;
+    }
+    
+    .calendar-day.selected {
+      background-color: #e9f5ff;
+      border: 1px solid #4285f4;
+    }
+    
+    .calendar-day.highlighted {
+      background-color: #fff7e6;
+      border: 1px solid #fbbc05;
+    }
+    
+    .calendar-day.selected.highlighted {
+      background-color: #e6f0ff;
+      border: 1px solid #4285f4;
+    }
+    
+    .calendar-day.empty {
+      background-color: #f0f0f0;
+      cursor: default;
+    }
+    
+    .day-number {
+      font-weight: bold;
+      margin-bottom: 5px;
+    }
+    
+    .day-dots {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 3px;
+      margin-top: 5px;
+    }
+    
+    .tour-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      display: inline-block;
+      margin-right: 3px;
+    }
+    
+    /* Tour List Container */
+    .tour-list-container {
+      margin-top: 30px;
+      background-color: white;
+      border-radius: 8px;
+      padding: 20px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+    }
+    
+    .tour-list-header {
+      font-size: 18px;
+      font-weight: bold;
+      margin-bottom: 15px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid #eee;
+    }
+    
+    .tour-list {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+      gap: 20px;
+    }
+    
+    .tour-card {
+      border-radius: 8px;
+      padding: 15px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+      transition: transform 0.2s;
+      cursor: pointer;
+      position: relative;
+    }
+    
+    .tour-card:hover {
+      transform: translateY(-5px);
+    }
+    
+    .tour-card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 10px;
+    }
+    
+    .tour-name {
+      font-size: 16px;
+      font-weight: bold;
+      color: #333;
+    }
+    
+    .tour-price {
+      font-weight: bold;
+      color: #34a853;
+    }
+    
+    .tour-dates {
+      font-size: 14px;
+      color: #666;
+      margin-bottom: 10px;
+    }
+    
+    .tour-details {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-top: 1px solid #f0f0f0;
+      padding-top: 10px;
+      margin-top: 10px;
+    }
+    
+    .tour-bookings {
+      font-size: 14px;
+      color: #666;
+    }
+    
+    .tour-action {
+      padding: 6px 12px;
+      background-color: #4285f4;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 14px;
+      transition: background-color 0.2s;
+    }
+    
+    .tour-action:hover {
+      background-color: #1a73e8;
+    }
+    
+    .tour-color-indicator {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 5px;
+      height: 100%;
+      border-top-left-radius: 8px;
+      border-bottom-left-radius: 8px;
+    }
+    
+    /* Tour Details Modal */
+    .tour-modal {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background-color: rgba(0, 0, 0, 0.5);
+      z-index: 1000;
+      justify-content: center;
+      align-items: center;
+    }
+    
+    .tour-modal-content {
+      background-color: white;
+      border-radius: 8px;
+      width: 90%;
+      max-width: 600px;
+      max-height: 80vh;
+      overflow-y: auto;
+      padding: 20px;
+      position: relative;
+    }
+    
+    .tour-modal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 20px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid #eee;
+    }
+    
+    .tour-modal-title {
+      font-size: 20px;
+      font-weight: bold;
+    }
+    
+    .tour-close-button {
+      background: none;
+      border: none;
+      font-size: 24px;
+      cursor: pointer;
+      color: #666;
+    }
+    
+    .tour-close-button:hover {
+      color: #333;
+    }
+    
+    .tour-modal-details {
+      margin-bottom: 20px;
+    }
+    
+    .tour-detail-item {
+      display: flex;
+      margin-bottom: 10px;
+    }
+    
+    .tour-detail-label {
+      width: 120px;
+      font-weight: bold;
+      color: #666;
+    }
+    
+    .tour-detail-value {
+      flex: 1;
+      color: #333;
+    }
+    
+    .tour-description {
+      margin-top: 20px;
+      padding-top: 20px;
+      border-top: 1px solid #eee;
+    }
+    
+    .no-tours {
+      text-align: center;
+      padding: 20px;
+      color: #666;
+      font-style: italic;
+    }
+  </style>
+</head>
+<body>
+  <div class="dashboard-container">
+    <div class="navigation">
+      {% include 'components/navigation.html' %}
+    </div>
+    <div class="content">
+      <h1>Tour Calendar</h1>
+      <p>View and manage tour schedules and bookings.</p>
+      
+      <!-- Calendar Container -->
+      <div class="calendar-container">
+        <div class="calendar-header">
+          <div class="month-selector">
+            <div class="month-nav" id="prev-month">◀</div>
+            <div class="month-title" id="month-year">March 2023</div>
+            <div class="month-nav" id="next-month">▶</div>
+          </div>
+        </div>
+        
+        <div class="calendar-grid">
+          <!-- Day headers -->
+          <div class="calendar-day-header">Sunday</div>
+          <div class="calendar-day-header">Monday</div>
+          <div class="calendar-day-header">Tuesday</div>
+          <div class="calendar-day-header">Wednesday</div>
+          <div class="calendar-day-header">Thursday</div>
+          <div class="calendar-day-header">Friday</div>
+          <div class="calendar-day-header">Saturday</div>
+          
+          <!-- Days will be generated by JavaScript -->
+          <div id="calendar-days"></div>
+        </div>
+      </div>
+      
+      <!-- Tour List Container -->
+      <div class="tour-list-container">
+        <div class="tour-list-header">
+          <span id="selected-date">Tours for Tuesday, April 1, 2025</span>
+        </div>
+        
+        <div id="tour-list" class="tour-list">
+          <!-- Tour cards will be generated by JavaScript -->
+          <div class="no-tours">Select a date to view available tours.</div>
+        </div>
+      </div>
+      
+      <!-- Tour Details Modal -->
+      <div id="tour-modal" class="tour-modal">
+        <div class="tour-modal-content">
+          <div class="tour-modal-header">
+            <div class="tour-modal-title">Tour Details</div>
+            <button class="tour-close-button">&times;</button>
+          </div>
+          
+          <div id="tour-modal-details" class="tour-modal-details">
+            <!-- Tour details will be populated by JavaScript -->
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  
+  <script>
+    document.addEventListener('DOMContentLoaded', function() {
+      // Sample tour data structure
+      const tourData = {
+        "1": [
+          {
+            "tourName": "nature reserve",
+            "start": "2025-04-01",
+            "end": "2025-04-03",
+            "price": "₱800.00",
+            "confirmedBookings": 0,
+            "color": "green",
+            "description": "Explore the natural beauty of the reserve with our expert guides."
+          }
+        ],
+        "7": [
+          {
+            "tourName": "Historical Tour",
+            "start": "2025-04-07",
+            "end": "2025-04-08",
+            "price": "₱650",
+            "confirmedBookings": 25,
+            "color": "orange",
+            "description": "Learn about the rich history of the region with our expert guides. Visit museums and historical landmarks."
+          }
+        ],
+        "12": [
+          {
+            "tourName": "Culinary Experience",
+            "start": "2025-04-12",
+            "end": "2025-04-12",
+            "price": "₱550",
+            "confirmedBookings": 22,
+            "color": "red",
+            "description": "Taste the local cuisine and learn about traditional cooking methods with our culinary tour."
+          }
+        ],
+        "20": [
+          {
+            "tourName": "Jungle Safari",
+            "start": "2025-04-20",
+            "end": "2025-04-22",
+            "price": "₱900",
+            "confirmedBookings": 18,
+            "color": "green",
+            "description": "Explore the jungle and see exotic wildlife in their natural habitat with our safari tour."
+          }
+        ]
+      };
+      
+      // Calendar variables
+      let currentDate = new Date(2025, 3, 1); // April 1, 2025 (months are 0-based, so 3 = April)
+      let selectedDate = null;
+      let selectedTour = null;
+      let highlightedDates = [];
+      
+      // DOM elements
+      const calendarDays = document.getElementById('calendar-days');
+      const monthYearDisplay = document.getElementById('month-year');
+      const prevMonthBtn = document.getElementById('prev-month');
+      const nextMonthBtn = document.getElementById('next-month');
+      const selectedDateDisplay = document.getElementById('selected-date');
+      const tourList = document.getElementById('tour-list');
+      const tourModal = document.getElementById('tour-modal');
+      const tourModalDetails = document.getElementById('tour-modal-details');
+      const tourCloseButton = document.querySelector('.tour-close-button');
+      
+      // Initialize the calendar
+      function initCalendar() {
+        renderCalendar();
+        setupEventListeners();
+      }
+      
+      // Render the calendar for the current month
+      function renderCalendar() {
+        // Clear previous calendar
+        calendarDays.innerHTML = '';
+        
+        // Update month and year display
+        const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+        monthYearDisplay.textContent = `${monthNames[currentDate.getMonth()]} ${currentDate.getFullYear()}`;
+        
+        // Calculate the first and last day of the month
+        const firstDay = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
+        const lastDay = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0);
+        
+        // Get the day of the week for the first day (0 = Sunday, 1 = Monday, etc.)
+        const firstDayOfWeek = firstDay.getDay();
+        
+        // Get the total number of days in the month
+        const totalDays = lastDay.getDate();
+        
+        // Add empty cells for days before the first day of the month
+        for (let i = 0; i < firstDayOfWeek; i++) {
+          const emptyDay = document.createElement('div');
+          emptyDay.classList.add('calendar-day', 'empty');
+          calendarDays.appendChild(emptyDay);
+        }
+        
+        // Add cells for each day of the month
+        for (let day = 1; day <= totalDays; day++) {
+          const dayCell = document.createElement('div');
+          dayCell.classList.add('calendar-day');
+          dayCell.dataset.date = `${currentDate.getFullYear()}-${(currentDate.getMonth() + 1).toString().padStart(2, '0')}-${day.toString().padStart(2, '0')}`;
+          dayCell.dataset.day = day;
+          
+          // Add day number
+          const dayNumber = document.createElement('div');
+          dayNumber.classList.add('day-number');
+          dayNumber.textContent = day;
+          dayCell.appendChild(dayNumber);
+          
+          // Add tour dots if there are tours on this day
+          if (tourData[day]) {
+            const dayDots = document.createElement('div');
+            dayDots.classList.add('day-dots');
+            
+            tourData[day].forEach(tour => {
+              const tourDot = document.createElement('span');
+              tourDot.classList.add('tour-dot');
+              tourDot.style.backgroundColor = tour.color;
+              dayDots.appendChild(tourDot);
+            });
+            
+            dayCell.appendChild(dayDots);
+          }
+          
+          // Highlight dates in the range if applicable
+          const dateStr = `${currentDate.getFullYear()}-${(currentDate.getMonth() + 1).toString().padStart(2, '0')}-${day.toString().padStart(2, '0')}`;
+          if (highlightedDates.includes(dateStr)) {
+            dayCell.classList.add('highlighted');
+          }
+          
+          // Add selection state if applicable
+          if (selectedDate && selectedDate.getDate() === day && 
+              selectedDate.getMonth() === currentDate.getMonth() && 
+              selectedDate.getFullYear() === currentDate.getFullYear()) {
+            dayCell.classList.add('selected');
+          }
+          
+          calendarDays.appendChild(dayCell);
+        }
+      }
+      
+      // Set up event listeners
+      function setupEventListeners() {
+        // Previous month button
+        prevMonthBtn.addEventListener('click', function() {
+          currentDate.setMonth(currentDate.getMonth() - 1);
+          renderCalendar();
+        });
+        
+        // Next month button
+        nextMonthBtn.addEventListener('click', function() {
+          currentDate.setMonth(currentDate.getMonth() + 1);
+          renderCalendar();
+        });
+        
+        // Day selection
+        document.addEventListener('click', function(event) {
+          const dayCell = event.target.closest('.calendar-day:not(.empty)');
+          if (dayCell) {
+            const day = parseInt(dayCell.dataset.day);
+            
+            // Remove selection from previously selected day
+            const previouslySelected = document.querySelector('.calendar-day.selected');
+            if (previouslySelected) {
+              previouslySelected.classList.remove('selected');
+            }
+            
+            // Add selection to this day
+            dayCell.classList.add('selected');
+            
+            // Update selected date
+            selectedDate = new Date(currentDate.getFullYear(), currentDate.getMonth(), day);
+            
+            // Update the tour list for the selected date
+            updateTourList(day);
+          }
+        });
+        
+        // Close modal button
+        tourCloseButton.addEventListener('click', function() {
+          tourModal.style.display = 'none';
+          
+          // Clear highlighted dates
+          highlightedDates = [];
+          renderCalendar();
+        });
+        
+        // Close modal when clicking outside
+        tourModal.addEventListener('click', function(event) {
+          if (event.target === tourModal) {
+            tourModal.style.display = 'none';
+            
+            // Clear highlighted dates
+            highlightedDates = [];
+            renderCalendar();
+          }
+        });
+      }
+      
+      // Update the tour list when a date is selected
+      function updateTourList(day) {
+        // Format the date for display
+        const options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
+        const formattedDate = selectedDate.toLocaleDateString('en-US', options);
+        selectedDateDisplay.textContent = `Tours for ${formattedDate}`;
+        
+        // Clear previous tour list
+        tourList.innerHTML = '';
+        
+        // Get tours for the selected day
+        const tours = tourData[day] || [];
+        
+        if (tours.length === 0) {
+          const noTours = document.createElement('div');
+          noTours.classList.add('no-tours');
+          noTours.textContent = 'No tours scheduled for this date.';
+          tourList.appendChild(noTours);
+          return;
+        }
+        
+        // Create tour cards
+        tours.forEach(tour => {
+          const tourCard = document.createElement('div');
+          tourCard.classList.add('tour-card');
+          tourCard.style.borderLeft = `5px solid ${tour.color}`;
+          
+          const tourCardHeader = document.createElement('div');
+          tourCardHeader.classList.add('tour-card-header');
+          
+          const tourName = document.createElement('div');
+          tourName.classList.add('tour-name');
+          tourName.textContent = tour.tourName;
+          
+          const tourPrice = document.createElement('div');
+          tourPrice.classList.add('tour-price');
+          tourPrice.textContent = tour.price;
+          
+          tourCardHeader.appendChild(tourName);
+          tourCardHeader.appendChild(tourPrice);
+          
+          const tourDates = document.createElement('div');
+          tourDates.classList.add('tour-dates');
+          tourDates.textContent = `${formatDate(tour.start)} to ${formatDate(tour.end)}`;
+          
+          const tourDetails = document.createElement('div');
+          tourDetails.classList.add('tour-details');
+          
+          const tourBookings = document.createElement('div');
+          tourBookings.classList.add('tour-bookings');
+          tourBookings.textContent = `${tour.confirmedBookings} confirmed bookings`;
+          
+          const tourAction = document.createElement('button');
+          tourAction.classList.add('tour-action');
+          tourAction.textContent = 'View Details';
+          tourAction.addEventListener('click', function() {
+            showTourDetails(tour);
+          });
+          
+          tourDetails.appendChild(tourBookings);
+          tourDetails.appendChild(tourAction);
+          
+          tourCard.appendChild(tourCardHeader);
+          tourCard.appendChild(tourDates);
+          tourCard.appendChild(tourDetails);
+          
+          tourList.appendChild(tourCard);
+        });
+      }
+      
+      // Show detailed tour information in the modal
+      function showTourDetails(tour) {
+        // Clear previous details
+        tourModalDetails.innerHTML = '';
+        
+        // Create tour details content
+        const tourDetailItems = [
+          { label: 'Tour Name', value: tour.tourName },
+          { label: 'Start Date', value: formatDate(tour.start) },
+          { label: 'End Date', value: formatDate(tour.end) },
+          { label: 'Price', value: tour.price },
+          { label: 'Bookings', value: `${tour.confirmedBookings} confirmed` }
+        ];
+        
+        tourDetailItems.forEach(item => {
+          const detailItem = document.createElement('div');
+          detailItem.classList.add('tour-detail-item');
+          
+          const detailLabel = document.createElement('div');
+          detailLabel.classList.add('tour-detail-label');
+          detailLabel.textContent = item.label + ':';
+          
+          const detailValue = document.createElement('div');
+          detailValue.classList.add('tour-detail-value');
+          detailValue.textContent = item.value;
+          
+          detailItem.appendChild(detailLabel);
+          detailItem.appendChild(detailValue);
+          
+          tourModalDetails.appendChild(detailItem);
+        });
+        
+        // Add description if available
+        if (tour.description) {
+          const descriptionContainer = document.createElement('div');
+          descriptionContainer.classList.add('tour-description');
+          
+          const descriptionLabel = document.createElement('div');
+          descriptionLabel.classList.add('tour-detail-label');
+          descriptionLabel.textContent = 'Description:';
+          
+          const descriptionValue = document.createElement('div');
+          descriptionValue.classList.add('tour-detail-value');
+          descriptionValue.textContent = tour.description;
+          
+          descriptionContainer.appendChild(descriptionLabel);
+          descriptionContainer.appendChild(descriptionValue);
+          
+          tourModalDetails.appendChild(descriptionContainer);
+        }
+        
+        // Highlight dates in the range
+        highlightTourDates(tour);
+        
+        // Show the modal
+        tourModal.style.display = 'flex';
+      }
+      
+      // Highlight dates corresponding to the tour duration
+      function highlightTourDates(tour) {
+        const startDate = new Date(tour.start);
+        const endDate = new Date(tour.end);
+        
+        highlightedDates = [];
+        
+        // Get all dates between start and end
+        const currentDate = new Date(startDate);
+        while (currentDate <= endDate) {
+          const dateStr = currentDate.toISOString().split('T')[0];
+          highlightedDates.push(dateStr);
+          currentDate.setDate(currentDate.getDate() + 1);
+        }
+        
+        // Rerender the calendar to show highlighted dates
+        renderCalendar();
+      }
+      
+      // Helper function to format dates
+      function formatDate(dateString) {
+        const date = new Date(dateString);
+        return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+      }
+      
+      // Initialize the calendar
+      initCalendar();
+      
+      // Select the first day (April 1) by default to show its tours
+      selectedDate = new Date(2025, 3, 1);
+      updateTourList(1);
+      
+      // In a real application, you would fetch tour data from the server here
+      // Example:
+      /*
+      fetch('/api/tours')
+        .then(response => response.json())
+        .then(data => {
+          tourData = data;
+          renderCalendar();
+        })
+        .catch(error => console.error('Error fetching tour data:', error));
+      */
+    });
+  </script>
+</body>
+</html> 

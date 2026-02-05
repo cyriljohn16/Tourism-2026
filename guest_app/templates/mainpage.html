@@ -1,0 +1,4391 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ibayaw Tour</title>
+    <style>
+        /* Reset and base styles */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Poppins', sans-serif;
+        }
+        
+        body {
+            background-color: #f8f9fa;
+            color: #333;
+            transform: scale(0.8);
+            transform-origin: top left;
+            width: 125%;
+            height: 125%;
+            overflow-x: hidden;
+        }
+        
+        /* Navigation styles */
+        .navbar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 4px 40px;
+            background-color: rgba(80, 80, 80, 0.6);
+            position: fixed;
+            width: 100%;
+            z-index: 100;
+            backdrop-filter: blur(5px);
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            transition: all 0.3s ease;
+        }
+        
+        .logo {
+            display: flex;
+            align-items: center;
+        }
+        
+        .logo img {
+            height: 24px;
+            margin-right: 8px;
+            filter: drop-shadow(0 0 5px rgba(255, 255, 255, 0.3));
+        }
+        
+        .logo h1 {
+            color: white;
+            font-size: 1rem;
+            font-weight: 600;
+            text-shadow: 1px 1px 3px rgba(0, 0, 0, 0.5);
+        }
+        
+        .nav-links {
+            display: flex;
+            gap: 20px;
+        }
+        
+        .nav-links a {
+            color: white;
+            text-decoration: none;
+            font-size: 0.8rem;
+            position: relative;
+            padding: 2px 0;
+            text-shadow: 1px 1px 3px rgba(0, 0, 0, 0.5);
+        }
+        
+        .nav-links a::after {
+            content: '';
+            position: absolute;
+            bottom: -2px;
+            left: 0;
+            width: 0;
+            height: 2px;
+            background-color: white;
+            transition: width 0.3s ease;
+        }
+        
+        .nav-links a:hover::after {
+            width: 100%;
+        }
+        
+        .login-btn {
+            background-color: white;
+            border: none;
+            color: #104CBA;
+            cursor: pointer;
+            padding: 4px 15px;
+            border-radius: 15px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            transition: all 0.3s;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+        }
+        
+        .login-btn:hover {
+            background-color: #f8f9fa;
+            transform: translateY(-2px);
+            box-shadow: 0 6px 15px rgba(0, 0, 0, 0.15);
+        }
+        
+        .login-btn i {
+            font-size: 1.2rem;
+        }
+        
+        /* Language selector in navbar */
+        .language-selector-nav {
+            margin-right: 15px;
+        }
+        
+        .language-selector-nav select {
+            padding: 5px 10px;
+            border-radius: 20px;
+            background-color: rgba(255, 255, 255, 0.2);
+            color: white;
+            border: 1px solid rgba(255, 255, 255, 0.4);
+            font-size: 0.8rem;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        
+        .language-selector-nav select:hover {
+            background-color: rgba(255, 255, 255, 0.3);
+        }
+        
+        .language-selector-nav select option {
+            background-color: #333;
+            color: white;
+        }
+        
+        /* Hero section with improved transitions */
+        .hero {
+            height: 70vh;
+            background-image: url('/static/images/5_CityLandscape_Estremos_Entry2.jpg');
+            background-size: cover;
+            background-position: center bottom;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            position: relative;
+            color: white;
+            text-align: center;
+            padding: 0 20px;
+            transition: all 1.5s ease;
+        }
+        
+        /* Add a pseudo-element for the crossfade effect */
+        .hero::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-size: cover;
+            background-position: inherit; /* Inherit the same positioning as parent */
+            opacity: 0;
+            z-index: -1;
+            transition: opacity 1.5s ease;
+        }
+        
+        /* For the gradient overlay, use ::before instead of ::after */
+        .hero::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(to bottom, rgba(16, 76, 186, 0.3), rgba(0, 0, 0, 0.5));
+            z-index: 0;
+        }
+        
+        /* Hero content positioning */
+        .hero-content {
+            position: relative;
+            z-index: 1;
+            max-width: 900px;
+            animation: fadeIn 1.5s ease;
+            text-align: left; /* Left-align the text */
+            margin-right: auto; 
+            margin-left: 7%; /* Adjust margin to match screenshot */
+            padding-left: 0;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        .hero-title {
+            font-size: 3.7rem;
+            text-transform: uppercase;
+            color: #8e94d9; /* Adjusted to match screenshot color */
+            font-weight: 800;
+            margin-bottom: 0;
+            text-shadow: 1px 1px 5px rgba(0, 0, 0, 0.2);
+            letter-spacing: 5px;
+        }
+        
+        .initiative {
+            font-size: 2.8rem;
+            font-family: 'Dancing Script', cursive;
+            margin-top: -5px; /* Adjusted to match screenshot */
+            color: #a3cffe; /* Light blue */
+            text-shadow: 1px 1px 5px rgba(0, 0, 0, 0.2);
+            letter-spacing: 2px;
+            display: block;
+            margin-left: 0;
+            margin-right: auto;
+        }
+        
+        .city-name {
+            font-size: 3rem;
+            text-transform: uppercase;
+            color: #8e94d9; /* Adjusted to match screenshot color */
+            font-weight: 800;
+            margin-top: -5px; /* Adjusted to match screenshot */
+            text-shadow: 1px 1px 5px rgba(0, 0, 0, 0.2);
+            letter-spacing: 5px;
+        }
+        
+        .hero-description {
+            margin-top: 15px;
+            font-size: 0.9rem;
+            max-width: 450px; /* Reduced to match screenshot */
+            line-height: 1.6;
+            text-shadow: 1px 1px 3px rgba(0, 0, 0, 0.3);
+            margin-right: auto;
+            margin-left: 0;
+            color: rgba(255, 255, 255, 0.9); /* Made more visible */
+        }
+        
+        /* Update carousel dots position */
+        .carousel-dots {
+            position: absolute;
+            bottom: 100px; /* Increased from 50px to 100px to move dots higher */
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            gap: 12px;
+            z-index: 2;
+        }
+        
+        .dot {
+            width: 12px;
+            height: 12px;
+            background-color: rgba(255, 255, 255, 0.7);
+            border-radius: 50%;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        
+        .dot.active {
+            background-color: #fff;
+            transform: scale(1.2);
+        }
+        
+        /* Tour packages section */
+        .tour-packages {
+            padding: 40px 0 40px 0; /* Reduced padding on the left */
+            background-color: white;
+            position: relative;
+            margin-top: -50px; /* Increased overlap with hero section */
+        }
+        
+        .tour-packages-container {
+            display: flex;
+            align-items: flex-start;
+            gap: 10px;
+            width: 100%;
+            max-width: 1600px; /* Increased from 1400px to extend further right */
+            margin: 0 0 0 -40px; /* Keep left positioning */
+            overflow: hidden;
+            padding-left: 0;
+            padding-right: 20px; /* Add padding on right to ensure content is visible */
+        }
+        
+        .packages-header {
+            display: flex;
+            align-items: flex-start;
+            max-width: 1400px;
+            margin: 0;
+            padding-left: 0; /* Remove padding */
+        }
+        
+        .header-title {
+            position: relative;
+            min-width: 180px; /* Further reduced from 200px */
+            margin-right: 10px;
+        }
+        
+        .header-title h2:first-child {
+            font-size: 4rem;
+            font-family: 'Dancing Script', cursive;
+            color: #8B4513;  /* Brown color for Ibayaw */
+            margin: 0;
+            line-height: 1;
+        }
+        
+        .header-title h2:last-child {
+            font-size: 2.2rem;
+            text-transform: uppercase;
+            color: #bb7d53;
+            margin: 0;
+            letter-spacing: 2px;
+            font-weight: 700;
+            line-height: 1.2;
+        }
+        
+        .packages-description {
+            max-width: 240px;
+            color: #666;
+            line-height: 1.6;
+            font-size: 0.95rem;
+        }
+        
+        .explore-link {
+            color: #5b5bff;
+            text-decoration: none;
+            font-weight: 600;
+            font-size: 0.9rem;
+            display: inline-block;
+            margin-top: 10px;
+        }
+        
+        .arrow-img {
+            width: 150px;
+            transform: rotate(0deg);
+            margin-top: -20px; /* Changed from 20px to -20px to move higher */
+            margin-left: 10px;
+            opacity: 1;
+        }
+        
+        /* Full-width container for header and packages */
+        .tour-packages-container {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+            width: 100%;
+            max-width: 1400px;
+            margin: 0 auto;
+            overflow: hidden;
+        }
+        
+        /* Packages grid as a horizontal scroll */
+        .packages-container {
+            flex: 1.2; /* Increased from 1 to take more horizontal space */
+            position: relative;
+            overflow: hidden;
+            margin-left: -20px;
+            margin-right: -30px; /* Extend further to the right */
+        }
+        
+        .packages-grid {
+            display: flex;
+            gap: 15px; /* Reduced from 20px */
+            padding: 10px 0;
+            overflow-x: auto;
+            scrollbar-width: none;
+            -ms-overflow-style: none;
+            padding-right: 30px; /* Add padding to ensure rightmost card is fully visible */
+        }
+        
+        .packages-grid::-webkit-scrollbar {
+            display: none;
+        }
+        
+        .package-card {
+            width: 260px;
+            height: 380px;
+            border-radius: 15px;
+            border: 3px solid transparent; /* Add transparent border initially */
+            overflow: hidden;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.15);
+            flex-shrink: 0;
+            background-color: white;
+            position: relative;
+            transition: transform 0.3s ease, box-shadow 0.3s ease, border-color 0.3s ease; /* Add border-color to transitions */
+            cursor: pointer;
+        }
+        
+        .package-card:hover, .package-card:active {
+            transform: translateY(-10px);
+            box-shadow: 0 15px 30px rgba(0,0,0,0.2);
+            border-color: rgba(80, 80, 80, 0.8); /* Dark gray border on hover/active */
+        }
+        
+        .package-card img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+        
+        .package-title {
+            position: absolute;
+            top: 15px;
+            left: 50%;
+            transform: translateX(-50%);
+            color: #333;
+            font-size: 1rem;
+            font-weight: 700;
+            background-color: rgba(255, 255, 255, 0.4); /* More faded white/gray background */
+            padding: 5px 15px;
+            border-radius: 12px;
+            text-align: center;
+            z-index: 2;
+            width: 80%;
+            max-width: 90%;
+            display: inline-block;
+            letter-spacing: 0.5px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            text-transform: uppercase;
+            backdrop-filter: blur(2px);
+        }
+        
+        /* Add styles for package details overlay */
+        .package-details {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            background: linear-gradient(to top, rgba(0,0,0,0.9), rgba(0,0,0,0.7) 70%, transparent);
+            color: white;
+            padding: 20px;
+            transform: translateY(100%);
+            transition: transform 0.3s ease;
+            z-index: 1;
+        }
+        
+        .package-card:hover .package-details {
+            transform: translateY(0);
+        }
+        
+        .package-price, .package-time {
+            display: flex;
+            align-items: center;
+            margin-bottom: 8px;
+            font-size: 0.95rem;
+        }
+        
+        .package-price i, .package-time i {
+            margin-right: 8px;
+            font-size: 1rem;
+        }
+        
+        .package-description {
+            font-size: 0.9rem;
+            line-height: 1.5;
+            margin-top: 12px;
+            opacity: 0.9;
+        }
+        
+        /* Modify the navigation arrows to include prev button and hover effects */
+        .package-nav {
+            position: absolute;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            background-color: rgba(255, 255, 255, 0.9);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+            cursor: pointer;
+            z-index: 50;
+            transition: all 0.3s ease;
+            opacity: 0.5; /* Start with semi-transparent */
+        }
+        
+        .package-nav.next {
+            right: 10px;
+        }
+        
+        .package-nav.prev {
+            left: 10px;
+            display: none; /* Will be shown by JavaScript if needed */
+        }
+        
+        .package-nav:hover {
+            background-color: #fff;
+            transform: translateY(-50%) scale(1.1);
+            opacity: 1; /* Full opacity on hover */
+        }
+        
+        .package-nav i {
+            font-size: 18px;
+            color: #333;
+        }
+        
+        .chat-button {
+            position: fixed;
+            bottom: 30px;
+            right: 30px;
+            background: linear-gradient(45deg, #104CBA, #1A67D2);
+            color: white;
+            width: 65px;
+            height: 65px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.8rem;
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.2);
+            cursor: pointer;
+            z-index: 1000;
+            transition: all 0.3s ease;
+        }
+        
+        .chat-button:hover {
+            transform: scale(1.1);
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.25);
+        }
+        
+        /* Mobile responsiveness */
+        @media (max-width: 768px) {
+            .navbar {
+                padding: 15px 20px;
+            }
+            
+            .logo h1 {
+                font-size: 1.5rem;
+            }
+            
+            .nav-links {
+                display: none;
+            }
+            
+            .hero-title {
+                font-size: 3.5rem;
+            }
+            
+            .initiative {
+                font-size: 2.8rem;
+            }
+            
+            .city-name {
+                font-size: 2.8rem;
+            }
+            
+            .hero-description {
+                font-size: 1.1rem;
+            }
+            
+            .packages-header {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 15px;
+            }
+            
+            .header-title h2:first-child {
+                font-size: 3rem;
+            }
+            
+            .header-title h2:last-child {
+                font-size: 2.2rem;
+            }
+            
+            .arrow-img {
+                display: none;
+            }
+            
+            .next-button {
+                display: none;
+            }
+        }
+        
+        /* Add specific styling for the images to show their lower portions */
+        .package-card img[src*="2 VERANO.jpg"],
+        .package-card img[src*="5_CityLandscape_Estremos_Entry2.jpg"] {
+            object-position: center 90%;
+        }
+        
+        /* For when these images are used in the hero background */
+        .hero[style*="2 VERANO.jpg"],
+        .hero[style*="5_CityLandscape_Estremos_Entry2.jpg"] {
+            background-position: center 90%;
+        }
+        
+        /* Wave separator styles */
+        .wave-separator {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            height: 100px;
+            overflow: visible;
+            z-index: 10;
+        }
+        
+        .wave-separator svg {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: block;
+        }
+        
+        .torn-paper-filter {
+            position: absolute;
+            bottom: 0;
+            width: 100%;
+            height: 100%;
+        }
+        
+        .wave-layer {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            background: #fff;
+        }
+        
+        .wave-layer-1 {
+            bottom: 0;
+            clip-path: polygon(
+                100% 100%,
+                100% 45%,
+                85% 30%,
+                70% 45%,
+                55% 25%,
+                40% 45%,
+                25% 30%,
+                10% 45%,
+                0% 25%,
+                0% 100%
+            );
+        }
+        
+        .wave-layer-2 {
+            bottom: 2px;
+            opacity: 0.1;
+            clip-path: polygon(
+                100% 100%,
+                100% 42%,
+                85% 27%,
+                70% 42%,
+                55% 22%,
+                40% 42%,
+                25% 27%,
+                10% 42%,
+                0% 22%,
+                0% 100%
+            );
+        }
+        
+        /* Style for no schedules message */
+        .package-no-schedule {
+            display: flex;
+            align-items: center;
+            margin-bottom: 15px;
+            font-size: 0.95rem;
+            color: #ff6b6b;
+            font-weight: 500;
+        }
+        
+        .package-no-schedule i {
+            margin-right: 8px;
+            font-size: 1rem;
+        }
+
+        /* Modal styles */
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1050;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            overflow: auto;
+            background-color: rgba(0,0,0,0.6);
+        }
+
+        .modal-content {
+            background-color: #fff;
+            margin: 5% auto;
+            padding: 25px;
+            border-radius: 8px;
+            max-width: 500px;
+            box-shadow: 0 5px 30px rgba(0,0,0,0.3);
+            position: relative;
+            animation: modalFadeIn 0.4s;
+        }
+
+        @keyframes modalFadeIn {
+            from {opacity: 0; transform: translateY(-50px);}
+            to {opacity: 1; transform: translateY(0);}
+        }
+
+        .close-modal {
+            position: absolute;
+            right: 20px;
+            top: 15px;
+            font-size: 28px;
+            font-weight: 700;
+            color: #555;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .close-modal:hover {
+            color: #000;
+        }
+
+        .modal-title {
+            color: #104CBA;
+            margin-bottom: 20px;
+            font-size: 1.8rem;
+            text-align: center;
+            font-weight: 700;
+        }
+
+        /* Improved form styles */
+        .form-control {
+            width: 100%;
+            padding: 10px 12px;
+            font-size: 0.9rem;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            margin-top: 5px;
+            transition: border-color 0.2s ease;
+        }
+
+        .form-control:focus {
+            border-color: #104CBA;
+            outline: none;
+            box-shadow: 0 0 0 2px rgba(16, 76, 186, 0.2);
+        }
+
+        .form-group {
+            margin-bottom: 18px;
+        }
+
+        .form-row {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 5px;
+        }
+
+        .form-row .form-group {
+            flex: 1;
+        }
+
+        .name-row {
+            display: flex;
+            gap: 15px;
+        }
+
+        label {
+            display: block;
+            font-size: 0.85rem;
+            margin-bottom: 4px;
+            color: #444;
+            font-weight: 500;
+        }
+
+        label.required:after {
+            content: " *";
+            color: #dc3545;
+        }
+
+        .error-message {
+            color: #dc3545;
+            font-size: 0.75rem;
+            margin-top: 4px;
+            min-height: 18px;
+        }
+
+        .submit-btn {
+            background: linear-gradient(45deg, #104CBA, #1A67D2);
+            color: white;
+            border: none;
+            border-radius: 25px;
+            padding: 12px 25px;
+            width: 100%;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            margin-top: 10px;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        .submit-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 12px rgba(0, 0, 0, 0.15);
+        }
+
+        .login-link {
+            text-align: center;
+            margin-top: 20px;
+            font-size: 0.85rem;
+            color: #666;
+        }
+
+        .login-link a {
+            color: #104CBA;
+            text-decoration: none;
+            font-weight: 600;
+        }
+
+        .login-link a:hover {
+            text-decoration: underline;
+        }
+
+        /* Make modal content larger and better spaced */
+        .modal-content {
+            padding: 30px 35px;
+            max-width: 550px;
+            width: 90%;
+        }
+
+        .modal-title {
+            margin-bottom: 30px;
+            padding-bottom: 15px;
+            border-bottom: 1px solid #eee;
+        }
+
+        /* Responsive adjustments */
+        @media (max-width: 768px) {
+            .form-row, .name-row {
+                flex-direction: column;
+                gap: 10px;
+            }
+            
+            .modal-content {
+                padding: 20px;
+                width: 95%;
+            }
+        }
+
+        .profile-input-options {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+
+        .camera-btn, .capture-btn, .cancel-btn, .retake-btn {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 5px;
+            background: #f0f0f0;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            padding: 8px 12px;
+            font-size: 0.9rem;
+            color: #333;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .camera-btn:hover, .retake-btn:hover {
+            background: #e0e0e0;
+        }
+
+        .capture-btn {
+            background: #28a745;
+            color: white;
+            border: none;
+        }
+
+        .capture-btn:hover {
+            background: #218838;
+        }
+
+        .cancel-btn {
+            background: #dc3545;
+            color: white;
+            border: none;
+        }
+
+        .cancel-btn:hover {
+            background: #c82333;
+        }
+
+        .camera-controls {
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+            margin-top: 10px;
+            margin-bottom: 15px;
+        }
+
+        #photo-preview {
+            position: relative;
+        }
+
+        #retake-button {
+            position: absolute;
+            bottom: 10px;
+            right: 10px;
+            padding: 5px 8px;
+            font-size: 0.8rem;
+            background: rgba(0,0,0,0.6);
+            color: white;
+            border: none;
+        }
+
+        /* User profile in navbar styles */
+        .user-profile-nav {
+            position: relative;
+            margin-left: 20px;
+        }
+        
+        .user-info {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            cursor: pointer;
+            color: white;
+            padding: 5px 10px;
+            border-radius: 20px;
+            transition: background-color 0.2s;
+        }
+        
+        .user-info:hover {
+            background-color: rgba(255, 255, 255, 0.1);
+        }
+        
+        .nav-profile-pic {
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            object-fit: cover;
+            border: 2px solid rgba(255, 255, 255, 0.7);
+        }
+        
+        .user-name {
+            font-weight: 500;
+            font-size: 0.9rem;
+        }
+        
+        .user-dropdown {
+            position: absolute;
+            top: 100%;
+            right: 0;
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+            width: 200px;
+            z-index: 1000;
+            display: none;
+            overflow: hidden;
+            margin-top: 10px;
+        }
+        
+        .user-dropdown a {
+            display: block;
+            padding: 12px 15px;
+            color: #333;
+            text-decoration: none;
+            transition: background-color 0.2s;
+        }
+        
+        .user-dropdown a:hover {
+            background-color: #f5f5f5;
+        }
+        
+        .dropdown-divider {
+            height: 1px;
+            background-color: #eee;
+            margin: 5px 0;
+        }
+        
+        .settings-item, .language-selector {
+            padding: 12px 15px;
+            color: #333;
+        }
+        
+        .language-selector {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        
+        .language-selector select {
+            padding: 5px;
+            border-radius: 4px;
+            border: 1px solid #ddd;
+            outline: none;
+            font-size: 0.85rem;
+        }
+        
+        .language-selector select:focus {
+            border-color: #104CBA;
+        }
+
+        /* Profile Update Modal Styles */
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            overflow: auto;
+            background-color: rgba(0,0,0,0.4);
+        }
+
+        .modal-content {
+            background-color: #fff;
+            margin: 5% auto;
+            padding: 20px;
+            border-radius: 8px;
+            width: 80%;
+            max-width: 600px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+        }
+
+        .close {
+            color: #aaa;
+            float: right;
+            font-size: 28px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+
+        .close:hover,
+        .close:focus {
+            color: black;
+            text-decoration: none;
+        }
+
+        .form-group {
+            margin-bottom: 15px;
+        }
+
+        .form-control {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+
+        .update-btn {
+            background-color: #4CAF50;
+            color: white;
+            padding: 10px 15px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+
+        .update-btn:hover {
+            background-color: #45a049;
+        }
+        
+        /* User Bookings Section Styles */
+        .user-bookings {
+            padding: 60px 0;
+            background-color: #f9f9f9;
+        }
+        
+        .section-title {
+            text-align: center;
+            margin-bottom: 30px;
+            font-size: 2rem;
+            color: #333;
+        }
+        
+        .bookings-tabs {
+            display: flex;
+            margin-bottom: 20px;
+            border-bottom: 1px solid #ddd;
+        }
+        
+        .tab-button {
+            padding: 10px 20px;
+            background: none;
+            border: none;
+            border-bottom: 2px solid transparent;
+            cursor: pointer;
+            font-weight: 600;
+            color: #555;
+            transition: all 0.3s;
+        }
+        
+        .tab-button.active {
+            color: #104CBA;
+            border-bottom: 2px solid #104CBA;
+        }
+        
+        .tab-button:hover {
+            color: #104CBA;
+        }
+        
+        .bookings-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            grid-gap: 20px;
+        }
+        
+        .booking-card {
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            overflow: hidden;
+            transition: all 0.3s;
+        }
+        
+        .booking-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+        }
+        
+        .booking-header {
+            padding: 15px;
+            background-color: #104CBA;
+            color: white;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .booking-header h3 {
+            margin: 0;
+            font-size: 1.1rem;
+        }
+        
+        .booking-id {
+            font-size: 0.8rem;
+            font-weight: normal;
+        }
+        
+        .booking-details {
+            padding: 15px;
+        }
+        
+        .booking-details p {
+            margin: 8px 0;
+            font-size: 0.9rem;
+        }
+        
+        .booking-actions {
+            padding: 0 15px 15px;
+            text-align: right;
+        }
+        
+        .cancel-booking-btn {
+            background-color: #dc3545;
+            color: white;
+            border: none;
+            padding: 8px 15px;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        
+        .cancel-booking-btn:hover {
+            background-color: #c82333;
+        }
+        
+        .status-pending {
+            color: #fd7e14;
+            font-weight: 600;
+        }
+        
+        .status-active {
+            color: #28a745;
+            font-weight: 600;
+        }
+        
+        .status-completed {
+            color: #0078D7;
+            font-weight: 600;
+        }
+        
+        .status-cancelled {
+            color: #dc3545;
+            font-weight: 600;
+        }
+        
+        .no-bookings-message {
+            grid-column: 1 / -1;
+            text-align: center;
+            padding: 30px;
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.05);
+        }
+        
+        /* Additional Modal Styles for Cancellation */
+        .form-actions {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 20px;
+        }
+        
+        .btn-secondary {
+            background-color: #6c757d;
+            color: white;
+            border: none;
+            padding: 8px 15px;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        
+        .btn-danger {
+            background-color: #dc3545;
+            color: white;
+            border: none;
+            padding: 8px 15px;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        /* Companion Request Notification Styles */
+        .request-notification {
+            position: relative;
+        }
+        
+        .request-badge {
+            position: absolute;
+            top: -5px;
+            right: -5px;
+            background-color: #e74c3c;
+            color: white;
+            border-radius: 50%;
+            width: 18px;
+            height: 18px;
+            font-size: 0.7rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+        }
+    </style>
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800&family=Dancing+Script:wght@700&display=swap" rel="stylesheet">
+    <!-- FontAwesome for icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+</head>
+<body>
+    <!-- Navigation -->
+    <nav class="navbar">
+        <!-- Hidden elements for language data -->
+        <div style="display: none;">
+            <div id="translations-data">{{ translations_json|default:'{}' }}</div>
+            <div id="current-language-data">{{ current_language|default:'en' }}</div>
+            {% csrf_token %}
+        </div>
+        <div class="logo">
+            <img src="/static/images/logo.png" alt="Ibayaw Tour Logo">
+            <h1>Ibayaw Tour</h1>
+        </div>
+        <div class="nav-links">
+            <a href="#">Tour Packs</a>
+            <a href="#">Programs</a>
+            <a href="{% url 'map' %}">City Map</a>
+            <a href="#">About Us</a>
+            <a href="#">Contact</a>
+        </div>
+        
+        <!-- Add a more prominent language selector in the navbar -->
+        <div class="language-selector-nav">
+            <select id="languageSelectNav" onchange="changeLanguage(this.value)">
+                <option value="en" {% if current_language == 'en' %}selected{% endif %}>English</option>
+                <option value="tl" {% if current_language == 'tl' %}selected{% endif %}>Tagalog</option>
+                <option value="ceb" {% if current_language == 'ceb' %}selected{% endif %}>Cebuano</option>
+                <option value="es" {% if current_language == 'es' %}selected{% endif %}>Spanish</option>
+            </select>
+        </div>
+        
+        {% if user.is_authenticated %}
+            <div class="user-profile-nav">
+                <div class="user-info" onclick="toggleUserMenu()">
+                    {% if user.picture %}
+                        <img src="{{ user.picture.url }}" alt="Profile" class="nav-profile-pic">
+                    {% else %}
+                        <img src="/static/images/default-profile.png" alt="Profile" class="nav-profile-pic">
+                    {% endif %}
+                    <span class="user-name">{{ user.first_name }}</span>
+                    <i class="fas fa-angle-down"></i>
+                </div>
+                <div class="user-dropdown" id="userDropdown">
+                    <a href="#" onclick="alert('Profile feature coming soon!'); return false;"><i class="fas fa-user"></i> My Profile</a>
+                    <div class="dropdown-divider"></div>
+                    <div class="settings-item">
+                        <a href="#" id="update-profile-link"><i class="fas fa-user-edit"></i> Update Profile</a>
+                    </div>
+                    <div class="dropdown-divider"></div>
+                    <a href="{% url 'companion' %}"><i class="fas fa-users"></i> Add Companion</a>
+                    <div class="dropdown-divider"></div>
+                    <a href="{% url 'list_companion_requests' %}" class="request-notification">
+                        <i class="fas fa-user-plus"></i> Companion Requests
+                        <span id="request-badge" class="request-badge" style="display: none;">0</span>
+                    </a>
+                    <div class="dropdown-divider"></div>
+                    <a href="#" onclick="logoutUser()"><i class="fas fa-sign-out-alt"></i> Logout</a>
+                </div>
+            </div>
+        {% else %}
+            <button class="login-btn" onclick="loginUser()">
+                <span class="login-text">Login</span> <i class="fas fa-user-circle"></i>
+            </button>
+        {% endif %}
+    </nav>
+
+    <!-- Hero Section -->
+    <section class="hero">
+        <div class="hero-content">
+            <h1 class="hero-title">RIVER TOUR</h1>
+            <h2 class="initiative">Initiative</h2>
+            <h1 class="city-name">BAYAWAN CITY</h1>
+            <p class="hero-description">
+                We exist to improve the quality of Bayawanons, maximizing its tourism potential,
+                using a website that will help elevate the already existing tours
+            </p>
+        </div>
+        <div class="carousel-dots">
+            <div class="dot active"></div>
+            <div class="dot"></div>
+            <div class="dot"></div>
+            <div class="dot"></div>
+            <div class="dot"></div>
+        </div>
+        
+        <!-- Updated wave separator with simpler torn paper effect -->
+        <div class="wave-separator">
+            <svg width="100%" height="100%" preserveAspectRatio="none" viewBox="0 0 1200 100">
+                <defs>
+                    <filter id="torn-paper" x="-10%" y="0%" width="120%" height="100%">
+                        <feTurbulence baseFrequency="0.03" numOctaves="5" type="fractalNoise" result="noise"/>
+                        <feDisplacementMap in="SourceGraphic" in2="noise" scale="8" xChannelSelector="R" yChannelSelector="G"/>
+                    </filter>
+                </defs>
+                <path d="M-10,100 L-10,50 
+                         Q150,20 300,50 
+                         Q450,80 600,40
+                         Q750,10 900,50
+                         Q1050,80 1210,30
+                         L1210,100 Z" 
+                      fill="#fff" 
+                      filter="url(#torn-paper)"/>
+            </svg>
+        </div>
+    </section>
+
+    <!-- Tour Packages Section -->
+    <section class="tour-packages">
+        <div class="tour-packages-container">
+        <div class="packages-header">
+                <div>
+            <div class="header-title">
+                <h2>Ibayaw</h2>
+                <h2>TOUR PACKS</h2>
+            </div>
+            <div class="packages-description">
+                <p>Now, let's see what activities can be seen in Bayawan, foods and its Hidden gems!</p>
+                        <a href="#" class="explore-link">EXPLORE ALL TOUR</a>
+            </div>
+            <img src="/static/images/arrow.png" alt="Arrow" class="arrow-img">
+        </div>
+            </div>
+            
+            <div class="packages-container">
+                <!-- Navigation Arrows -->
+                <div class="package-nav prev">
+                    <i class="fas fa-chevron-left"></i>
+                </div>
+                <div class="package-nav next">
+                    <i class="fas fa-chevron-right"></i>
+                </div>
+
+        <div class="packages-grid">
+            {% for tour in tours %}
+            <div class="package-card" data-tour-id="{{ tour.tour_id }}" data-url="{% url 'guest_book' tour_id=tour.tour_id %}">
+                        <div class="package-title">{{ tour.tour_name|upper }}</div>
+                <img src="{{ tour.image.url }}" alt="{{ tour.tour_name }}">
+                <div class="package-details">
+                            {% if tour.schedules.exists %}
+                                <div class="package-price">
+                                    <i class="fas fa-money-bill-wave"></i>
+                                    <span>
+                                        ₱ 
+                                        {% with min_schedule=tour.schedules.all|dictsort:"price"|first max_schedule=tour.schedules.all|dictsortreversed:"price"|first %}
+                                            {% if tour.schedules.count == 1 %}
+                                                {{ min_schedule.price }}
+                                            {% else %}
+                                                {{ min_schedule.price }} - {{ max_schedule.price }}
+                                            {% endif %}
+                                        {% endwith %}
+                                    </span>
+                                </div>
+                                <div class="package-time">
+                                    <i class="fas fa-calendar-day"></i>
+                                    <span>
+                                        {% if tour.schedules.exists %}
+                                            {% if tour.has_duration_range %}
+                                                {{ tour.min_duration }}-{{ tour.max_duration }} days
+                                            {% elif tour.min_duration %}
+                                                {{ tour.min_duration }} day{% if tour.min_duration > 1 %}s{% endif %}
+                                            {% elif tour.schedules.count == 1 %}
+                                                {% with schedule=tour.schedules.first %}
+                                                    {% if schedule.start_time|date:"Y-m-d" == schedule.end_time|date:"Y-m-d" %}
+                                                        1 day
+                                                    {% else %}
+                                                        {% with start_day=schedule.start_time|date:"j" end_day=schedule.end_time|date:"j" %}
+                                                            {% with day_diff=end_day|add:"-"|add:start_day|add:"1" %}
+                                                                {{ day_diff }} days
+                                                            {% endwith %}
+                                                        {% endwith %}
+                                                    {% endif %}
+                                                {% endwith %}
+                                            {% else %}
+                                                Duration varies
+                                            {% endif %}
+                                        {% else %}
+                                            Duration varies
+                                        {% endif %}
+                                    </span>
+                                </div>
+                            {% else %}
+                                <div class="package-no-schedule">
+                                    <i class="fas fa-exclamation-circle"></i>
+                                    <span>No schedules made for this tour yet</span>
+                                </div>
+                            {% endif %}
+                            <div class="package-description">
+                                {{ tour.description }}
+                            </div>
+                </div>
+            </div>
+            {% empty %}
+            <!-- If no tours are available -->
+            <div class="package-card">
+                        <div class="package-title">FOREST</div>
+                        <img src="/static/images/2 VERANO.jpg" alt="Forest Tour" style="object-position: center 90%;">
+                <div class="package-details">
+                            <div class="package-price">
+                                <i class="fas fa-money-bill-wave"></i>
+                                <span>₱ 500 - 600</span>
+                            </div>
+                            <div class="package-time">
+                                <i class="fas fa-calendar-day"></i>
+                                <span>Duration based on schedule</span>
+                            </div>
+                            <div class="package-description">
+                                Bayawan City Government, Negros Oriental, Philippines. Dedicated to protecting the local biodiversity, reintroducing endangered and endemic animals...
+                            </div>
+                </div>
+            </div>
+            <div class="package-card">
+                        <div class="package-title">RIVER</div>
+                <img src="/static/images/3 LANDSCAPE_ARTAJO.jpg" alt="River Tour">
+                <div class="package-details">
+                            <div class="package-price">
+                                <i class="fas fa-money-bill-wave"></i>
+                                <span>₱ 450 - 550</span>
+                            </div>
+                            <div class="package-time">
+                                <i class="fas fa-calendar-day"></i>
+                                <span>Duration based on schedule</span>
+                            </div>
+                            <div class="package-description">
+                                Experience the tranquil waters and rich ecosystems of Bayawan's scenic rivers. Perfect for nature lovers and adventure seekers.
+                            </div>
+                </div>
+            </div>
+            <div class="package-card">
+                        <div class="package-title">SEA</div>
+                <img src="/static/images/4 LANDSCAPE_DAYTO.jpg" alt="Sea Tour">
+                <div class="package-details">
+                            <div class="package-price">
+                                <i class="fas fa-money-bill-wave"></i>
+                                <span>₱ 600 - 750</span>
+                            </div>
+                            <div class="package-time">
+                                <i class="fas fa-calendar-day"></i>
+                                <span>Duration based on schedule</span>
+                            </div>
+                            <div class="package-description">
+                                Discover the pristine beaches and crystal-clear waters along Bayawan's coastline. Snorkeling, swimming, and boat rides available.
+                            </div>
+                </div>
+            </div>
+            <div class="package-card">
+                        <div class="package-title">MOUNTAIN</div>
+                        <img src="/static/images/5_CityLandscape_Estremos_Entry2.jpg" alt="Mountain Tour" style="object-position: center 90%;">
+                <div class="package-details">
+                            <div class="package-price">
+                                <i class="fas fa-money-bill-wave"></i>
+                                <span>₱ 550 - 700</span>
+                            </div>
+                            <div class="package-time">
+                                <i class="fas fa-calendar-day"></i>
+                                <span>Duration based on schedule</span>
+                            </div>
+                            <div class="package-description">
+                                Hike through breathtaking mountain trails with panoramic views of Bayawan City and surrounding areas. Guided tours available.
+                            </div>
+                </div>
+            </div>
+            <div class="package-card">
+                        <div class="package-title">SUNSET</div>
+                <img src="/static/images/1 Landscape_Espartero_Entry2.jpg" alt="Sunset Tour">
+                <div class="package-details">
+                            <div class="package-price">
+                                <i class="fas fa-money-bill-wave"></i>
+                                <span>₱ 400 - 500</span>
+                            </div>
+                            <div class="package-time">
+                                <i class="fas fa-calendar-day"></i>
+                                <span>Duration based on schedule</span>
+                            </div>
+                            <div class="package-description">
+                                Experience the magical sunset views of Bayawan. Perfect for photography enthusiasts and romantic evenings.
+                            </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- User Bookings Section - Only shown for logged in users -->
+    {% if user.is_authenticated %}
+    <section class="user-bookings" id="myBookings">
+        <div class="container">
+            <h2 class="section-title">My Bookings</h2>
+            <div class="bookings-tabs">
+                <button class="tab-button active" data-tab="upcoming">Upcoming Tours</button>
+                <button class="tab-button" data-tab="current">Current Tours</button>
+                <button class="tab-button" data-tab="past">Past Tours</button>
+            </div>
+            
+            <div class="tab-content" id="upcomingToursTab">
+                <div class="bookings-grid">
+                    {% for booking in upcoming_tours %}
+                    <div class="booking-card">
+                        <div class="booking-header">
+                            {% if booking.tour %}
+                            <h3>{{ booking.tour.tour_name }}</h3>
+                            <span class="booking-id">#{{ booking.booking_id }}</span>
+                            {% else %}
+                            <h3>{{ booking.tour_id.tour_name }}</h3>
+                            <span class="booking-id">PEN-{{ booking.id }}</span>
+                            {% endif %}
+                        </div>
+                        <div class="booking-details">
+                            {% if booking.schedule %}
+                            <p><strong>Date:</strong> {{ booking.schedule.start_time|date:"F d, Y" }}</p>
+                            <p><strong>Time:</strong> {{ booking.schedule.start_time|time:"g:i A" }} - {{ booking.schedule.end_time|time:"g:i A" }}</p>
+                            {% else %}
+                            <p><strong>Date:</strong> {{ booking.sched_id.start_time|date:"F d, Y" }}</p>
+                            <p><strong>Time:</strong> {{ booking.sched_id.start_time|time:"g:i A" }} - {{ booking.sched_id.end_time|time:"g:i A" }}</p>
+                            {% endif %}
+                            
+                            {% if booking.num_adults %}
+                            <p><strong>Guests:</strong> {{ booking.num_adults }} Adults, {{ booking.num_children }} Children</p>
+                            <p><strong>Total Price:</strong> 
+                              {% if booking.schedule %}
+                                ₱{{ booking.schedule.price|floatformat:2 }} × {{ booking.num_adults|add:booking.num_children }} = ₱{% widthratio booking.schedule.price 1 booking.num_adults|add:booking.num_children %}
+                              {% elif booking.sched_id %}
+                                ₱{{ booking.sched_id.price|floatformat:2 }} × {{ booking.num_adults|add:booking.num_children }} = ₱{% widthratio booking.sched_id.price 1 booking.num_adults|add:booking.num_children %}
+                              {% else %}
+                                ₱{{ booking.total_amount|default:"0.00" }}
+                              {% endif %}
+                            </p>
+                            {% else %}
+                            <p><strong>Guests:</strong> {{ booking.num_adults|default:0 }} Adults, {{ booking.num_children|default:0 }} Children</p>
+                            <p><strong>Total Guests:</strong> {{ booking.total_guests }}</p>
+                            <p><strong>Total Price:</strong> 
+                              {% if booking.sched_id %}
+                                ₱{{ booking.sched_id.price|floatformat:2 }} × {{ booking.total_guests }} = ₱{% widthratio booking.sched_id.price 1 booking.total_guests %}
+                              {% else %}
+                                ₱0.00
+                              {% endif %}
+                            </p>
+                            {% endif %}
+                            
+                            <p><strong>Status:</strong> 
+                            {% if booking.tour %}
+                                {% if booking.status == 'completed' or booking.status == 'Completed' %}
+                                <span class="status-completed">
+                                    {% if booking.get_status_display %}
+                                        {{ booking.get_status_display }}
+                                    {% else %}
+                                        {{ booking.status }}
+                                    {% endif %}
+                                </span>
+                                {% elif booking.status == 'cancelled' or booking.status == 'Cancelled' %}
+                                <span class="status-cancelled">
+                                    {% if booking.get_status_display %}
+                                        {{ booking.get_status_display }}
+                                    {% else %}
+                                        {{ booking.status }}
+                                    {% endif %}
+                                </span>
+                                {% else %}
+                                <span class="status-completed">
+                                    {% if booking.get_status_display %}
+                                        {{ booking.get_status_display }}
+                                    {% else %}
+                                        {{ booking.status }}
+                                    {% endif %}
+                                </span>
+                                {% endif %}
+                            {% else %}
+                                {% if booking.status == 'Cancelled' %}
+                                <span class="status-cancelled">{{ booking.status }}</span>
+                                {% elif booking.status == 'Pending' %}
+                                <span class="status-pending">{{ booking.status }}</span>
+                                {% else %}
+                                <span class="status-completed">{{ booking.status }}</span>
+                                {% endif %}
+                            {% endif %}
+                            </p>
+                        </div>
+                        <div class="booking-actions">
+                            {% if booking.booking_id %}
+                            <button class="cancel-booking-btn" data-booking-id="{{ booking.booking_id }}">Cancel Tour</button>
+                            {% else %}
+                            <button class="cancel-booking-btn" data-booking-id="{{ booking.id }}" data-booking-type="pending">Cancel Tour</button>
+                            {% endif %}
+                        </div>
+                    </div>
+                    {% empty %}
+                    <div class="no-bookings-message">
+                        <p>You don't have any upcoming tours scheduled.</p>
+                        <p>Browse our tours and book one today!</p>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            
+            <div class="tab-content" id="currentToursTab" style="display: none;">
+                <div class="bookings-grid">
+                    {% for booking in current_tours %}
+                    <div class="booking-card">
+                        <div class="booking-header">
+                            {% if booking.tour %}
+                            <h3>{{ booking.tour.tour_name }}</h3>
+                            <span class="booking-id">#{{ booking.booking_id }}</span>
+                            {% else %}
+                            <h3>{{ booking.tour_id.tour_name }}</h3>
+                            <span class="booking-id">PEN-{{ booking.id }}</span>
+                            {% endif %}
+                        </div>
+                        <div class="booking-details">
+                            {% if booking.schedule %}
+                            <p><strong>Date:</strong> {{ booking.schedule.start_time|date:"F d, Y" }}</p>
+                            <p><strong>Time:</strong> {{ booking.schedule.start_time|time:"g:i A" }} - {{ booking.schedule.end_time|time:"g:i A" }}</p>
+                            {% else %}
+                            <p><strong>Date:</strong> {{ booking.sched_id.start_time|date:"F d, Y" }}</p>
+                            <p><strong>Time:</strong> {{ booking.sched_id.start_time|time:"g:i A" }} - {{ booking.sched_id.end_time|time:"g:i A" }}</p>
+                            {% endif %}
+                            
+                            {% if booking.num_adults %}
+                            <p><strong>Guests:</strong> {{ booking.num_adults }} Adults, {{ booking.num_children }} Children</p>
+                            <p><strong>Total Price:</strong> 
+                              {% if booking.schedule %}
+                                ₱{{ booking.schedule.price|floatformat:2 }} × {{ booking.num_adults|add:booking.num_children }} = ₱{% widthratio booking.schedule.price 1 booking.num_adults|add:booking.num_children %}
+                              {% elif booking.sched_id %}
+                                ₱{{ booking.sched_id.price|floatformat:2 }} × {{ booking.num_adults|add:booking.num_children }} = ₱{% widthratio booking.sched_id.price 1 booking.num_adults|add:booking.num_children %}
+                              {% else %}
+                                ₱{{ booking.total_amount|default:"0.00" }}
+                              {% endif %}
+                            </p>
+                            {% else %}
+                            <p><strong>Guests:</strong> {{ booking.num_adults|default:0 }} Adults, {{ booking.num_children|default:0 }} Children</p>
+                            <p><strong>Total Guests:</strong> {{ booking.total_guests }}</p>
+                            <p><strong>Total Price:</strong> 
+                              {% if booking.sched_id %}
+                                ₱{{ booking.sched_id.price|floatformat:2 }} × {{ booking.total_guests }} = ₱{% widthratio booking.sched_id.price 1 booking.total_guests %}
+                              {% else %}
+                                ₱0.00
+                              {% endif %}
+                            </p>
+                            {% endif %}
+                            
+                            <p><strong>Status:</strong> 
+                            {% if booking.tour %}
+                                {% if booking.status == 'completed' or booking.status == 'Completed' %}
+                                <span class="status-completed">
+                                    {% if booking.get_status_display %}
+                                        {{ booking.get_status_display }}
+                                    {% else %}
+                                        {{ booking.status }}
+                                    {% endif %}
+                                </span>
+                                {% elif booking.status == 'cancelled' or booking.status == 'Cancelled' %}
+                                <span class="status-cancelled">
+                                    {% if booking.get_status_display %}
+                                        {{ booking.get_status_display }}
+                                    {% else %}
+                                        {{ booking.status }}
+                                    {% endif %}
+                                </span>
+                                {% else %}
+                                <span class="status-completed">
+                                    {% if booking.get_status_display %}
+                                        {{ booking.get_status_display }}
+                                    {% else %}
+                                        {{ booking.status }}
+                                    {% endif %}
+                                </span>
+                                {% endif %}
+                            {% else %}
+                                {% if booking.status == 'Cancelled' %}
+                                <span class="status-cancelled">{{ booking.status }}</span>
+                                {% elif booking.status == 'Pending' %}
+                                <span class="status-pending">{{ booking.status }}</span>
+                                {% else %}
+                                <span class="status-completed">{{ booking.status }}</span>
+                                {% endif %}
+                            {% endif %}
+                            </p>
+                        </div>
+                        <div class="booking-actions">
+                            {% if booking.booking_id %}
+                            <button class="cancel-booking-btn" data-booking-id="{{ booking.booking_id }}">Cancel Tour</button>
+                            {% else %}
+                            <button class="cancel-booking-btn" data-booking-id="{{ booking.id }}" data-booking-type="pending">Cancel Tour</button>
+                            {% endif %}
+                        </div>
+                    </div>
+                    {% empty %}
+                    <div class="no-bookings-message">
+                        <p>You don't have any active tours at the moment.</p>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            
+            <div class="tab-content" id="pastToursTab" style="display: none;">
+                <div class="bookings-grid">
+                    {% for booking in past_tours %}
+                    <div class="booking-card">
+                        <div class="booking-header">
+                            {% if booking.tour %}
+                            <h3>{{ booking.tour.tour_name }}</h3>
+                            <span class="booking-id">#{{ booking.booking_id }}</span>
+                            {% else %}
+                            <h3>{{ booking.tour_id.tour_name }}</h3>
+                            <span class="booking-id">PEN-{{ booking.id }}</span>
+                            {% endif %}
+                        </div>
+                        <div class="booking-details">
+                            {% if booking.schedule %}
+                            <p><strong>Date:</strong> {{ booking.schedule.start_time|date:"F d, Y" }}</p>
+                            <p><strong>Time:</strong> {{ booking.schedule.start_time|time:"g:i A" }} - {{ booking.schedule.end_time|time:"g:i A" }}</p>
+                            {% else %}
+                            <p><strong>Date:</strong> {{ booking.sched_id.start_time|date:"F d, Y" }}</p>
+                            <p><strong>Time:</strong> {{ booking.sched_id.start_time|time:"g:i A" }} - {{ booking.sched_id.end_time|time:"g:i A" }}</p>
+                            {% endif %}
+                            
+                            {% if booking.num_adults %}
+                            <p><strong>Guests:</strong> {{ booking.num_adults }} Adults, {{ booking.num_children }} Children</p>
+                            <p><strong>Total Price:</strong> 
+                              {% if booking.schedule %}
+                                ₱{{ booking.schedule.price|floatformat:2 }} × {{ booking.num_adults|add:booking.num_children }} = ₱{% widthratio booking.schedule.price 1 booking.num_adults|add:booking.num_children %}
+                              {% elif booking.sched_id %}
+                                ₱{{ booking.sched_id.price|floatformat:2 }} × {{ booking.num_adults|add:booking.num_children }} = ₱{% widthratio booking.sched_id.price 1 booking.num_adults|add:booking.num_children %}
+                              {% else %}
+                                ₱{{ booking.total_amount|default:"0.00" }}
+                              {% endif %}
+                            </p>
+                            {% else %}
+                            <p><strong>Guests:</strong> {{ booking.num_adults|default:0 }} Adults, {{ booking.num_children|default:0 }} Children</p>
+                            <p><strong>Total Guests:</strong> {{ booking.total_guests }}</p>
+                            <p><strong>Total Price:</strong> 
+                              {% if booking.sched_id %}
+                                ₱{{ booking.sched_id.price|floatformat:2 }} × {{ booking.total_guests }} = ₱{% widthratio booking.sched_id.price 1 booking.total_guests %}
+                              {% else %}
+                                ₱0.00
+                              {% endif %}
+                            </p>
+                            {% endif %}
+                            
+                            <p><strong>Status:</strong> 
+                            {% if booking.tour %}
+                                {% if booking.status == 'completed' or booking.status == 'Completed' %}
+                                <span class="status-completed">
+                                    {% if booking.get_status_display %}
+                                        {{ booking.get_status_display }}
+                                    {% else %}
+                                        {{ booking.status }}
+                                    {% endif %}
+                                </span>
+                                {% elif booking.status == 'cancelled' or booking.status == 'Cancelled' %}
+                                <span class="status-cancelled">
+                                    {% if booking.get_status_display %}
+                                        {{ booking.get_status_display }}
+                                    {% else %}
+                                        {{ booking.status }}
+                                    {% endif %}
+                                </span>
+                                {% else %}
+                                <span class="status-completed">
+                                    {% if booking.get_status_display %}
+                                        {{ booking.get_status_display }}
+                                    {% else %}
+                                        {{ booking.status }}
+                                    {% endif %}
+                                </span>
+                                {% endif %}
+                            {% else %}
+                                {% if booking.status == 'Cancelled' %}
+                                <span class="status-cancelled">{{ booking.status }}</span>
+                                {% elif booking.status == 'Pending' %}
+                                <span class="status-pending">{{ booking.status }}</span>
+                                {% else %}
+                                <span class="status-completed">{{ booking.status }}</span>
+                                {% endif %}
+                            {% endif %}
+                            </p>
+                            
+                            {% if booking.cancellation_reason %}
+                            <p><strong>Cancellation Reason:</strong> {{ booking.cancellation_reason }}</p>
+                            {% endif %}
+                        </div>
+                    </div>
+                    {% empty %}
+                    <div class="no-bookings-message">
+                        <p>You haven't completed any tours yet.</p>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Booking Cancellation Modal -->
+    <div id="cancellationModal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <span class="close-modal">&times;</span>
+            <h3>Cancel Tour</h3>
+            <p>Are you sure you want to cancel this tour? This action cannot be undone.</p>
+            <form id="cancellation-form">
+                {% csrf_token %}
+                <input type="hidden" id="booking_id" name="booking_id">
+                <div class="form-group">
+                    <label for="cancellation_reason">Reason for Cancellation:</label>
+                    <textarea id="cancellation_reason" name="cancellation_reason" rows="3"></textarea>
+                    <small>Please provide a reason for cancellation. This helps us improve our services and will be visible to our staff.</small>
+                </div>
+                <div class="form-actions">
+                    <button type="button" id="cancel-cancellation" class="btn-secondary">No, Keep Tour</button>
+                    <button type="submit" id="confirm-cancellation" class="btn-danger">Yes, Cancel Tour</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Chat Button -->
+    <div class="chat-button">
+        <i class="fas fa-comment"></i>
+    </div>
+
+    <!-- Add modals before the closing body tag -->
+    <!-- Sign Up Modal -->
+    <div id="signupModal" class="modal">
+        <div class="modal-content">
+            <span class="close-modal" id="close-signup">&times;</span>
+            <h2 class="modal-title">Sign Up to Continue</h2>
+            
+            <!-- Success message -->
+            <div id="signup-success" class="success-message" style="display: none; color: #28a745; text-align: center; padding: 15px; margin-bottom: 20px; background-color: #f8fff8; border-radius: 5px; border: 1px solid #d4edda;">
+                Registration successful! Logging you in...
+            </div>
+            
+            <form id="signup-form" enctype="multipart/form-data">
+                {% csrf_token %}
+                
+                <div class="form-row name-row">
+                    <div class="form-group" style="flex: 2;">
+                        <label for="first_name" class="required">First Name</label>
+                        <input type="text" id="first_name" name="first_name" class="form-control" required>
+                        <div class="error-message" id="first_name-error"></div>
+                    </div>
+                    
+                    <div class="form-group" style="flex: 1; max-width: 80px;">
+                        <label for="middle_initial">M.I.</label>
+                        <input type="text" id="middle_initial" name="middle_initial" class="form-control" maxlength="1">
+                        <div class="error-message" id="middle_initial-error"></div>
+                    </div>
+                    
+                    <div class="form-group" style="flex: 2;">
+                        <label for="last_name" class="required">Last Name</label>
+                        <input type="text" id="last_name" name="last_name" class="form-control" required>
+                        <div class="error-message" id="last_name-error"></div>
+                    </div>
+                </div>
+                
+                <div class="form-group">
+                    <label for="email" class="required">Email Address</label>
+                    <input type="email" id="email" name="email" class="form-control" required>
+                    <div class="error-message" id="email-error"></div>
+                </div>
+                
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="country_of_origin" class="required">Country of Origin</label>
+                        <input type="text" id="country_of_origin" name="country_of_origin" class="form-control" required>
+                        <div class="error-message" id="country_of_origin-error"></div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="city" class="required">City</label>
+                        <input type="text" id="city" name="city" class="form-control" required>
+                        <div class="error-message" id="city-error"></div>
+                    </div>
+                </div>
+                
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="birthday" class="required">Birthday</label>
+                        <input type="date" id="birthday" name="birthday" class="form-control" required>
+                        <div class="error-message" id="birthday-error"></div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="age">Age</label>
+                        <input type="number" id="age" name="age" class="form-control" readonly>
+                        <div class="error-message" id="age-error"></div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="age_label">Age Category</label>
+                        <input type="text" id="age_label" name="age_label" class="form-control" readonly>
+                    </div>
+                </div>
+                
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="phone_number" class="required">Phone Number</label>
+                        <input type="tel" id="phone_number" name="phone_number" class="form-control" required>
+                        <div class="error-message" id="phone-error"></div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="sex" class="required">Sex</label>
+                        <select id="sex" name="sex" class="form-control" required>
+                            <option value="">-- Select --</option>
+                            <option value="M">Male</option>
+                            <option value="F">Female</option>
+                        </select>
+                        <div class="error-message" id="sex-error"></div>
+                    </div>
+                </div>
+                
+                <div class="form-group">
+                    <label for="company_name">Company Name <small>(Optional)</small></label>
+                    <input type="text" id="company_name" name="company_name" class="form-control">
+                    <div class="error-message" id="company_name-error"></div>
+                </div>
+                
+                <div class="form-group">
+                    <label for="credentials">Credentials (Passport, Valid ID, etc.)</label>
+                    <input type="file" id="credentials" name="credentials" class="form-control" multiple accept="image/*">
+                    <small>You can upload multiple files by selecting them together</small>
+                    <div class="error-message" id="credentials-error"></div>
+                </div>
+                
+                <div class="form-group">
+                    <label for="profile_picture">Profile Picture (Optional)</label>
+                    <div class="profile-input-options">
+                        <input type="file" id="profile_picture" name="picture" class="form-control" accept="image/*">
+                        <button type="button" class="camera-btn" id="signup-open-camera">
+                            <i class="fas fa-camera"></i> Use Camera
+                        </button>
+                    </div>
+                    <div id="signup-camera-container" style="display: none; margin-top: 10px;">
+                        <video id="signup-camera-preview" width="100%" autoplay playsinline></video>
+                        <canvas id="signup-canvas" style="display: none;"></canvas>
+                        <div class="camera-controls">
+                            <button type="button" class="capture-btn" id="signup-capture-photo">
+                                <i class="fas fa-camera"></i> Capture
+                            </button>
+                            <button type="button" class="cancel-btn" id="signup-cancel-camera">
+                                <i class="fas fa-times"></i> Cancel
+                            </button>
+                        </div>
+                    </div>
+                    <div id="signup-photo-preview" style="display: none; margin-top: 10px; position: relative;">
+                        <img id="signup-captured-photo" style="max-width: 100%; border-radius: 5px;">
+                        <button type="button" id="signup-retake-button" class="retake-btn">
+                            <i class="fas fa-redo"></i> Retake
+                        </button>
+                    </div>
+                    <div class="error-message" id="picture-error"></div>
+                </div>
+                
+                <div class="form-group checkbox-group">
+                    <input type="checkbox" id="has_disability" name="has_disability" class="form-check-input">
+                    <label for="has_disability" class="form-check-label">Do you have a disability?</label>
+                </div>
+                
+                <div id="disability_details" style="display: none;">
+                    <div class="form-group">
+                        <label for="disability_type">Type of Disability</label>
+                        <input type="text" id="disability_type" name="disability_type" class="form-control">
+                        <div class="error-message" id="disability_type-error"></div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="disability_documents">Medical Records or Verification (Optional)</label>
+                        <input type="file" id="disability_documents" name="disability_documents" class="form-control" multiple accept="image/*,application/pdf">
+                        <small>You can upload multiple files by selecting them together</small>
+                        <div class="error-message" id="disability_documents-error"></div>
+                    </div>
+                </div>
+                
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="password" class="required">Password</label>
+                        <input type="password" id="password" name="password" class="form-control" required>
+                        <div class="error-message" id="password-error"></div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="confirm_password" class="required">Confirm Password</label>
+                        <input type="password" id="confirm_password" name="confirm_password" class="form-control" required>
+                        <div class="error-message" id="confirm-password-error"></div>
+                    </div>
+                </div>
+                
+                <div class="button-group">
+                    <button type="submit" class="btn btn-primary">Sign Up</button>
+                </div>
+            </form>
+            
+            <div class="form-link">
+                <p>Already have an account? <a href="#" class="show-login">Log In</a></p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Login Modal -->
+    <div id="loginModal" class="modal">
+        <div class="modal-content">
+            <span class="close-modal" id="close-login">&times;</span>
+            <h2 class="modal-title">Login to Continue</h2>
+            
+            <!-- Success message -->
+            <div id="login-success" class="success-message" style="display: none; color: #28a745; text-align: center; padding: 15px; margin-bottom: 20px; background-color: #f8fff8; border-radius: 5px; border: 1px solid #d4edda;">
+                Login successful! Redirecting...
+            </div>
+            
+            <form id="login-form">
+                {% csrf_token %}
+                
+                <div class="form-group">
+                    <label for="login-email" class="required">Email</label>
+                    <input type="email" id="login-email" name="email" class="form-control" required>
+                    <div class="error-message" id="login-email-error"></div>
+                </div>
+                
+                <div class="form-group">
+                    <label for="login-password" class="required">Password</label>
+                    <input type="password" id="login-password" name="password" class="form-control" required>
+                    <div class="error-message" id="login-password-error"></div>
+                </div>
+                
+                <button type="submit" class="submit-btn">Log In</button>
+                
+                <div class="login-link">
+                    Don't have an account? <a href="#" id="show-signup">Sign up here</a>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Profile Update Modal -->
+    <div id="profileUpdateModal" class="modal">
+        <div class="modal-content">
+            <span class="close-modal">&times;</span>
+            <h2 class="modal-title">Update Your Profile</h2>
+            
+            <!-- Success message -->
+            <div id="profile-update-success" class="success-message" style="display: none; color: #28a745; text-align: center; padding: 15px; margin-bottom: 20px; background-color: #f8fff8; border-radius: 5px; border: 1px solid #d4edda;">
+                Profile updated successfully!
+            </div>
+            
+            <form id="profileUpdateForm" enctype="multipart/form-data">
+                {% csrf_token %}
+                
+                <div class="form-row name-row">
+                    <div class="form-group" style="flex: 2;">
+                        <label for="first_name" class="required">First Name</label>
+                        <input type="text" id="first_name" name="first_name" class="form-control" required>
+                        <div class="error-message" id="first_name-error"></div>
+                    </div>
+                    
+                    <div class="form-group" style="flex: 1; max-width: 80px;">
+                        <label for="middle_initial">M.I.</label>
+                        <input type="text" id="middle_initial" name="middle_initial" class="form-control" maxlength="1">
+                        <div class="error-message" id="middle_initial-error"></div>
+                    </div>
+                    
+                    <div class="form-group" style="flex: 2;">
+                        <label for="last_name" class="required">Last Name</label>
+                        <input type="text" id="last_name" name="last_name" class="form-control" required>
+                        <div class="error-message" id="last_name-error"></div>
+                    </div>
+                </div>
+                
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="country_of_origin" class="required">Country of Origin</label>
+                        <input type="text" id="country_of_origin" name="country_of_origin" class="form-control" required>
+                        <div class="error-message" id="country_of_origin-error"></div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="city" class="required">City</label>
+                        <input type="text" id="city" name="city" class="form-control" required>
+                        <div class="error-message" id="city-error"></div>
+                    </div>
+                </div>
+                
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="age">Age</label>
+                        <input type="number" id="age" name="age" class="form-control">
+                        <div class="error-message" id="age-error"></div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="phone_number" class="required">Phone Number</label>
+                        <input type="text" id="phone_number" name="phone_number" class="form-control" required>
+                        <div class="error-message" id="phone_number-error"></div>
+                    </div>
+                </div>
+                
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="company_name">Company Name <small>(Optional)</small></label>
+                        <input type="text" id="company_name" name="company_name" class="form-control">
+                        <div class="error-message" id="company_name-error"></div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="sex" class="required">Sex</label>
+                        <select id="sex" name="sex" class="form-control" required>
+                            <option value="M">Male</option>
+                            <option value="F">Female</option>
+                        </select>
+                        <div class="error-message" id="sex-error"></div>
+                    </div>
+                </div>
+                
+                <div class="form-group">
+                    <label for="picture">Profile Picture</label>
+                    <div class="image-upload-container">
+                        <input type="file" id="picture" name="picture" accept="image/*">
+                        <button type="button" id="camera-button" class="btn">
+                            <i class="fas fa-camera"></i> Use Camera
+                        </button>
+                        <img id="image-preview" style="display: none; max-width: 100%; margin-top: 10px;">
+                    </div>
+                </div>
+                
+                <button type="submit" class="submit-btn">Update Profile</button>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener("DOMContentLoaded", function() {
+            // Add body attribute for authentication state
+            document.body.setAttribute('data-authenticated', '{% if user.is_authenticated %}true{% else %}false{% endif %}');
+            
+            // Get the modals and close buttons
+            const signupModal = document.getElementById("signupModal");
+            const loginModal = document.getElementById("loginModal");
+            const closeSignupBtn = document.getElementById("close-signup");
+            const closeLoginBtn = document.getElementById("close-login");
+            
+            // Automatically show login modal if user is not authenticated
+            if (document.body.getAttribute('data-authenticated') === 'false') {
+                loginModal.style.display = "block";
+            }
+            
+            // Login functionality
+            function loginUser() {
+                // Show login modal instead of redirecting
+                document.getElementById('loginModal').style.display = "block";
+            }
+            
+            function logoutUser() {
+                // Call the logout URL
+                fetch('{% url "logout" %}', {
+                    method: 'GET',
+                    credentials: 'same-origin',
+                    headers: {
+                        'X-Requested-With': 'XMLHttpRequest'
+                    }
+                })
+                .then(response => {
+                    if (response.ok) {
+                        // Update authentication state
+                        document.body.setAttribute('data-authenticated', 'false');
+                        
+                        // Replace the logout button with login button
+                        const navbarRight = document.querySelector('.navbar').lastElementChild;
+                        // Clear welcome message and logout button
+                        navbarRight.innerHTML = `
+                            <button class="login-btn" onclick="loginUser()">
+                                <span class="login-text">Login</span> <i class="fas fa-user-circle"></i>
+                            </button>
+                        `;
+                        
+                        // Reload the page to refresh the state
+                        window.location.reload();
+                    } else {
+                        console.error('Logout failed');
+                    }
+                })
+                .catch(error => {
+                    console.error('Error during logout:', error);
+                });
+            }
+            
+            // Make functions available globally
+            window.loginUser = loginUser;
+            window.logoutUser = logoutUser;
+            
+            // Show signup modal and hide login modal
+            document.getElementById('show-signup').addEventListener('click', function(e) {
+                e.preventDefault();
+                loginModal.style.display = "none";
+                signupModal.style.display = "block";
+            });
+            
+            // Show login modal and hide signup modal
+            document.querySelector('.show-login').addEventListener('click', function(e) {
+                e.preventDefault();
+                signupModal.style.display = "none";
+                loginModal.style.display = "block";
+            });
+            
+            // Close the signup modal
+            if (closeSignupBtn) {
+                closeSignupBtn.addEventListener('click', function() {
+                    signupModal.style.display = "none";
+                });
+            }
+            
+            // Close the login modal
+            if (closeLoginBtn) {
+                closeLoginBtn.addEventListener('click', function() {
+                    loginModal.style.display = "none";
+                });
+            }
+            
+            // Close both modals when clicking outside
+            window.onclick = function(event) {
+                if (event.target == signupModal) {
+                    signupModal.style.display = "none";
+                }
+                if (event.target == loginModal) {
+                    loginModal.style.display = "none";
+                }
+            }
+        });
+    </script>
+
+    <script>
+        document.addEventListener("DOMContentLoaded", function() {
+            // Enhanced carousel functionality with crossfade
+            let currentSlide = 0;
+            let nextSlide = 0;
+            const hero = document.querySelector('.hero');
+            const backgrounds = [
+                    '/static/images/5_CityLandscape_Estremos_Entry2.jpg',
+                    '/static/images/4 LANDSCAPE_DAYTO.jpg',
+                '/static/images/1 Landscape_Espartero_Entry2.jpg',
+                '/static/images/2 VERANO.jpg',
+                    '/static/images/3 LANDSCAPE_ARTAJO.jpg'
+                ];
+                
+                // Get positioning info for each image
+                const positionStyles = [
+                    'center bottom',
+                    'center center',
+                    'center center',
+                    'center bottom',
+                    'center center'
+                ];
+                
+                // Add dots to match the number of images
+            const dotsContainer = document.querySelector('.carousel-dots');
+            dotsContainer.innerHTML = '';
+            
+            for (let i = 0; i < backgrounds.length; i++) {
+                const dot = document.createElement('div');
+                dot.classList.add('dot');
+                if (i === 0) dot.classList.add('active');
+                dotsContainer.appendChild(dot);
+            }
+            
+            const allDots = document.querySelectorAll('.dot');
+            
+                function updateBackgroundWithFade(index) {
+                    // Set the current slide's image to the main background
+                    hero.style.backgroundImage = `url('${backgrounds[index]}')`;
+                    
+                    // Set the appropriate positioning based on the image
+                    hero.style.backgroundPosition = positionStyles[index];
+                    
+                    // Update dots
+                    allDots.forEach(d => d.classList.remove('active'));
+                    allDots[index].classList.add('active');
+                }
+                
+                allDots.forEach((dot, index) => {
+                    dot.addEventListener('click', () => {
+                    currentSlide = index;
+                        updateBackgroundWithFade(index);
+                    });
+                });
+                
+                // Auto rotate carousel with smoother transitions
+            setInterval(() => {
+                currentSlide = (currentSlide + 1) % backgrounds.length;
+                    updateBackgroundWithFade(currentSlide);
+                }, 12000); // Increased from 7000 to 12000 ms for longer display
+            
+                // Initialize the first slide
+                updateBackgroundWithFade(0);
+                
+                // Tour packages navigation
+                const nextBtn = document.querySelector('.package-nav.next');
+                const prevBtn = document.querySelector('.package-nav.prev');
+                const packagesGrid = document.querySelector('.packages-grid');
+                
+                function updateArrowVisibility() {
+                    if (packagesGrid) {
+                        // Show/hide prev button based on scroll position
+                        if (packagesGrid.scrollLeft > 10) {
+                            prevBtn.style.display = 'flex';
+                        } else {
+                            prevBtn.style.display = 'none';
+                        }
+                        
+                        // Show/hide next button based on whether we can scroll more to the right
+                        const scrollableWidth = packagesGrid.scrollWidth - packagesGrid.clientWidth;
+                        if (Math.ceil(packagesGrid.scrollLeft) >= scrollableWidth - 10) {
+                            nextBtn.style.display = 'none';
+                        } else {
+                            nextBtn.style.display = 'flex';
+                        }
+                    }
+                }
+                
+                // Initial check
+                updateArrowVisibility();
+                
+                // Set up event listeners
+                if (nextBtn && packagesGrid) {
+                    nextBtn.addEventListener('click', function() {
+                        packagesGrid.scrollBy({
+                            left: 300,
+                            behavior: 'smooth'
+                        });
+                    });
+                }
+                
+                if (prevBtn && packagesGrid) {
+                    prevBtn.addEventListener('click', function() {
+                        packagesGrid.scrollBy({
+                            left: -300,
+                            behavior: 'smooth'
+                        });
+                    });
+                }
+                
+                // Check arrow visibility on scroll
+                if (packagesGrid) {
+                    packagesGrid.addEventListener('scroll', updateArrowVisibility);
+                }
+        });
+    </script>
+
+    <script>
+        document.addEventListener("DOMContentLoaded", function() {
+            // Add body attribute for authentication state
+            document.body.setAttribute('data-authenticated', '{% if user.is_authenticated %}true{% else %}false{% endif %}');
+            
+            // Automatically show login modal if user is not authenticated
+            if (document.body.getAttribute('data-authenticated') === 'false') {
+                document.getElementById('loginModal').style.display = "block";
+            }
+            
+            // Login functionality
+            function loginUser() {
+                // Show login modal instead of redirecting
+                document.getElementById('loginModal').style.display = "block";
+            }
+            
+            function logoutUser() {
+                // Call the logout URL
+                fetch('{% url "logout" %}', {
+                    method: 'GET',
+                    credentials: 'same-origin',
+                    headers: {
+                        'X-Requested-With': 'XMLHttpRequest'
+                    }
+                })
+                .then(response => {
+                    if (response.ok) {
+                        // Update authentication state
+                        document.body.setAttribute('data-authenticated', 'false');
+                        
+                        // Replace the logout button with login button
+                        const navbarRight = document.querySelector('.navbar').lastElementChild;
+                        // Clear welcome message and logout button
+                        navbarRight.innerHTML = `
+                            <button class="login-btn" onclick="loginUser()">
+                                <span class="login-text">Login</span> <i class="fas fa-user-circle"></i>
+                            </button>
+                        `;
+                        
+                        // Reload the page to refresh the state
+                        window.location.reload();
+                    } else {
+                        console.error('Logout failed');
+                    }
+                })
+                .catch(error => {
+                    console.error('Error during logout:', error);
+                });
+            }
+            
+            // Make functions available globally
+            window.loginUser = loginUser;
+            window.logoutUser = logoutUser;
+            
+            // Get the modals and close buttons
+            const signupModal = document.getElementById("signupModal");
+            const loginModal = document.getElementById("loginModal");
+            const closeSignupBtn = document.querySelector(".close-modal");
+            const closeLoginBtn = document.getElementById("close-login");
+            
+            // Show signup modal and hide login modal
+            document.getElementById('show-signup').addEventListener('click', function(e) {
+                e.preventDefault();
+                loginModal.style.display = "none";
+                signupModal.style.display = "block";
+            });
+            
+            // Show login modal and hide signup modal
+            document.querySelector('.show-login').addEventListener('click', function(e) {
+                e.preventDefault();
+                signupModal.style.display = "none";
+                loginModal.style.display = "block";
+            });
+            
+            // Close the signup modal
+            closeSignupBtn.onclick = function() {
+                signupModal.style.display = "none";
+            }
+            
+            // Close the login modal
+            closeLoginBtn.onclick = function() {
+                loginModal.style.display = "none";
+            }
+            
+            // Close both modals when clicking outside
+            window.onclick = function(event) {
+                if (event.target == signupModal) {
+                    signupModal.style.display = "none";
+                }
+                if (event.target == loginModal) {
+                    loginModal.style.display = "none";
+                }
+            }
+            
+            // Store the URL of the clicked card
+            let clickedCardUrl = '';
+            
+            // Add click handlers for package cards
+            document.querySelectorAll('.package-card').forEach(card => {
+                card.addEventListener('click', function() {
+                    const isAuthenticated = document.body.getAttribute('data-authenticated') === 'true';
+                    // Store the URL for later use after signup/login
+                    clickedCardUrl = this.getAttribute('data-url') || '';
+                    
+                    if (isAuthenticated) {
+                        // If user is logged in, redirect to the tour page
+                        if (clickedCardUrl) window.location.href = clickedCardUrl;
+                    } else {
+                        // If user is not logged in, show the login modal instead of signup
+                        loginModal.style.display = "block";
+                    }
+                });
+            });
+            
+            // Handle the login form submission
+            document.getElementById('login-form').addEventListener('submit', function(e) {
+                e.preventDefault();
+                
+                // Clear previous error messages
+                document.querySelectorAll('#login-form .error-message').forEach(el => {
+                    el.textContent = '';
+                });
+                
+                // Get form data
+                const formData = new FormData(this);
+                
+                // Send AJAX request for login
+                fetch('{% url "login" %}', {
+                    method: 'POST',
+                    body: formData,
+                    headers: {
+                        'X-Requested-With': 'XMLHttpRequest',
+                        'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+                    }
+                })
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('Network response was not ok');
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    if (data.success) {
+                        // Login successful - update UI and redirect immediately
+                        console.log('Login successful, redirecting...');
+                        
+                        // Update authentication state
+                        document.body.setAttribute('data-authenticated', 'true');
+                        
+                        // Redirect to the original tour page or reload
+                        if (clickedCardUrl) {
+                            window.location.href = clickedCardUrl;
+                        } else {
+                            window.location.reload();
+                        }
+                    } else {
+                        // Login failed
+                        console.error('Login failed:', data.message);
+                        document.getElementById('login-email-error').textContent = data.message || 'Invalid email or password';
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    document.getElementById('login-email-error').textContent = 'An error occurred. Please try again.';
+                });
+            });
+            
+            // Handle the signup form submission
+            document.getElementById('signup-form').addEventListener('submit', function(e) {
+                e.preventDefault();
+                
+                // Clear previous error messages
+                document.querySelectorAll('.error-message').forEach(el => {
+                    el.textContent = '';
+                });
+                
+                // Basic form validation
+                let isValid = true;
+                
+                // Password validation
+                const password = document.getElementById('password').value;
+                const confirmPassword = document.getElementById('confirm_password').value;
+                
+                if (password !== confirmPassword) {
+                    document.getElementById('confirm-password-error').textContent = 'Passwords do not match.';
+                    isValid = false;
+                }
+                
+                // Email validation
+                const email = document.getElementById('email').value;
+                const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+                if (!emailRegex.test(email)) {
+                    document.getElementById('email-error').textContent = 'Please enter a valid email address.';
+                    isValid = false;
+                }
+                
+                // Phone validation
+                const phone = document.getElementById('phone_number').value;
+                const phoneRegex = /^[+]?[(]?[0-9]{1,4}[)]?[-\s.]?[0-9]{1,3}[-\s.]?[0-9]{1,4}[-\s.]?[0-9]{1,4}$/;
+                if (!phoneRegex.test(phone)) {
+                    document.getElementById('phone-error').textContent = 'Please enter a valid phone number.';
+                    isValid = false;
+                }
+                
+                // Age validation
+                const age = document.getElementById('age').value;
+                if (age < 18) {
+                    document.getElementById('age-error').textContent = 'You must be at least 18 years old.';
+                    isValid = false;
+                }
+                
+                // Sex validation
+                const sex = document.getElementById('sex').value;
+                if (!sex) {
+                    document.getElementById('sex-error').textContent = 'Please select your sex.';
+                    isValid = false;
+                }
+                
+                // Profile picture validation
+                const profilePicture = document.getElementById('profile_picture');
+                if (profilePicture.files.length > 0) {
+                    const file = profilePicture.files[0];
+                    if (!file.type.startsWith('image/')) {
+                        document.getElementById('file-error').textContent = 'Please upload an image file.';
+                        isValid = false;
+                    } else if (file.size > 5 * 1024 * 1024) { // 5MB limit
+                        document.getElementById('file-error').textContent = 'File size should be less than 5MB.';
+                        isValid = false;
+                    }
+                } else {
+                    document.getElementById('file-error').textContent = 'Please upload a profile picture.';
+                    isValid = false;
+                }
+                
+                if (!isValid) {
+                    return;
+                }
+                
+                // Create FormData object for handling file upload
+                const formData = new FormData(this);
+                
+                // Send AJAX request for registration
+                fetch('{% url "register" %}', {
+                    method: 'POST',
+                    body: formData,
+                    headers: {
+                        'X-Requested-With': 'XMLHttpRequest',
+                        'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+                    }
+                })
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('Network response was not ok');
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    if (data.success) {
+                        // Registration successful, proceed with login immediately
+                        console.log('Registration successful, logging in...');
+                        
+                        // Auto-login the user
+                        const loginData = new FormData();
+                        const username = formData.get('username');
+                        loginData.append('username', username);
+                        loginData.append('password', formData.get('password'));
+                        loginData.append('csrfmiddlewaretoken', document.querySelector('[name=csrfmiddlewaretoken]').value);
+                        
+                        return fetch('{% url "login" %}', {
+                            method: 'POST',
+                            body: loginData,
+                            headers: {
+                                'X-Requested-With': 'XMLHttpRequest',
+                                'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+                            }
+                        }).then(response => response.json());
+                    } else {
+                        // Show error messages
+                        if (data.errors) {
+                            // Handle field-specific errors
+                            Object.keys(data.errors).forEach(key => {
+                                const errorEl = document.getElementById(`${key}-error`) || 
+                                               document.getElementById(`${key.replace('_', '-')}-error`);
+                                if (errorEl) {
+                                    errorEl.textContent = data.errors[key];
+                                }
+                            });
+                        
+                            // Check if message contains information about taken emails
+                            if (data.message && data.message.includes('email is already registered')) {
+                                document.getElementById('email-error').textContent = 'This email is already registered. Please use another or login.';
+                            } else if (data.message) {
+                                alert(data.message);
+                            }
+                        } else {
+                            alert('Registration failed. Please try again.');
+                        }
+                        throw new Error('Registration failed');
+                    }
+                })
+                .then(loginData => {
+                    if (loginData.success) {
+                        // Login successful - redirect immediately
+                        console.log('Login successful, redirecting...');
+                        
+                        // Update authentication state
+                        document.body.setAttribute('data-authenticated', 'true');
+                        
+                        // Redirect to the original tour page or reload
+                        if (clickedCardUrl) {
+                            window.location.href = clickedCardUrl;
+                        } else {
+                            window.location.reload();
+                        }
+                    } else {
+                        // Login failed
+                        console.error('Login failed');
+                        alert('Login failed. Please try again.');
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    document.getElementById('signup-form').reset();
+                    
+                    // Display error messages from the server
+                    if (data && data.errors) {
+                        for (const field in data.errors) {
+                            document.getElementById(`${field}-error`).textContent = data.errors[field];
+                        }
+                    } else if (data.message) {
+                        // Check if message contains information about taken usernames/emails
+                        if (data.message.includes('email is already registered')) {
+                            document.getElementById('email-error').textContent = 'This email is already registered. Please use another or login.';
+                        } else {
+                            alert(data.message);
+                        }
+                    } else {
+                        alert('Registration failed. Please try again.');
+                    }
+                    throw new Error('Registration failed');
+                });
+            });
+        });
+    </script>
+
+    <script>
+        document.addEventListener("DOMContentLoaded", function() {
+            // Camera functionality for signup
+            const cameraButton = document.getElementById('camera-button');
+            const cameraContainer = document.getElementById('camera-container');
+            const cameraPreview = document.getElementById('camera-preview');
+            const captureButton = document.getElementById('capture-button');
+            const cancelCamera = document.getElementById('cancel-camera');
+            const photoCanvas = document.getElementById('photo-canvas');
+            const profilePictureInput = document.getElementById('profile_picture');
+            const photoPreview = document.getElementById('photo-preview');
+            const capturedImage = document.getElementById('captured-image');
+            const retakeButton = document.getElementById('retake-button');
+            
+            let stream = null;
+            
+            // Function to start the camera
+            function startCamera() {
+                if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+                    profilePictureInput.style.display = 'none';
+                    cameraContainer.style.display = 'block';
+                    
+                    navigator.mediaDevices.getUserMedia({ video: true })
+                        .then(function(mediaStream) {
+                            stream = mediaStream;
+                            cameraPreview.srcObject = mediaStream;
+                            cameraPreview.play();
+                        })
+                        .catch(function(error) {
+                            console.error('Could not access the camera: ', error);
+                            alert('Could not access your camera. Please check permissions or use file upload instead.');
+                            stopCamera();
+                        });
+                } else {
+                    alert('Your browser does not support camera access. Please use file upload instead.');
+                }
+            }
+            
+            // Function to stop the camera
+            function stopCamera() {
+                if (stream) {
+                    stream.getTracks().forEach(track => track.stop());
+                    stream = null;
+                }
+                
+                cameraContainer.style.display = 'none';
+                profilePictureInput.style.display = 'block';
+            }
+            
+            // Capture photo from camera
+            function capturePhoto() {
+                const context = photoCanvas.getContext('2d');
+                
+                // Set canvas dimensions to match the video
+                photoCanvas.width = cameraPreview.videoWidth;
+                photoCanvas.height = cameraPreview.videoHeight;
+                
+                // Draw the current video frame on the canvas
+                context.drawImage(cameraPreview, 0, 0, photoCanvas.width, photoCanvas.height);
+                
+                // Convert the canvas to a data URL (base64 encoded image)
+                const dataURL = photoCanvas.toDataURL('image/jpeg');
+                
+                // Display the captured image
+                capturedImage.src = dataURL;
+                cameraContainer.style.display = 'none';
+                photoPreview.style.display = 'block';
+                
+                // Convert the data URL to a file and attach it to the file input
+                fetch(dataURL)
+                    .then(res => res.blob())
+                    .then(blob => {
+                        const file = new File([blob], "camera-capture.jpg", { type: "image/jpeg" });
+                        
+                        // Create a FileList-like object (not a real FileList, but works for our purpose)
+                        const dataTransfer = new DataTransfer();
+                        dataTransfer.items.add(file);
+                        profilePictureInput.files = dataTransfer.files;
+                        
+                        // Clear any previous validation errors
+                        document.getElementById('file-error').textContent = '';
+                    });
+            }
+            
+            // Button event listeners
+            if (cameraButton) {
+                cameraButton.addEventListener('click', startCamera);
+            }
+            
+            if (captureButton) {
+                captureButton.addEventListener('click', function() {
+                    capturePhoto();
+                    stopCamera();
+                });
+            }
+            
+            if (cancelCamera) {
+                cancelCamera.addEventListener('click', function() {
+                    stopCamera();
+                });
+            }
+            
+            if (retakeButton) {
+                retakeButton.addEventListener('click', function() {
+                    photoPreview.style.display = 'none';
+                    startCamera();
+                });
+            }
+            
+            // Clean up camera when modal is closed
+            const closeButtons = document.querySelectorAll('.close-modal');
+            closeButtons.forEach(button => {
+                button.addEventListener('click', stopCamera);
+            });
+            
+            // Clean up camera if user clicks outside modal
+            window.addEventListener('click', function(event) {
+                if (event.target.classList.contains('modal')) {
+                    stopCamera();
+                    photoPreview.style.display = 'none';
+                    profilePictureInput.style.display = 'block';
+                }
+            });
+        });
+    </script>
+
+    <script>
+        function toggleUserMenu() {
+            const dropdown = document.getElementById('userDropdown');
+            dropdown.style.display = dropdown.style.display === 'block' ? 'none' : 'block';
+            
+            // Close the dropdown when clicking outside
+            document.addEventListener('click', function closeDropdown(e) {
+                const userInfo = document.querySelector('.user-info');
+                const dropdown = document.getElementById('userDropdown');
+                
+                if (!userInfo.contains(e.target) && !dropdown.contains(e.target)) {
+                    dropdown.style.display = 'none';
+                    document.removeEventListener('click', closeDropdown);
+                }
+            });
+        }
+        
+        function changeLanguage(lang) {
+            console.log('Changing language to: ' + lang);
+            
+            // Make a request to the set-language endpoint
+            fetch(`/guest_app/set-language/${lang}/`, {
+                method: 'POST',
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+                }
+            })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Network response was not ok');
+                }
+                return response.json();
+            })
+            .then(data => {
+                console.log('Language changed successfully:', data);
+                
+                // Save to localStorage as backup
+                localStorage.setItem('preferredLanguage', lang);
+                
+                // Fetch translations
+                return fetch(`/guest_app/get-translations/${lang}/`);
+            })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Network response was not ok');
+                }
+                return response.json();
+            })
+            .then(data => {
+                console.log('Got translations:', data);
+                
+                if (data.success) {
+                    // Update the UI with translations
+                    updateInterfaceWithTranslations(data.translations);
+                }
+            })
+            .catch(error => {
+                console.error('Error changing language:', error);
+            });
+        }
+    </script>
+
+    <script>
+        // Other existing scripts...
+
+        // Profile update functionality
+        document.addEventListener('DOMContentLoaded', function() {
+            const modal = document.getElementById('profileUpdateModal');
+            const updateProfileLink = document.getElementById('update-profile-link');
+            const closeBtn = modal.querySelector('.close-modal');
+            const form = document.getElementById('profileUpdateForm');
+            const successMessage = document.getElementById('profile-update-success');
+            
+            // Function to clear all error messages
+            function clearErrors() {
+                document.querySelectorAll('.error-message').forEach(el => {
+                    el.textContent = '';
+                });
+                successMessage.style.display = 'none';
+            }
+            
+            // Open modal when clicking update profile link
+            updateProfileLink.addEventListener('click', function(e) {
+                e.preventDefault();
+                clearErrors();
+                loadUserProfile();
+                modal.style.display = 'block';
+            });
+            
+            // Close modal when clicking X
+            closeBtn.addEventListener('click', function() {
+                modal.style.display = 'none';
+            });
+            
+            // Close modal when clicking outside of it
+            window.addEventListener('click', function(e) {
+                if (e.target === modal) {
+                    modal.style.display = 'none';
+                }
+            });
+            
+            // Load current user profile data via AJAX
+            function loadUserProfile() {
+                fetch('/get_profile_data/', {
+                    headers: {
+                        'X-Requested-With': 'XMLHttpRequest'
+                    }
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        const user = data.user;
+                        
+                        // Set form field values
+                        document.getElementById('first_name').value = user.first_name || '';
+                        document.getElementById('middle_initial').value = user.middle_initial || '';
+                        document.getElementById('last_name').value = user.last_name || '';
+                        document.getElementById('username').value = user.username || '';
+                        document.getElementById('country_of_origin').value = user.country_of_origin || '';
+                        document.getElementById('city').value = user.city || '';
+                        document.getElementById('phone_number').value = user.phone_number || '';
+                        document.getElementById('age').value = user.age || '';
+                        document.getElementById('company_name').value = user.company_name || '';
+                        document.getElementById('sex').value = user.sex || 'M';
+                    } else {
+                        console.error('Failed to load user profile data');
+                    }
+                })
+                .catch(error => {
+                    console.error('Error loading profile data:', error);
+                });
+            }
+            
+            // Handle form submission
+            form.addEventListener('submit', function(e) {
+                e.preventDefault();
+                clearErrors();
+                
+                const formData = new FormData(form);
+                
+                fetch('/update_profile/', {
+                    method: 'POST',
+                    body: formData,
+                    headers: {
+                        'X-Requested-With': 'XMLHttpRequest'
+                    }
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        // Show success message
+                        successMessage.style.display = 'block';
+                        
+                        // Refresh page after a delay to show updated profile info
+                        setTimeout(() => {
+            window.location.reload();
+                        }, 1500);
+                    } else {
+                        // Display specific error messages if provided
+                        if (data.errors) {
+                            Object.keys(data.errors).forEach(field => {
+                                const errorElement = document.getElementById(`${field}-error`);
+                                if (errorElement) {
+                                    errorElement.textContent = data.errors[field];
+                                }
+                            });
+                        } else {
+                            // General error message
+                            alert('Failed to update profile: ' + (data.message || 'Unknown error'));
+                        }
+                    }
+                })
+                .catch(error => {
+                    console.error('Error updating profile:', error);
+                    alert('Error updating profile. Please try again.');
+                });
+            });
+        });
+    </script>
+
+    <script>
+        // Other existing scripts...
+
+        // Function to toggle user dropdown menu
+        function toggleUserMenu() {
+            const dropdown = document.getElementById('userDropdown');
+            dropdown.style.display = dropdown.style.display === 'block' ? 'none' : 'block';
+        }
+        
+        // Function to logout user
+        function logoutUser() {
+            fetch('/logout/', {
+                method: 'POST',
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'X-CSRFToken': '{{ csrf_token }}'
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    window.location.reload();
+                } else {
+                    alert('Logout failed. Please try again.');
+                }
+            })
+            .catch(error => {
+                console.error('Error during logout:', error);
+            });
+        }
+        
+        // Function to trigger login form
+        function loginUser() {
+            // Show login modal or redirect to login page
+            document.getElementById('loginModal').style.display = 'block';
+        }
+        
+        // Language functionality
+        function changeLanguage(lang) {
+            console.log('Changing language to: ' + lang);
+            
+            // Make a request to the set-language endpoint
+            fetch(`/guest_app/set-language/${lang}/`, {
+                method: 'POST',
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+                }
+            })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Network response was not ok');
+                }
+                return response.json();
+            })
+            .then(data => {
+                console.log('Language changed successfully:', data);
+                
+                // Save to localStorage as backup
+                localStorage.setItem('preferredLanguage', lang);
+                
+                // Fetch translations
+                return fetch(`/guest_app/get-translations/${lang}/`);
+            })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Network response was not ok');
+                }
+                return response.json();
+            })
+            .then(data => {
+                console.log('Got translations:', data);
+                
+                if (data.success) {
+                    // Update the UI with translations
+                    updateInterfaceWithTranslations(data.translations);
+                }
+            })
+            .catch(error => {
+                console.error('Error changing language:', error);
+            });
+        }
+        
+        // Function to update interface with translations
+        function updateInterfaceWithTranslations(translations) {
+            // Logo text
+            const logoText = document.querySelector('.logo h1');
+            if (logoText) {
+                logoText.textContent = translations['ibayaw_tour'] || 'Ibayaw Tour';
+            }
+            
+            // Navigation elements
+            document.querySelectorAll('.nav-links a').forEach((el, index) => {
+                const navKeys = ['nav_tour_packs', 'nav_programs', 'nav_city_map', 'nav_about_us', 'nav_contact'];
+                if (index < navKeys.length) {
+                    el.textContent = translations[navKeys[index]] || el.textContent;
+                }
+            });
+
+            // Hero section
+            document.querySelector('.hero-title').textContent = translations['hero_title'] || 'RIVER TOUR';
+            document.querySelector('.initiative').textContent = translations['initiative'] || 'Initiative';
+            document.querySelector('.city-name').textContent = translations['bayawan_city'] || 'BAYAWAN CITY';
+            document.querySelector('.hero-description').textContent = translations['hero_description'] || document.querySelector('.hero-description').textContent;
+
+            // User dropdown
+            document.querySelectorAll('#userDropdown a').forEach((el, index) => {
+                if (index === 0) {
+                    const iconHtml = el.innerHTML.split('</i>')[0] + '</i> ';
+                    el.innerHTML = iconHtml + (translations['my_profile'] || 'My Profile');
+                } else if (index === 1) {
+                    const iconHtml = el.innerHTML.split('</i>')[0] + '</i> ';
+                    el.innerHTML = iconHtml + (translations['update_profile'] || 'Update Profile');
+                } else if (el.getAttribute('onclick') && el.getAttribute('onclick').includes('logoutUser')) {
+                    const iconHtml = el.innerHTML.split('</i>')[0] + '</i> ';
+                    el.innerHTML = iconHtml + (translations['logout'] || 'Logout');
+                }
+            });
+
+            // Tour packages section
+            const headerTitle = document.querySelector('.header-title h2:first-child');
+            if (headerTitle) {
+                headerTitle.textContent = translations['ibayaw'] || 'Ibayaw';
+            }
+            
+            const tourPacksTitle = document.querySelector('.packages-header .header-title h2:last-child');
+            if (tourPacksTitle) {
+                tourPacksTitle.textContent = translations['tour_packs'] || 'TOUR PACKS';
+            }
+            
+            const packagesDesc = document.querySelector('.packages-description p');
+            if (packagesDesc) {
+                packagesDesc.textContent = translations['tour_packs_description'] || packagesDesc.textContent;
+            }
+            
+            const exploreLink = document.querySelector('.explore-link');
+            if (exploreLink) {
+                exploreLink.textContent = translations['explore_all_tour'] || 'EXPLORE ALL TOUR';
+            }
+
+            // Tour cards - update both the demo cards and the real cards
+            document.querySelectorAll('.package-card').forEach(card => {
+                // Price label
+                const priceElement = card.querySelector('.package-price');
+                if (priceElement) {
+                    const priceIcon = priceElement.querySelector('i');
+                    const priceSpan = priceElement.querySelector('span');
+                    if (priceSpan && priceSpan.textContent) {
+                        const priceValue = priceSpan.textContent.trim();
+                        priceSpan.textContent = priceValue;
+                    }
+                }
+                
+                // Time/duration label
+                const timeElement = card.querySelector('.package-time');
+                if (timeElement) {
+                    const timeIcon = timeElement.querySelector('i');
+                    const timeSpan = timeElement.querySelector('span');
+                    if (timeSpan && translations['duration_based']) {
+                        // Check if this contains "Duration based on schedule" text
+                        if (timeSpan.textContent.includes('Duration based')) {
+                            timeSpan.textContent = translations['duration_based'] || 'Duration based on schedule';
+                        } else if (timeSpan.textContent.includes('day')) {
+                            // Don't change actual day numbers, just the "days" text
+                            const dayText = timeSpan.textContent.trim();
+                            if (dayText === '1 day' && translations['day_singular']) {
+                                timeSpan.textContent = '1 ' + translations['day_singular'];
+                            } else if (translations['day_plural']) {
+                                const parts = dayText.split(' ');
+                                if (parts.length >= 2) {
+                                    timeSpan.textContent = parts[0] + ' ' + translations['day_plural'];
+                                }
+                            }
+                        }
+                    }
+                }
+                
+                // No schedule message
+                const noScheduleElement = card.querySelector('.package-no-schedule span');
+                if (noScheduleElement) {
+                    noScheduleElement.textContent = translations['no_schedules_made'] || 'No schedules made for this tour yet';
+                }
+                
+                // If this is a real tour with a tour_id
+                const tourId = card.getAttribute('data-tour-id');
+                if (tourId) {
+                    // Update tour name and description if translations exist
+                    const nameKey = `tour_${tourId}_name`;
+                    const descKey = `tour_${tourId}_description`;
+                    
+                    const titleElement = card.querySelector('.package-title');
+                    const descElement = card.querySelector('.package-description');
+                    
+                    if (titleElement && translations[nameKey]) {
+                        titleElement.textContent = translations[nameKey].toUpperCase();
+                    }
+                    
+                    if (descElement && translations[descKey]) {
+                        descElement.textContent = translations[descKey];
+                    }
+                } else {
+                    // This is a demo card - translate based on the title
+                    const titleElement = card.querySelector('.package-title');
+                    const descElement = card.querySelector('.package-description');
+                    
+                    if (titleElement) {
+                        const cardType = titleElement.textContent.trim().toLowerCase();
+                        if (translations[`${cardType}_tour`]) {
+                            titleElement.textContent = translations[`${cardType}_tour`];
+                        }
+                    }
+                    
+                    if (descElement) {
+                        const cardType = titleElement.textContent.trim().toLowerCase();
+                        if (translations[`${cardType}_description`]) {
+                            descElement.textContent = translations[`${cardType}_description`];
+                        }
+                    }
+                }
+            });
+
+            // Login/signup modals
+            const signupTitle = document.querySelector('#signupModal .modal-title');
+            if (signupTitle) {
+                signupTitle.textContent = translations['signup_to_continue'] || 'Sign Up to Continue';
+            }
+            
+            const loginTitle = document.querySelector('#loginModal .modal-title');
+            if (loginTitle) {
+                loginTitle.textContent = translations['login_to_continue'] || 'Login to Continue';
+            }
+            
+            // Profile update modal
+            const profileUpdateTitle = document.querySelector('#profileUpdateModal .modal-title');
+            if (profileUpdateTitle) {
+                profileUpdateTitle.textContent = translations['update_your_profile'] || 'Update Your Profile';
+            }
+            
+            // Form labels
+            document.querySelectorAll('label').forEach(label => {
+                const forAttr = label.getAttribute('for');
+                if (forAttr && translations[`label_${forAttr}`]) {
+                    // Keep the asterisk for required fields
+                    if (label.classList.contains('required')) {
+                        label.innerHTML = translations[`label_${forAttr}`] + ' *';
+                    } else {
+                        label.textContent = translations[`label_${forAttr}`];
+                    }
+                }
+            });
+            
+            // Buttons
+            document.querySelectorAll('button[type="submit"]').forEach(button => {
+                if (button.closest('#signup-form')) {
+                    button.textContent = translations['sign_up'] || 'Sign Up';
+                } else if (button.closest('#login-form')) {
+                    button.textContent = translations['log_in'] || 'Log In';
+                } else if (button.closest('#profileUpdateForm')) {
+                    button.textContent = translations['update_profile'] || 'Update Profile';
+                }
+            });
+            
+            // Login links
+            const loginLinks = document.querySelectorAll('.login-link');
+            loginLinks.forEach(link => {
+                const text = link.childNodes[0].nodeValue;
+                if (text.includes('Already have an account')) {
+                    link.childNodes[0].nodeValue = translations['already_have_account'] || 'Already have an account? ';
+                    const anchor = link.querySelector('a');
+                    if (anchor) {
+                        anchor.textContent = translations['log_in_here'] || 'Log in here';
+                    }
+                } else if (text.includes('Don\'t have an account')) {
+                    link.childNodes[0].nodeValue = translations['dont_have_account'] || 'Don\'t have an account? ';
+                    const anchor = link.querySelector('a');
+                    if (anchor) {
+                        anchor.textContent = translations['sign_up_here'] || 'Sign up here';
+                    }
+                }
+            });
+            
+            // Success messages
+            const signupSuccess = document.querySelector('#signup-success');
+            if (signupSuccess) {
+                signupSuccess.textContent = translations['registration_successful'] || 'Registration successful! Logging you in...';
+            }
+            
+            const loginSuccess = document.querySelector('#login-success');
+            if (loginSuccess) {
+                loginSuccess.textContent = translations['login_successful'] || 'Login successful! Redirecting...';
+            }
+            
+            const profileUpdateSuccess = document.querySelector('#profile-update-success');
+            if (profileUpdateSuccess) {
+                profileUpdateSuccess.textContent = translations['profile_updated'] || 'Profile updated successfully!';
+            }
+
+            // Login button (if not logged in)
+            const loginBtn = document.querySelector('.login-btn');
+            if (loginBtn) {
+                const loginTextEl = loginBtn.querySelector('.login-text');
+                if (loginTextEl) {
+                    loginTextEl.textContent = translations['login'] || 'Login';
+                }
+            }
+        }
+        
+        // Initialize translations on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            try {
+                // Get initial translations from the page data
+                const translationsElement = document.getElementById('translations-data');
+                if (translationsElement && translationsElement.textContent) {
+                    const initialTranslations = JSON.parse(translationsElement.textContent);
+                    if (initialTranslations) {
+                        updateInterfaceWithTranslations(initialTranslations);
+                    }
+                }
+                
+                // Set the correct language in both selectors
+                const currentLangElement = document.getElementById('current-language-data');
+                if (currentLangElement) {
+                    const currentLang = currentLangElement.textContent.trim();
+                    
+                    // Set the nav language selector
+                    const languageSelectNav = document.getElementById('languageSelectNav');
+                    if (languageSelectNav) {
+                        languageSelectNav.value = currentLang;
+                    }
+                }
+            } catch (e) {
+                console.error('Error initializing translations:', e);
+            }
+        });
+    </script>
+    
+    <!-- Bookings Tab and Cancellation Script -->
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // Tab switching functionality
+            const tabButtons = document.querySelectorAll('.tab-button');
+            const tabContents = document.querySelectorAll('.tab-content');
+            
+            tabButtons.forEach(button => {
+                button.addEventListener('click', () => {
+                    // Remove active class from all buttons
+                    tabButtons.forEach(btn => btn.classList.remove('active'));
+                    
+                    // Add active class to clicked button
+                    button.classList.add('active');
+                    
+                    // Hide all tab contents
+                    tabContents.forEach(content => {
+                        content.style.display = 'none';
+                    });
+                    
+                    // Show the selected tab content
+                    const tabName = button.getAttribute('data-tab');
+                    document.getElementById(tabName + 'ToursTab').style.display = 'block';
+                });
+            });
+            
+            // Cancellation modal functionality
+            const modal = document.getElementById('cancellationModal');
+            const cancelButtons = document.querySelectorAll('.cancel-booking-btn');
+            const closeModal = document.querySelector('#cancellationModal .close-modal');
+            const cancelCancellation = document.getElementById('cancel-cancellation');
+            const cancellationForm = document.getElementById('cancellation-form');
+            
+            if (cancelButtons.length) {
+                cancelButtons.forEach(button => {
+                    button.addEventListener('click', () => {
+                        const bookingId = button.getAttribute('data-booking-id');
+                        const bookingType = button.getAttribute('data-booking-type') || 'tour';
+                        
+                        document.getElementById('booking_id').value = bookingId;
+                        // Set a hidden field for booking type if it doesn't exist
+                        let bookingTypeField = document.getElementById('booking_type');
+                        if (!bookingTypeField) {
+                            bookingTypeField = document.createElement('input');
+                            bookingTypeField.type = 'hidden';
+                            bookingTypeField.id = 'booking_type';
+                            bookingTypeField.name = 'booking_type';
+                            cancellationForm.appendChild(bookingTypeField);
+                        }
+                        bookingTypeField.value = bookingType;
+                        
+                        modal.style.display = 'block';
+                    });
+                });
+            }
+            
+            if (closeModal) {
+                closeModal.addEventListener('click', () => {
+                    modal.style.display = 'none';
+                });
+            }
+            
+            if (cancelCancellation) {
+                cancelCancellation.addEventListener('click', () => {
+                    modal.style.display = 'none';
+                });
+            }
+            
+            // Cancellation form submission
+            if (cancellationForm) {
+                cancellationForm.addEventListener('submit', function(e) {
+                    e.preventDefault();
+                    
+                    const bookingId = document.getElementById('booking_id').value;
+                    const bookingType = document.getElementById('booking_type')?.value || 'tour';
+                    const cancellationReason = document.getElementById('cancellation_reason').value;
+                    
+                    // Send AJAX request to cancel booking
+                    fetch('{% url "cancel_booking" %}', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/x-www-form-urlencoded',
+                            'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+                        },
+                        body: new URLSearchParams({
+                            'booking_id': bookingId,
+                            'booking_type': bookingType,
+                            'cancellation_reason': cancellationReason
+                        })
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            // Close the modal
+                            modal.style.display = 'none';
+                            
+                            // Update UI - move the booking card from upcoming to past
+                            // We need to select by both data-booking-id and data-booking-type
+                            let bookingSelector = `[data-booking-id="${bookingId}"]`;
+                            if (bookingType === 'pending') {
+                                bookingSelector += '[data-booking-type="pending"]';
+                            }
+                            
+                            const bookingCard = document.querySelector(bookingSelector)?.closest('.booking-card');
+                            
+                            if (bookingCard) {
+                                // Create clone of the card to move to past tours
+                                const clonedCard = bookingCard.cloneNode(true);
+                                
+                                // Update status text and class in the cloned card
+                                const statusSpan = clonedCard.querySelector('.booking-details p:last-child span');
+                                if (statusSpan) {
+                                    statusSpan.textContent = 'Cancelled Tour';
+                                    statusSpan.className = 'status-cancelled';
+                                }
+                                
+                                // Add cancellation reason if provided
+                                if (cancellationReason) {
+                                    const detailsDiv = clonedCard.querySelector('.booking-details');
+                                    const reasonP = document.createElement('p');
+                                    reasonP.innerHTML = `<strong>Cancellation Reason:</strong> ${cancellationReason}`;
+                                    reasonP.style.color = '#dc3545';
+                                    reasonP.style.fontStyle = 'italic';
+                                    reasonP.style.marginTop = '10px';
+                                    reasonP.style.padding = '5px';
+                                    reasonP.style.border = '1px solid #f8d7da';
+                                    reasonP.style.borderRadius = '4px';
+                                    reasonP.style.backgroundColor = '#fff8f8';
+                                    detailsDiv.appendChild(reasonP);
+                                }
+                                
+                                // Remove cancel button from cloned card
+                                const actionDiv = clonedCard.querySelector('.booking-actions');
+                                if (actionDiv) {
+                                    clonedCard.removeChild(actionDiv);
+                                }
+                                
+                                // Add the cloned card to past tours
+                                const pastToursGrid = document.querySelector('#pastToursTab .bookings-grid');
+                                const noBookingsMsg = pastToursGrid.querySelector('.no-bookings-message');
+                                
+                                if (noBookingsMsg) {
+                                    // Remove the "no bookings" message if it exists
+                                    pastToursGrid.removeChild(noBookingsMsg);
+                                }
+                                
+                                pastToursGrid.appendChild(clonedCard);
+                                
+                                // Remove the original card
+                                bookingCard.parentNode.removeChild(bookingCard);
+                                
+                                // Check if there are no more upcoming tours
+                                const upcomingToursGrid = document.querySelector('#upcomingToursTab .bookings-grid');
+                                if (!upcomingToursGrid.querySelector('.booking-card')) {
+                                    const noUpcomingMsg = document.createElement('div');
+                                    noUpcomingMsg.className = 'no-bookings-message';
+                                    noUpcomingMsg.innerHTML = `
+                                        <p>You don't have any upcoming tours scheduled.</p>
+                                        <p>Browse our tours and book one today!</p>
+                                    `;
+                                    upcomingToursGrid.appendChild(noUpcomingMsg);
+                                }
+                                
+                                // Show a success message
+                                alert('Your tour has been successfully cancelled. Staff has been notified.');
+                            } else {
+                                // If card not found with selector, refresh the page
+                                window.location.reload();
+                            }
+                        } else {
+                            // Show error message
+                            alert(data.message || 'An error occurred while cancelling your booking.');
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error:', error);
+                        alert('An error occurred while processing your request.');
+                    });
+                });
+            }
+        });
+    </script>
+
+    <!-- Add this JavaScript to the bottom of the file before </body> -->
+    <script>
+    // Age calculation function
+    document.addEventListener('DOMContentLoaded', function() {
+        // Birthday and age calculation
+        const birthdayInput = document.getElementById('birthday');
+        const ageInput = document.getElementById('age');
+        const ageLabelInput = document.getElementById('age_label');
+        
+        birthdayInput.addEventListener('change', function() {
+            const birthDate = new Date(this.value);
+            const today = new Date();
+            
+            let age = today.getFullYear() - birthDate.getFullYear();
+            const monthDiff = today.getMonth() - birthDate.getMonth();
+            
+            if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+                age--;
+            }
+            
+            // Set the calculated age
+            ageInput.value = age;
+            
+            // Determine age label based on age range
+            let ageLabel = '';
+            if (age >= 0 && age <= 1) {
+                ageLabel = 'Infant';
+            } else if (age >= 2 && age <= 4) {
+                ageLabel = 'Toddler';
+            } else if (age >= 5 && age <= 12) {
+                ageLabel = 'Child';
+            } else if (age >= 13 && age <= 19) {
+                ageLabel = 'Teen';
+            } else if (age >= 20 && age <= 39) {
+                ageLabel = 'Adult';
+            } else if (age >= 40 && age <= 59) {
+                ageLabel = 'Middle Adult';
+            } else if (age >= 60) {
+                ageLabel = 'Senior';
+            }
+            
+            ageLabelInput.value = ageLabel;
+        });
+        
+        // Show/hide disability details when checkbox is clicked
+        const hasDisabilityCheckbox = document.getElementById('has_disability');
+        const disabilityDetails = document.getElementById('disability_details');
+        
+        hasDisabilityCheckbox.addEventListener('change', function() {
+            if (this.checked) {
+                disabilityDetails.style.display = 'block';
+            } else {
+                disabilityDetails.style.display = 'none';
+            }
+        });
+        
+        // Form submission handling to include file uploads
+        const signupForm = document.getElementById('signup-form');
+        
+        signupForm.addEventListener('submit', function(event) {
+            event.preventDefault();
+            
+            // Create FormData object to handle file uploads
+            const formData = new FormData(this);
+            
+            // Add the age value to form data
+            formData.append('age', document.getElementById('age').value);
+            
+            // AJAX form submission
+            fetch('{% url "register" %}', {
+                method: 'POST',
+                body: formData,
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest'
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    // Show success message
+                    document.getElementById('signup-success').style.display = 'block';
+                    
+                    // Redirect or refresh after a brief delay
+                    setTimeout(function() {
+                        window.location.reload();
+                    }, 2000);
+                } else {
+                    // Display validation errors
+                    const errors = data.errors || {};
+                    
+                    // Clear all previous error messages
+                    document.querySelectorAll('.error-message').forEach(el => {
+                        el.textContent = '';
+                    });
+                    
+                    // Set new error messages
+                    Object.keys(errors).forEach(field => {
+                        const errorElement = document.getElementById(field + '-error');
+                        if (errorElement) {
+                            errorElement.textContent = errors[field];
+                        }
+                    });
+                    
+                    // Display general message if provided
+                    if (data.message) {
+                        alert(data.message);
+                    }
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('An error occurred. Please try again later.');
+            });
+        });
+    });
+    </script>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // Camera functionality for profile picture
+            const openCameraBtn = document.getElementById('open-camera');
+            const cameraContainer = document.getElementById('camera-container');
+            const cameraPreview = document.getElementById('camera-preview');
+            const captureBtn = document.getElementById('capture-photo');
+            const cancelBtn = document.getElementById('cancel-camera');
+            const canvas = document.getElementById('canvas');
+            const photoPreview = document.getElementById('photo-preview');
+            const capturedPhoto = document.getElementById('captured-photo');
+            const retakeBtn = document.getElementById('retake-button');
+            const pictureInput = document.getElementById('picture');
+            
+            let stream = null;
+            
+            // Function to start the camera
+            function startCamera() {
+                if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+                    navigator.mediaDevices.getUserMedia({ video: true })
+                        .then(function(videoStream) {
+                            stream = videoStream;
+                            cameraPreview.srcObject = stream;
+                            cameraContainer.style.display = 'block';
+                            pictureInput.style.display = 'none';
+                        })
+                        .catch(function(error) {
+                            console.error('Camera error:', error);
+                            alert('Could not access the camera. Please ensure you have given permission and your device has a camera.');
+                        });
+                } else {
+                    alert('Your browser does not support camera access. Please use a different browser or upload a photo instead.');
+                }
+            }
+            
+            // Function to stop the camera
+            function stopCamera() {
+                if (stream) {
+                    stream.getTracks().forEach(track => {
+                        track.stop();
+                    });
+                    stream = null;
+                }
+                cameraContainer.style.display = 'none';
+                pictureInput.style.display = 'block';
+            }
+            
+            // Open camera button click
+            if (openCameraBtn) {
+                openCameraBtn.addEventListener('click', function() {
+                    startCamera();
+                    photoPreview.style.display = 'none';
+                });
+            }
+            
+            // Capture photo button click
+            if (captureBtn) {
+                captureBtn.addEventListener('click', function() {
+                    if (stream) {
+                        // Set canvas dimensions to match video
+                        canvas.width = cameraPreview.videoWidth;
+                        canvas.height = cameraPreview.videoHeight;
+                        
+                        // Draw the current video frame to the canvas
+                        const context = canvas.getContext('2d');
+                        context.drawImage(cameraPreview, 0, 0, canvas.width, canvas.height);
+                        
+                        // Convert canvas to image data URL
+                        const imageDataURL = canvas.toDataURL('image/png');
+                        
+                        // Display the captured photo
+                        capturedPhoto.src = imageDataURL;
+                        photoPreview.style.display = 'block';
+                        cameraContainer.style.display = 'none';
+                        
+                        // Create a file from the data URL for form submission
+                        fetch(imageDataURL)
+                            .then(res => res.blob())
+                            .then(blob => {
+                                const file = new File([blob], "camera-capture.png", { type: "image/png" });
+                                
+                                // Create a new FileList-like object
+                                const dataTransfer = new DataTransfer();
+                                dataTransfer.items.add(file);
+                                
+                                // Set the file to the input element
+                                pictureInput.files = dataTransfer.files;
+                            });
+                        
+                        // Stop the camera
+                        stopCamera();
+                    }
+                });
+            }
+            
+            // Cancel camera button click
+            if (cancelBtn) {
+                cancelBtn.addEventListener('click', function() {
+                    stopCamera();
+                });
+            }
+            
+            // Retake photo button click
+            if (retakeBtn) {
+                retakeBtn.addEventListener('click', function() {
+                    photoPreview.style.display = 'none';
+                    startCamera();
+                });
+            }
+        });
+    </script>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // Camera functionality for signup form
+            const openSignupCameraBtn = document.getElementById('signup-open-camera');
+            const signupCameraContainer = document.getElementById('signup-camera-container');
+            const signupCameraPreview = document.getElementById('signup-camera-preview');
+            const captureSignupBtn = document.getElementById('signup-capture-photo');
+            const cancelSignupCameraBtn = document.getElementById('signup-cancel-camera');
+            const signupCanvas = document.getElementById('signup-canvas');
+            const signupPhotoPreview = document.getElementById('signup-photo-preview');
+            const signupCapturedPhoto = document.getElementById('signup-captured-photo');
+            const retakeSignupBtn = document.getElementById('signup-retake-button');
+            const signupPictureInput = document.getElementById('profile_picture');
+            
+            let signupStream = null;
+            
+            // Function to handle camera operations for signup form
+            function startSignupCamera() {
+                if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+                    navigator.mediaDevices.getUserMedia({ video: true })
+                        .then(function(videoStream) {
+                            signupStream = videoStream;
+                            signupCameraPreview.srcObject = signupStream;
+                            signupCameraContainer.style.display = 'block';
+                            signupPictureInput.style.display = 'none';
+                        })
+                        .catch(function(error) {
+                            console.error('Camera error:', error);
+                            alert('Could not access the camera. Please ensure you have given permission and your device has a camera.');
+                        });
+                } else {
+                    alert('Your browser does not support camera access. Please use a different browser or upload a photo instead.');
+                }
+            }
+            
+            function stopSignupCamera() {
+                if (signupStream) {
+                    signupStream.getTracks().forEach(track => {
+                        track.stop();
+                    });
+                    signupStream = null;
+                }
+                signupCameraContainer.style.display = 'none';
+                signupPictureInput.style.display = 'block';
+            }
+            
+            // Open camera button click for signup
+            if (openSignupCameraBtn) {
+                openSignupCameraBtn.addEventListener('click', function() {
+                    startSignupCamera();
+                    signupPhotoPreview.style.display = 'none';
+                });
+            }
+            
+            // Capture photo button click for signup
+            if (captureSignupBtn) {
+                captureSignupBtn.addEventListener('click', function() {
+                    if (signupStream) {
+                        // Set canvas dimensions to match video
+                        signupCanvas.width = signupCameraPreview.videoWidth;
+                        signupCanvas.height = signupCameraPreview.videoHeight;
+                        
+                        // Draw the current video frame to the canvas
+                        const context = signupCanvas.getContext('2d');
+                        context.drawImage(signupCameraPreview, 0, 0, signupCanvas.width, signupCanvas.height);
+                        
+                        // Convert canvas to image data URL
+                        const imageDataURL = signupCanvas.toDataURL('image/png');
+                        
+                        // Display the captured photo
+                        signupCapturedPhoto.src = imageDataURL;
+                        signupPhotoPreview.style.display = 'block';
+                        signupCameraContainer.style.display = 'none';
+                        
+                        // Create a file from the data URL for form submission
+                        fetch(imageDataURL)
+                            .then(res => res.blob())
+                            .then(blob => {
+                                const file = new File([blob], "camera-capture.png", { type: "image/png" });
+                                
+                                // Create a new FileList-like object
+                                const dataTransfer = new DataTransfer();
+                                dataTransfer.items.add(file);
+                                
+                                // Set the file to the input element
+                                signupPictureInput.files = dataTransfer.files;
+                            });
+                        
+                        // Stop the camera
+                        stopSignupCamera();
+                    }
+                });
+            }
+            
+            // Cancel camera button click for signup
+            if (cancelSignupCameraBtn) {
+                cancelSignupCameraBtn.addEventListener('click', function() {
+                    stopSignupCamera();
+                });
+            }
+            
+            // Retake photo button click for signup
+            if (retakeSignupBtn) {
+                retakeSignupBtn.addEventListener('click', function() {
+                    signupPhotoPreview.style.display = 'none';
+                    startSignupCamera();
+                });
+            }
+        });
+    </script>
+
+    <script>
+        document.addEventListener("DOMContentLoaded", function() {
+            // Birthday field - auto calculate age and set age label
+            const birthdayField = document.getElementById('birthday');
+            const ageField = document.getElementById('age');
+            const ageLabelField = document.getElementById('age_label');
+            
+            if (birthdayField) {
+                birthdayField.addEventListener('change', function() {
+                    if (this.value) {
+                        // Calculate age based on birthday
+                        const today = new Date();
+                        const birthDate = new Date(this.value);
+                        let age = today.getFullYear() - birthDate.getFullYear();
+                        const monthDiff = today.getMonth() - birthDate.getMonth();
+                        
+                        if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+                            age--;
+                        }
+                        
+                        // Set age field
+                        if (ageField) {
+                            ageField.value = age;
+                        }
+                        
+                        // Set age label based on age
+                        if (ageLabelField) {
+                            let ageLabel = '';
+                            if (age <= 1) {
+                                ageLabel = 'Infant';
+                            } else if (age >= 2 && age <= 4) {
+                                ageLabel = 'Toddler';
+                            } else if (age >= 5 && age <= 12) {
+                                ageLabel = 'Child';
+                            } else if (age >= 13 && age <= 19) {
+                                ageLabel = 'Teen';
+                            } else if (age >= 20 && age <= 39) {
+                                ageLabel = 'Adult';
+                            } else if (age >= 40 && age <= 59) {
+                                ageLabel = 'Middle Adult';
+                            } else if (age >= 60) {
+                                ageLabel = 'Senior';
+                            }
+                            ageLabelField.value = ageLabel;
+                        }
+                    }
+                });
+            }
+            
+            // Toggle disability fields
+            const hasDisabilityCheck = document.getElementById('has_disability');
+            const disabilityDetails = document.getElementById('disability_details');
+            
+            if (hasDisabilityCheck && disabilityDetails) {
+                hasDisabilityCheck.addEventListener('change', function() {
+                    disabilityDetails.style.display = this.checked ? 'block' : 'none';
+                });
+            }
+            
+            // Camera functionality for profile picture
+            const openCameraBtn = document.getElementById('signup-open-camera');
+            const cameraContainer = document.getElementById('signup-camera-container');
+            const cameraPreview = document.getElementById('signup-camera-preview');
+            const captureBtn = document.getElementById('signup-capture-photo');
+            const cancelCameraBtn = document.getElementById('signup-cancel-camera');
+            const photoPreview = document.getElementById('signup-photo-preview');
+            const capturedPhoto = document.getElementById('signup-captured-photo');
+            const retakeBtn = document.getElementById('signup-retake-button');
+            const canvas = document.getElementById('signup-canvas');
+            let stream = null;
+            
+            // Function to start camera
+            function startCamera() {
+                if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+                    navigator.mediaDevices.getUserMedia({ video: true })
+                        .then(function(mediaStream) {
+                            stream = mediaStream;
+                            cameraPreview.srcObject = mediaStream;
+                            cameraPreview.play();
+                            cameraContainer.style.display = 'block';
+                        })
+                        .catch(function(error) {
+                            console.error("Camera error: ", error);
+                            alert("Unable to access camera. Please ensure camera permissions are granted.");
+                        });
+                } else {
+                    alert("Your browser doesn't support camera access. Please use a different browser or upload a photo.");
+                }
+            }
+            
+            // Function to stop camera
+            function stopCamera() {
+                if (stream) {
+                    stream.getTracks().forEach(track => {
+                        track.stop();
+                    });
+                }
+                cameraContainer.style.display = 'none';
+            }
+            
+            // Open camera button
+            if (openCameraBtn) {
+                openCameraBtn.addEventListener('click', function() {
+                    startCamera();
+                });
+            }
+            
+            // Capture photo button
+            if (captureBtn) {
+                captureBtn.addEventListener('click', function() {
+                    canvas.width = cameraPreview.videoWidth;
+                    canvas.height = cameraPreview.videoHeight;
+                    canvas.getContext('2d').drawImage(cameraPreview, 0, 0, canvas.width, canvas.height);
+                    
+                    // Convert to data URL and show in the preview
+                    const photoData = canvas.toDataURL('image/png');
+                    capturedPhoto.src = photoData;
+                    photoPreview.style.display = 'block';
+                    cameraContainer.style.display = 'none';
+                    
+                    // Create a new File object from the data URL
+                    fetch(photoData)
+                        .then(res => res.blob())
+                        .then(blob => {
+                            const file = new File([blob], "camera-capture.png", { type: "image/png" });
+                            
+                            // Create a new FileList-like object
+                            const dataTransfer = new DataTransfer();
+                            dataTransfer.items.add(file);
+                            
+                            // Set the file to the input
+                            document.getElementById('profile_picture').files = dataTransfer.files;
+                        });
+                    
+                    // Stop camera after capturing
+                    stopCamera();
+                });
+            }
+            
+            // Cancel camera button
+            if (cancelCameraBtn) {
+                cancelCameraBtn.addEventListener('click', function() {
+                    stopCamera();
+                });
+            }
+            
+            // Retake photo button
+            if (retakeBtn) {
+                retakeBtn.addEventListener('click', function() {
+                    photoPreview.style.display = 'none';
+                    startCamera();
+                });
+            }
+            
+            // Add the same camera functionality for profile update form
+            const updateOpenCameraBtn = document.getElementById('open-camera');
+            const updateCameraContainer = document.getElementById('camera-container');
+            const updateCameraPreview = document.getElementById('camera-preview');
+            const updateCaptureBtn = document.getElementById('capture-photo');
+            const updateCancelCameraBtn = document.getElementById('cancel-camera');
+            const updatePhotoPreview = document.getElementById('photo-preview');
+            const updateCapturedPhoto = document.getElementById('captured-photo');
+            const updateRetakeBtn = document.getElementById('retake-button');
+            const updateCanvas = document.getElementById('canvas');
+            let updateStream = null;
+            
+            // Function to start camera for profile update
+            function startUpdateCamera() {
+                if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+                    navigator.mediaDevices.getUserMedia({ video: true })
+                        .then(function(mediaStream) {
+                            updateStream = mediaStream;
+                            updateCameraPreview.srcObject = mediaStream;
+                            updateCameraPreview.play();
+                            updateCameraContainer.style.display = 'block';
+                        })
+                        .catch(function(error) {
+                            console.error("Camera error: ", error);
+                            alert("Unable to access camera. Please ensure camera permissions are granted.");
+                        });
+                } else {
+                    alert("Your browser doesn't support camera access. Please use a different browser or upload a photo.");
+                }
+            }
+            
+            // Function to stop camera for profile update
+            function stopUpdateCamera() {
+                if (updateStream) {
+                    updateStream.getTracks().forEach(track => {
+                        track.stop();
+                    });
+                }
+                updateCameraContainer.style.display = 'none';
+            }
+            
+            // Open camera button for profile update
+            if (updateOpenCameraBtn) {
+                updateOpenCameraBtn.addEventListener('click', function() {
+                    startUpdateCamera();
+                });
+            }
+            
+            // Capture photo button for profile update
+            if (updateCaptureBtn) {
+                updateCaptureBtn.addEventListener('click', function() {
+                    updateCanvas.width = updateCameraPreview.videoWidth;
+                    updateCanvas.height = updateCameraPreview.videoHeight;
+                    updateCanvas.getContext('2d').drawImage(updateCameraPreview, 0, 0, updateCanvas.width, updateCanvas.height);
+                    
+                    // Convert to data URL and show in the preview
+                    const photoData = updateCanvas.toDataURL('image/png');
+                    updateCapturedPhoto.src = photoData;
+                    updatePhotoPreview.style.display = 'block';
+                    updateCameraContainer.style.display = 'none';
+                    
+                    // Create a new File object from the data URL
+                    fetch(photoData)
+                        .then(res => res.blob())
+                        .then(blob => {
+                            const file = new File([blob], "camera-capture.png", { type: "image/png" });
+                            
+                            // Create a new FileList-like object
+                            const dataTransfer = new DataTransfer();
+                            dataTransfer.items.add(file);
+                            
+                            // Set the file to the input
+                            document.getElementById('picture').files = dataTransfer.files;
+                        });
+                    
+                    // Stop camera after capturing
+                    stopUpdateCamera();
+                });
+            }
+            
+            // Cancel camera button for profile update
+            if (updateCancelCameraBtn) {
+                updateCancelCameraBtn.addEventListener('click', function() {
+                    stopUpdateCamera();
+                });
+            }
+            
+            // Retake photo button for profile update
+            if (updateRetakeBtn) {
+                updateRetakeBtn.addEventListener('click', function() {
+                    updatePhotoPreview.style.display = 'none';
+                    startUpdateCamera();
+                });
+            }
+        });
+    </script>
+
+    <script>
+        // Function to get profile data and populate the form
+        function getProfileData() {
+            fetch('/profile/get-data/')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        // Populate form with user data
+                        document.getElementById('first_name').value = data.user.first_name;
+                        if (data.user.middle_initial) {
+                            document.getElementById('middle_initial').value = data.user.middle_initial;
+                        }
+                        document.getElementById('last_name').value = data.user.last_name;
+                        document.getElementById('country_of_origin').value = data.user.country_of_origin;
+                        document.getElementById('city').value = data.user.city;
+                        document.getElementById('phone_number').value = data.user.phone_number;
+                        document.getElementById('sex').value = data.user.sex;
+                        
+                        // Optional fields
+                        if (data.user.age) {
+                            document.getElementById('age').value = data.user.age;
+                        }
+                        if (data.user.company_name) {
+                            document.getElementById('company_name').value = data.user.company_name;
+                        }
+                    } else {
+                        alert('Could not retrieve profile data. Please try again later.');
+                    }
+                })
+                .catch(error => {
+                    console.error('Error fetching profile data:', error);
+                    alert('An error occurred. Please try again later.');
+                });
+        }
+    </script>
+
+    <script>
+        // Function to check for new companion requests
+        function checkCompanionRequests() {
+            fetch("{% url 'companion_request_count' %}")
+                .then(response => response.json())
+                .then(data => {
+                    const badge = document.getElementById('request-badge');
+                    if (badge) {
+                        if (data.count > 0) {
+                            badge.textContent = data.count;
+                            badge.style.display = 'flex';
+                        } else {
+                            badge.style.display = 'none';
+                        }
+                    }
+                })
+                .catch(error => console.error('Error checking requests:', error));
+        }
+        
+        // Check for companion requests when page loads
+        document.addEventListener('DOMContentLoaded', function() {
+            if (document.getElementById('request-badge')) {
+                checkCompanionRequests();
+                setInterval(checkCompanionRequests, 60000); // Check every minute
+            }
+        });
+    </script>
+
+    <!-- Add this JavaScript to handle profile updates in mainpage.html -->
+    <!-- Place this inside a <script> tag near the end of the file -->
+
+    <script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Profile form elements
+        const profileForm = document.getElementById('profile-form');
+        if (profileForm) {
+            profileForm.addEventListener('submit', function(event) {
+                event.preventDefault();
+                updateProfile();
+            });
+        }
+
+        // Load profile data when page loads
+        loadProfileData();
+    });
+
+    // Function to load profile data
+    function loadProfileData() {
+        // Use the correct URL path that matches your urls.py configuration
+        fetch('/guest_app/profile/data/', {  // Correct URL
+            method: 'GET',
+            headers: {
+                'X-Requested-With': 'XMLHttpRequest',
+                'Content-Type': 'application/json'
+            },
+            credentials: 'same-origin'
+        })
+        .then(response => {
+            if (!response.ok) {
+                throw new Error('Network response was not ok');
+            }
+            return response.json();
+        })
+        .then(data => {
+            // Populate form fields with profile data
+            if (data.success) {
+                const profile = data.profile;
+                document.getElementById('first_name').value = profile.first_name || '';
+                document.getElementById('last_name').value = profile.last_name || '';
+                document.getElementById('middle_initial').value = profile.middle_initial || '';
+                document.getElementById('email').value = profile.email || '';
+                document.getElementById('country_of_origin').value = profile.country_of_origin || '';
+                document.getElementById('city').value = profile.city || '';
+                document.getElementById('phone_number').value = profile.phone_number || '';
+                // Add other fields as needed
+            }
+        })
+        .catch(error => {
+            console.error('Error loading profile data:', error);
+        });
+    }
+
+    // Function to update profile
+    function updateProfile() {
+        const formData = new FormData(document.getElementById('profile-form'));
+        
+        fetch('/guest_app/profile/update/', {  // Correct URL
+            method: 'POST',
+            body: formData,
+            headers: {
+                'X-Requested-With': 'XMLHttpRequest',
+                'X-CSRFToken': getCookie('csrftoken')
+            },
+            credentials: 'same-origin'
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                // Show success message
+                showNotification('Profile updated successfully!', 'success');
+            } else {
+                // Show error message
+                showNotification(data.error || 'Error updating profile', 'error');
+            }
+        })
+        .catch(error => {
+            console.error('Error updating profile:', error);
+            showNotification('Error updating profile. Please try again.', 'error');
+        });
+    }
+
+    // Helper function to get CSRF token
+    function getCookie(name) {
+        let cookieValue = null;
+        if (document.cookie && document.cookie !== '') {
+            const cookies = document.cookie.split(';');
+            for (let i = 0; i < cookies.length; i++) {
+                const cookie = cookies[i].trim();
+                if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                    cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                    break;
+                }
+            }
+        }
+        return cookieValue;
+    }
+
+    // Function to show notifications
+    function showNotification(message, type) {
+        // You can implement this based on your UI
+        // For example:
+        const notification = document.createElement('div');
+        notification.className = `notification ${type}`;
+        notification.textContent = message;
+        
+        document.body.appendChild(notification);
+        
+        // Remove notification after 3 seconds
+        setTimeout(() => {
+            notification.remove();
+        }, 3000);
+    }
+    </script>
+
+    <!-- Function to handle camera capture -->
+    <script>
+    function setupCameraCapture() {
+        const cameraButton = document.getElementById('camera-button');
+        const fileInput = document.getElementById('picture');
+        
+        if (cameraButton && fileInput) {
+            cameraButton.addEventListener('click', function() {
+                // Create a new input element specifically for camera
+                const cameraInput = document.createElement('input');
+                cameraInput.type = 'file';
+                cameraInput.accept = 'image/*';
+                cameraInput.capture = 'environment'; // Use the environment-facing camera
+                
+                // Trigger click on the input to open camera
+                cameraInput.click();
+                
+                // Handle the file selection
+                cameraInput.addEventListener('change', function() {
+                    if (cameraInput.files && cameraInput.files[0]) {
+                        // Create a FileList object
+                        const dataTransfer = new DataTransfer();
+                        dataTransfer.items.add(cameraInput.files[0]);
+                        
+                        // Update the original file input
+                        fileInput.files = dataTransfer.files;
+                        
+                        // Show preview if you have a preview element
+                        const preview = document.getElementById('image-preview');
+                        if (preview) {
+                            const reader = new FileReader();
+                            reader.onload = function(e) {
+                                preview.src = e.target.result;
+                                preview.style.display = 'block';
+                            };
+                            reader.readAsDataURL(cameraInput.files[0]);
+                        }
+                        
+                        // Trigger change event on file input
+                        const event = new Event('change', { bubbles: true });
+                        fileInput.dispatchEvent(event);
+                    }
+                });
+            });
+        }
+    }
+
+    // Initialize camera functionality when DOM is loaded
+    document.addEventListener('DOMContentLoaded', function() {
+        setupCameraCapture();
+        // Make sure to call loadProfileData() here too if not already called
+    });
+    </script>
+</body>
+</html>

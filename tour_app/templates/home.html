@@ -1,0 +1,2063 @@
+<!DOCTYPE html>
+{% load static %}
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Welcome to Ibaway Tours</title>
+    <!-- Add Font Awesome for icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
+    <link rel="stylesheet" href="{% static 'css/navigation.css' %}">
+    <style>
+        body {
+            font-family: 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background-color: #f4f7fc;
+            margin: 0;
+            padding: 0;
+            color: #333;
+            line-height: 1.5;
+            overflow-x: hidden;
+        }
+
+        /* Navigation Styles */
+        .sidebar {
+            position: fixed;
+            left: 0;
+            top: 0;
+            width: 250px;
+            height: 100vh;
+            background-color: #fff;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+            z-index: 100;
+            overflow-y: auto; /* Single scrollbar for the sidebar */
+        }
+        
+        .nav-sidebar {
+            width: 100%;
+            display: flex;
+            flex-direction: column;
+            padding: 20px 0;
+            min-height: 100%;
+            overflow-y: visible; /* Remove scrolling from this element */
+        }
+        
+        .nav-logo {
+            padding: 15px 20px;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+        
+        .nav-logo svg {
+            max-width: 150px;
+            height: auto;
+        }
+        
+        .nav-section {
+            font-size: 12px;
+            color: #888;
+            padding: 8px 20px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-top: 10px;
+        }
+        
+        .nav-menu {
+            list-style: none;
+            padding: 0;
+            margin: 0 0 15px 0;
+        }
+        
+        .nav-item {
+            margin: 0;
+            position: relative;
+        }
+        
+        .nav-link {
+            display: flex;
+            align-items: center;
+            padding: 10px 20px;
+            color: #333;
+            text-decoration: none;
+            transition: all 0.3s;
+            font-size: 14px;
+        }
+        
+        .nav-link:hover, .nav-link.active {
+            background-color: #f0f7ff;
+            color: #4285f4;
+        }
+        
+        .nav-icon {
+            margin-right: 10px;
+            display: flex;
+            align-items: center;
+        }
+        
+        .nav-subitem {
+            padding-left: 15px;
+        }
+        
+        .nav-sublink {
+            display: flex;
+            align-items: center;
+            padding: 8px 20px 8px 35px;
+            color: #666;
+            text-decoration: none;
+            transition: all 0.3s;
+            font-size: 13px;
+        }
+        
+        .nav-sublink:hover, .nav-sublink.active {
+            background-color: #f0f7ff;
+            color: #4285f4;
+        }
+        
+        .dropdown-toggle {
+            cursor: pointer;
+            position: relative;
+        }
+        
+        .dropdown-toggle:after {
+            content: "▼";
+            font-size: 10px;
+            margin-left: 5px;
+            vertical-align: middle;
+        }
+        
+        .nav-submenu {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.4s ease-out;
+        }
+        
+        .nav-submenu.show {
+            max-height: 500px;
+        }
+        
+        /* Hover functionality */
+        .nav-item:hover > .nav-submenu {
+            max-height: 500px;
+        }
+        
+        .nav-footer {
+            margin-top: auto;
+            padding: 15px 20px;
+            border-top: 1px solid #eee;
+        }
+        
+        .logout-link {
+            display: flex;
+            align-items: center;
+            color: #666;
+            text-decoration: none;
+            font-size: 14px;
+            transition: color 0.3s;
+        }
+        
+        .logout-link:hover {
+            color: #e74c3c;
+        }
+        
+        .access-denied-container {
+            padding: 20px;
+            text-align: center;
+            color: #e74c3c;
+        }
+        
+        .access-denied-message {
+            font-size: 16px;
+            margin: 0;
+        }
+        
+        .access-denied-link {
+            color: #3498db;
+            text-decoration: underline;
+        }
+
+        .dashboard-container {
+            display: flex;
+            min-height: 100vh;
+        }
+
+        .content {
+            flex: 1;
+            padding: 32px;
+            box-sizing: border-box;
+        }
+
+        .main-container {
+            margin-left: 250px;
+            padding: 20px;
+        }
+
+        .container {
+            background-color: #fff;
+            border-radius: 12px;
+            padding: 30px;
+            width: 80%;
+            box-shadow: 0px 10px 20px rgba(0, 0, 0, 0.1);
+            text-align: center;
+            margin-top: 50px;
+        }
+
+        .tour-list {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            gap: 20px;
+            width: 100%;
+            max-width: 1200px;
+            margin-top: 30px;
+        }
+
+        .tour-item {
+            background-color: #fff;
+            border-radius: 10px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+            padding: 15px;
+            transition: transform 0.3s ease-in-out;
+            cursor: pointer;
+        }
+
+        .tour-item:hover {
+            transform: translateY(-5px);
+        }
+
+        .tour-item img {
+            width: 100%;
+            height: 200px;
+            object-fit: cover;
+            border-radius: 10px;
+        }
+
+        .tour-item h2 {
+            font-size: 1.5rem;
+            margin-top: 10px;
+            color: #333;
+        }
+
+        .tour-item p {
+            font-size: 1rem;
+            margin: 8px 0;
+            color: #555;
+        }
+
+        .button {
+            background-color: #ff6347;
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            font-size: 18px;
+            border-radius: 8px;
+            cursor: pointer;
+            margin-top: 20px;
+            text-decoration: none;
+            display: inline-block;
+            transition: all 0.3s ease-in-out;
+        }
+
+        .button:hover {
+            background-color: #e55347;
+            transform: translateY(-2px);
+            box-shadow: 0px 5px 15px rgba(0, 0, 0, 0.2);
+        }
+
+        .no-tours-message {
+            font-size: 1.2rem;
+            color: #888;
+            text-align: center;
+        }
+
+        /* Stylish Add Schedule button */
+        .add-schedule-btn {
+            background: linear-gradient(135deg, #00bcd4, #ff9800);  /* Gradient effect */
+            color: white;
+            border: none;
+            padding: 12px 25px;
+            font-size: 16px;
+            border-radius: 50px;  /* Rounded edges */
+            cursor: pointer;
+            text-decoration: none;
+            transition: all 0.3s ease;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+            display: inline-block;
+        }
+
+        .add-schedule-btn:hover {
+            background: linear-gradient(135deg, #0097a7, #ff5722);  /* Darker gradient on hover */
+            transform: translateY(-2px);  /* Lift effect */
+            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.2);
+        }
+
+        .add-schedule-btn:focus {
+            outline: none;
+        }
+
+        /* Button container */
+        .button-container {
+            display: flex;
+            justify-content: center;
+            margin-top: 15px;
+        }
+
+        /* Responsive Styling */
+        @media (max-width: 768px) {
+            .container {
+                width: 90%;
+                padding: 20px;
+            }
+
+            .tour-item {
+                padding: 10px;
+            }
+
+            .tour-item img {
+                height: 180px;
+            }
+        }
+
+        /* Modal Popup Styles */
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+        }
+
+        .modal-content {
+            background-color: white;
+            margin: 5% auto;
+            padding: 30px;
+            border-radius: 12px;
+            width: 500px;
+            max-width: 90%;
+            box-shadow: 0 5px 20px rgba(0, 0, 0, 0.2);
+            text-align: center;
+            position: relative;
+            max-height: 80vh;
+            overflow-y: auto;
+        }
+
+        .modal-title {
+            margin-top: 0;
+            margin-bottom: 20px;
+            color: #333;
+            font-size: 24px;
+        }
+
+        .close {
+            position: absolute;
+            top: 15px;
+            right: 20px;
+            font-size: 28px;
+            font-weight: bold;
+            color: #555;
+            cursor: pointer;
+        }
+
+        .close:hover {
+            color: #000;
+        }
+
+        .update-option {
+            display: block;
+            width: 100%;
+            padding: 15px;
+            margin-bottom: 12px;
+            background: linear-gradient(135deg, #3498db, #2980b9);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .update-option:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+        }
+
+        .update-option.tour {
+            background: linear-gradient(135deg, #3498db, #2980b9);
+        }
+
+        .update-option.schedule {
+            background: linear-gradient(135deg, #9b59b6, #8e44ad);
+        }
+
+        .update-option.itinerary {
+            background: linear-gradient(135deg, #f1c40f, #f39c12);
+        }
+
+        /* Form styles */
+        .update-form {
+            text-align: left;
+            margin-top: 20px;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+            color: #555;
+        }
+
+        .form-control {
+            width: 100%;
+            padding: 10px;
+            border-radius: 8px;
+            border: 1px solid #ddd;
+            font-size: 16px;
+        }
+
+        textarea.form-control {
+            min-height: 100px;
+        }
+
+        .form-submit {
+            background: linear-gradient(135deg, #3498db, #2980b9);
+            color: white;
+            border: none;
+            padding: 12px 25px;
+            font-size: 16px;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            margin-top: 10px;
+        }
+
+        .form-submit:hover {
+            background: linear-gradient(135deg, #2980b9, #1f6dad);
+            transform: translateY(-2px);
+        }
+
+        .back-button {
+            background: #95a5a6;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            font-size: 14px;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            margin-right: 10px;
+        }
+
+        .back-button:hover {
+            background: #7f8c8d;
+        }
+
+        .schedule-select {
+            width: 100%;
+            padding: 10px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            font-size: 16px;
+        }
+
+        .options-container {
+            display: block;
+        }
+
+        .forms-container {
+            display: none;
+        }
+
+        /* Schedule and Event items styling */
+        .schedule-item, .event-item {
+            background: #f9f9f9;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 15px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            position: relative;
+        }
+
+        .schedule-item h4, .event-item h4 {
+            margin-top: 0;
+            color: #333;
+            font-size: 18px;
+        }
+
+        .schedule-item p, .event-item p {
+            margin: 5px 0;
+            color: #555;
+        }
+
+        .error-message {
+            color: #e74c3c;
+            text-align: center;
+            padding: 20px;
+            font-weight: bold;
+        }
+
+        .loading-text, .select-schedule-text {
+            color: #7f8c8d;
+            text-align: center;
+            padding: 20px;
+        }
+
+        /* Add these styles for payables section */
+        .payable-group {
+            display: flex;
+            align-items: center;
+            margin-bottom: 10px;
+            gap: 10px;
+        }
+        
+        .payable-select {
+            flex-grow: 1;
+            padding: 8px;
+            border-radius: 4px;
+            border: 1px solid #ddd;
+        }
+        
+        .price-input {
+            width: 120px;
+            padding: 8px;
+            border-radius: 4px;
+            border: 1px solid #ddd;
+        }
+        
+        .remove-btn {
+            background-color: #e74c3c;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            padding: 8px 12px;
+            cursor: pointer;
+        }
+        
+        .btn-primary {
+            background-color: #3498db;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            padding: 8px 15px;
+            margin-bottom: 15px;
+            cursor: pointer;
+        }
+
+        /* Add these styles for the delete button and event display */
+        .delete-btn {
+            background-color: #e74c3c;
+            color: white;
+            border: none;
+            padding: 12px 25px;
+            font-size: 16px;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            float: right;
+        }
+
+        .delete-btn:hover {
+            background-color: #c0392b;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+        }
+
+        .event-item {
+            background-color: #f9f9f9;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 15px;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+            position: relative;
+        }
+
+        .event-item h4 {
+            margin-top: 0;
+            color: #333;
+            margin-bottom: 5px;
+        }
+
+        .event-item p {
+            margin: 5px 0;
+            color: #555;
+        }
+
+        .event-time {
+            font-weight: bold;
+            color: #3498db;
+        }
+
+        .event-edit-btn {
+            background-color: #3498db;
+            color: white;
+            border: none;
+            padding: 8px 15px;
+            font-size: 14px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-top: 10px;
+        }
+
+        .event-edit-btn:hover {
+            background-color: #2980b9;
+        }
+
+        /* Improved image preview */
+        #current_image_preview {
+            border: 1px solid #ddd;
+            padding: 10px;
+            border-radius: 4px;
+            text-align: center;
+        }
+
+        #current_image_preview p {
+            margin-top: 0;
+            font-weight: bold;
+            color: #555;
+        }
+
+        #event_image_preview {
+            border-radius: 4px;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+        }
+
+        /* Add styles for the schedules list in itinerary selection */
+        .schedules-for-itinerary {
+            margin-top: 20px;
+        }
+        
+        .schedule-item-for-itinerary {
+            background-color: #f9f9f9;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 15px;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        
+        .schedule-item-for-itinerary:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        }
+        
+        .schedule-item-for-itinerary h4 {
+            margin-top: 0;
+            color: #333;
+            margin-bottom: 10px;
+        }
+        
+        .schedule-item-for-itinerary p {
+            margin: 5px 0;
+            color: #555;
+        }
+        
+        .schedule-item-for-itinerary .view-itinerary-btn {
+            background: linear-gradient(135deg, #f1c40f, #f39c12);
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            font-size: 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            margin-top: 15px;
+            transition: all 0.3s ease;
+        }
+        
+        .schedule-item-for-itinerary .view-itinerary-btn:hover {
+            background: linear-gradient(135deg, #f39c12, #e67e22);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+        }
+
+        /* Add these styles for the schedules list */
+        .schedule-item {
+            background-color: #fff;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+            padding: 20px;
+            margin-bottom: 20px;
+            transition: all 0.3s ease;
+        }
+
+        .schedule-item:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.15);
+        }
+
+        .schedule-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+            border-bottom: 1px solid #f0f0f0;
+            padding-bottom: 10px;
+        }
+
+        .schedule-header h4 {
+            margin: 0;
+            color: #333;
+            font-size: 18px;
+        }
+
+        .status-badge {
+            padding: 5px 10px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: bold;
+            text-transform: uppercase;
+        }
+
+        .status-active {
+            background-color: #28a745;
+            color: white;
+        }
+
+        .status-completed {
+            background-color: #17a2b8;
+            color: white;
+        }
+
+        .status-cancelled {
+            background-color: #dc3545;
+            color: white;
+        }
+
+        .status-default {
+            background-color: #6c757d;
+            color: white;
+        }
+
+        .schedule-details {
+            margin-bottom: 15px;
+        }
+
+        .schedule-details p {
+            margin: 5px 0;
+            color: #555;
+        }
+
+        .schedule-details i {
+            margin-right: 5px;
+            color: #3498db;
+        }
+
+        .button-group {
+            display: flex;
+            gap: 10px;
+        }
+
+        .form-submit.edit-btn {
+            background: linear-gradient(135deg, #3498db, #2980b9);
+        }
+
+        .form-submit.edit-btn:hover {
+            background: linear-gradient(135deg, #2980b9, #1f6dad);
+        }
+
+        .form-submit.itinerary-btn {
+            background: linear-gradient(135deg, #f1c40f, #f39c12);
+            color: white;
+            text-decoration: none;
+            display: inline-block;
+            padding: 12px 25px;
+            font-size: 16px;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            margin-top: 10px;
+            border: none;
+        }
+
+        .form-submit.itinerary-btn:hover {
+            background: linear-gradient(135deg, #f39c12, #e67e22);
+            transform: translateY(-2px);
+        }
+
+        /* Add these styles for the modal close buttons */
+        .modal .close {
+            position: absolute;
+            top: 10px;
+            right: 15px;
+            font-size: 24px;
+            font-weight: bold;
+            color: #777;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            z-index: 10;
+        }
+
+        .modal .close:hover {
+            color: #e74c3c;
+            transform: scale(1.1);
+        }
+
+        .modal-content {
+            position: relative;
+            padding-top: 30px;
+        }
+    </style>
+</head>
+<body>
+    <div class="dashboard-container">
+        <div class="navigation">
+            {% if request.session.user_type == 'employee' %}
+                {% if request.session.is_admin %}
+                    {% include "components/navigation.html" %}
+                {% else %}
+                    {% include "components/employee_navigation.html" %}
+                {% endif %}
+            {% else %}
+                {% include "components/navigation.html" %}
+            {% endif %}
+        </div>
+        <div class="main-container">
+            <div class="container">
+                <h1>Welcome to Ibaway Tours!</h1>
+                <p>Explore our amazing tour packages and book your next adventure.</p>
+
+                <!-- Display the list of tours -->
+                <div class="tour-list">
+                    {% for tour in tours %}
+                        <div class="tour-item">
+                            <img src="{{ tour.image.url }}" alt="{{ tour.tour_name }}">
+                            <h2>{{ tour.tour_name }}</h2>
+                            <p><strong>Details:</strong> {{ tour.description }}</p>
+                            <!-- Buttons for each tour -->
+                            <div class="button-container">
+                                <a href="{% url 'tour_app:create_schedule' tour_id=tour.tour_id %}" class="add-schedule-btn">
+                                    Add Schedule
+                                </a>
+                                <button onclick="openUpdateModal('{{ tour.tour_id }}')" class="add-schedule-btn" style="margin-left: 10px; background: linear-gradient(135deg, #2ecc71, #27ae60);">
+                                    Edit Tour
+                                </button>
+                                {% if request.session.is_admin %}
+                                <button onclick="confirmDeleteTour('{{ tour.tour_id }}')" class="add-schedule-btn" style="margin-left: 10px; background: linear-gradient(135deg, #e74c3c, #c0392b);">
+                                    Delete Tour
+                                </button>
+                                {% endif %}
+                            </div>
+                        </div>
+                    {% empty %}
+                        <p class="no-tours-message">No tours available at the moment. Please check back later.</p>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Update Options Modal -->
+    <div id="updateModal" class="modal">
+        <div class="modal-content">
+            <span class="close">&times;</span>
+            
+            <!-- Options container (initial view) -->
+            <div id="optionsContainer" class="options-container">
+                <h3 class="modal-title">Select Update Option</h3>
+                <button id="updateTourBtn" class="update-option tour">Edit Tour Details</button>
+                <button id="updateScheduleBtn" class="update-option schedule">Update Schedule</button>
+                <button id="updateItineraryBtn" class="update-option itinerary">Update Itinerary</button>
+            </div>
+            
+            <!-- Forms container (hidden initially) -->
+            <div id="formsContainer" class="forms-container">
+                <!-- Back button to return to options -->
+                <button id="backToOptions" class="back-button">← Back to Options</button>
+                
+                <!-- Update Tour Form -->
+                <div id="updateTourForm" class="update-form" style="display: none;">
+                    <h3 class="modal-title">Edit Tour Details</h3>
+                    <form id="editTourForm" method="POST" enctype="multipart/form-data">
+                        {% csrf_token %}
+                        <input type="hidden" name="tour_id" id="edit_tour_id">
+                        
+                        <div class="form-group">
+                            <label for="tour_name">Tour Name:</label>
+                            <input type="text" id="tour_name" name="tour_name" class="form-control" required>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="description">Description:</label>
+                            <textarea id="description" name="description" class="form-control" required></textarea>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="tour_image">Current Image:</label>
+                            <div id="current_image_preview">
+                                <p>Current image will be displayed here</p>
+                                <img id="tour_image_preview" src="" alt="Tour Image" style="max-width: 100%; max-height: 200px; display: none;">
+                            </div>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="new_tour_image">Upload New Image (optional):</label>
+                            <input type="file" id="new_tour_image" name="image" class="form-control">
+                        </div>
+                        
+                        <button type="button" class="back-button" id="backFromTourEdit">Cancel</button>
+                        <button type="submit" class="form-submit">Save Changes</button>
+                    </form>
+                </div>
+                
+                <!-- Update Schedule Form -->
+                <div id="updateScheduleForm" class="update-form">
+                    <h3 class="modal-title">Update Tour Schedules</h3>
+                    <div id="schedulesList">
+                        <!-- Schedule items will be loaded here by JavaScript -->
+                        <p class="loading-text">Loading schedules...</p>
+                    </div>
+                    
+                    <!-- Form for editing a specific schedule (hidden initially) -->
+                    <div id="editScheduleForm" style="display: none;">
+                        <h4>Edit Schedule <span id="edit_schedule_label"></span></h4>
+                        <form method="POST" id="scheduleForm" onsubmit="event.preventDefault(); updateSchedule(document.getElementById('edit_schedule_id').value);">
+                            {% csrf_token %}
+                            <input type="hidden" name="action" value="update">
+                            <input type="hidden" name="schedule_id" id="edit_schedule_id">
+                            <input type="hidden" name="slots_booked" id="slots_booked">
+                            
+                            <div class="form-group">
+                                <label for="start_time">Start Time:</label>
+                                <input type="datetime-local" id="start_time" name="start_time" class="form-control" required>
+                            </div>
+                            
+                            <div class="form-group">
+                                <label for="end_time">End Time:</label>
+                                <input type="datetime-local" id="end_time" name="end_time" class="form-control" required>
+                            </div>
+                            
+                            <div class="form-group">
+                                <label for="total_slots">Total Slots:</label>
+                                <input type="number" id="total_slots" name="total_slots" class="form-control" required>
+                            </div>
+                            
+                            <div class="form-group">
+                                <label for="slots_available">Available Slots:</label>
+                                <input type="number" id="slots_available" name="slots_available" class="form-control" required>
+                            </div>
+                            
+                            <div class="form-group" id="payable-section">
+                                <label>Payables:</label>
+                                <div id="payablesList">
+                                    <!-- Payables will be loaded here -->
+                                </div>
+                                <button type="button" class="btn btn-primary" id="add-more-payables">Add Admission</button>
+                            </div>
+                            
+                            <div class="form-group">
+                                <label for="price">Total Price:</label>
+                                <input type="text" id="price" name="price" class="form-control" readonly>
+                            </div>
+                            
+                            <button type="button" class="back-button" id="backToSchedulesList">Cancel</button>
+                            <button type="submit" class="form-submit">Save Changes</button>
+                        </form>
+                    </div>
+                </div>
+                
+                <!-- Update Itinerary Form -->
+                <div id="updateItineraryForm" class="update-form">
+                    <h3 class="modal-title">Update Itinerary</h3>
+                    
+                    <!-- Schedule selection dropdown -->
+                    <div class="form-group">
+                        <label for="itinerary_schedule_select">Select Schedule:</label>
+                        <select id="itinerary_schedule_select" class="form-control">
+                            <option value="">-- Select a Schedule --</option>
+                            <!-- Schedules will be populated dynamically -->
+                        </select>
+                    </div>
+                    
+                    <!-- Itinerary events table -->
+                    <div id="itineraryEventsContainer" style="display: none; margin-top: 20px;">
+                        <h4>Events for Schedule: <span id="selectedScheduleLabel"></span></h4>
+                        
+                        <table id="eventsTable" style="width: 100%; border-collapse: collapse; margin-top: 15px;">
+                            <thead>
+                                <tr style="background-color: #3498db; color: white;">
+                                    <th style="padding: 12px; text-align: left;">Time</th>
+                                    <th style="padding: 12px; text-align: left;">Event Name</th>
+                                    <th style="padding: 12px; text-align: left;">Description</th>
+                                    <th style="padding: 12px; text-align: left;">Image</th>
+                                    <th style="padding: 12px; text-align: left;">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="eventsTableBody">
+                                <!-- Events will be loaded here -->
+                            </tbody>
+                        </table>
+                        
+                        <p id="noEventsMessage" style="text-align: center; padding: 20px; color: #7f8c8d; display: none;">
+                            No events found for this schedule.
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+<script>
+// Store the current tour ID
+let currentTourId = '';
+let admissionRates = []; // Store admission rates data
+
+// Function to fetch admission rates
+async function fetchAdmissionRates() {
+    try {
+        const response = await fetch('/tour_app/rates/json/');
+        admissionRates = await response.json();
+        return admissionRates;
+    } catch (error) {
+        console.error('Error fetching admission rates:', error);
+        return [];
+    }
+}
+
+// Fetch admission rates when page loads
+fetchAdmissionRates();
+
+// Function to initialize all modal buttons
+function initializeModalButtons() {
+    // Edit Tour button
+    document.getElementById('updateTourBtn').onclick = function() {
+        document.getElementById('optionsContainer').style.display = 'none';
+        document.getElementById('formsContainer').style.display = 'block';
+        hideAllForms();
+        document.getElementById('updateTourForm').style.display = 'block';
+        
+        // Fetch tour details
+        fetchTourDetails();
+    };
+
+    // Update Schedule button
+    document.getElementById('updateScheduleBtn').onclick = function() {
+        document.getElementById('optionsContainer').style.display = 'none';
+        document.getElementById('formsContainer').style.display = 'block';
+        hideAllForms();
+        document.getElementById('updateScheduleForm').style.display = 'block';
+        
+        // Fetch schedules for the current tour
+        fetchSchedules();
+    };
+
+    // Update Itinerary button
+    document.getElementById('updateItineraryBtn').onclick = function() {
+        document.getElementById('optionsContainer').style.display = 'none';
+        document.getElementById('formsContainer').style.display = 'block';
+        hideAllForms();
+        document.getElementById('updateItineraryForm').style.display = 'block';
+        
+        // Fetch schedules for the dropdown
+        fetchSchedulesForItinerary();
+    };
+}
+
+// Initialize modal buttons when page loads
+document.addEventListener('DOMContentLoaded', function() {
+    initializeModalButtons();
+    
+    // Add event listener for tour edit form submission
+    document.getElementById('editTourForm').addEventListener('submit', function(e) {
+        e.preventDefault();
+        saveTourChanges();
+    });
+    
+    // Add event listener for back button from tour edit
+    document.getElementById('backFromTourEdit').addEventListener('click', function() {
+        document.getElementById('optionsContainer').style.display = 'block';
+        document.getElementById('formsContainer').style.display = 'none';
+        hideAllForms();
+    });
+    
+    // Initialize navbar dropdowns
+    $('.dropdown-toggle').on('click', function() {
+        $(this).next('.nav-submenu').toggleClass('show');
+    });
+    
+    // Add payables event listener
+    document.getElementById('add-more-payables').addEventListener('click', function() {
+        const payablesList = document.getElementById('payablesList');
+        const index = payablesList.children.length;
+        const payableDiv = createPayableInput(index);
+        payablesList.appendChild(payableDiv);
+    });
+});
+
+// Re-initialize modal buttons when opening the modal
+function openUpdateModal(tourId) {
+    currentTourId = tourId;
+    document.getElementById('updateModal').style.display = 'block';
+    
+    // Show options, hide forms
+    document.getElementById('optionsContainer').style.display = 'block';
+    document.getElementById('formsContainer').style.display = 'none';
+    
+    // Hide all forms
+    hideAllForms();
+    
+    // Re-initialize buttons
+    initializeModalButtons();
+}
+
+// Function to hide all forms
+function hideAllForms() {
+    document.getElementById('updateTourForm').style.display = 'none';
+    document.getElementById('updateScheduleForm').style.display = 'none';
+    document.getElementById('updateItineraryForm').style.display = 'none';
+}
+
+// Get the modal and close button
+const modal = document.getElementById('updateModal');
+const closeBtn = document.getElementsByClassName('close')[0];
+
+// Close the modal when clicking the close button
+closeBtn.onclick = function() {
+    modal.style.display = 'none';
+}
+
+// Close the modal when clicking outside the modal content
+window.onclick = function(event) {
+    if (event.target == modal) {
+        modal.style.display = 'none';
+    }
+}
+
+// Get back button and add functionality
+document.getElementById('backToOptions').addEventListener('click', function() {
+    document.getElementById('optionsContainer').style.display = 'block';
+    document.getElementById('formsContainer').style.display = 'none';
+    hideAllForms();
+});
+
+// Back to schedules list
+document.getElementById('backToSchedulesList').addEventListener('click', function() {
+    document.getElementById('schedulesList').style.display = 'block';
+    document.getElementById('editScheduleForm').style.display = 'none';
+});
+
+// Back to events list
+/* This line is causing problems - commenting it out 
+document.getElementById('backToEventsList').addEventListener('click', function() {
+    document.getElementById('eventsList').style.display = 'block';
+    document.getElementById('editEventForm').style.display = 'none';
+});
+*/
+
+// Function to fetch tour details
+async function fetchTourDetails() {
+    try {
+        console.log('Fetching tour details for ID:', currentTourId);
+        const response = await fetch(`/tour_app/tour/${currentTourId}/details/`);
+        
+        if (!response.ok) {
+            throw new Error(`Server returned ${response.status}: ${response.statusText}`);
+        }
+        
+        const tourData = await response.json();
+        console.log('Tour data received:', tourData);
+        
+        // Populate form fields
+        document.getElementById('edit_tour_id').value = tourData.tour_id;
+        document.getElementById('tour_name').value = tourData.tour_name;
+        document.getElementById('description').value = tourData.description;
+        
+        // Show current image
+        if (tourData.image_url) {
+            const imagePreview = document.getElementById('tour_image_preview');
+            imagePreview.src = tourData.image_url;
+            imagePreview.style.display = 'block';
+            document.querySelector('#current_image_preview p').textContent = 'Current Image:';
+        }
+        
+    } catch (error) {
+        console.error('Error fetching tour details:', error);
+        alert('Error loading tour details: ' + error.message);
+    }
+}
+
+// Function to save tour changes
+async function saveTourChanges() {
+    try {
+        const formData = new FormData(document.getElementById('editTourForm'));
+        formData.append('action', 'update_tour');
+        
+        console.log('Saving tour changes for ID:', currentTourId);
+        
+        const response = await fetch(`/tour_app/tour/${currentTourId}/update/`, {
+            method: 'POST',
+            body: formData
+        });
+        
+        if (!response.ok) {
+            throw new Error(`Server returned ${response.status}: ${response.statusText}`);
+        }
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            alert('Tour updated successfully!');
+            // Close modal and refresh page to see changes
+            document.getElementById('updateModal').style.display = 'none';
+            window.location.reload();
+        } else {
+            alert('Error updating tour: ' + (result.message || 'Unknown error'));
+        }
+        
+    } catch (error) {
+        console.error('Error saving tour changes:', error);
+        alert('Error saving tour changes: ' + error.message);
+    }
+}
+
+// Function to fetch schedules
+async function fetchSchedules() {
+    try {
+        console.log('Fetching schedules for tour ID:', currentTourId);
+        const response = await fetch(`/tour_app/tour/${currentTourId}/schedules/`);
+        
+        if (!response.ok) {
+            throw new Error(`Server returned ${response.status}: ${response.statusText}`);
+        }
+        
+        const schedules = await response.json();
+        console.log('Schedules data received:', schedules);
+        
+        const schedulesList = document.getElementById('schedulesList');
+        schedulesList.innerHTML = '';
+        
+        if (schedules.length === 0) {
+            schedulesList.innerHTML = '<p class="no-schedules">No schedules found for this tour.</p>';
+            return;
+        }
+        
+        schedules.forEach(schedule => {
+            const scheduleItem = document.createElement('div');
+            scheduleItem.className = 'schedule-item';
+            
+            // Format dates for display
+            const startDate = new Date(schedule.start_time);
+            const endDate = new Date(schedule.end_time);
+            const formattedStartDate = startDate.toLocaleDateString() + ' ' + startDate.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+            const formattedEndDate = endDate.toLocaleDateString() + ' ' + endDate.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+            
+            // Status badge with color based on status
+            let statusBadgeClass = '';
+            switch(schedule.status) {
+                case 'active':
+                    statusBadgeClass = 'status-active';
+                    break;
+                case 'completed':
+                    statusBadgeClass = 'status-completed';
+                    break;
+                case 'cancelled':
+                    statusBadgeClass = 'status-cancelled';
+                    break;
+                default:
+                    statusBadgeClass = 'status-default';
+            }
+            
+            scheduleItem.innerHTML = `
+                <div class="schedule-header">
+                    <h4>Schedule #${schedule.schedule_id}</h4>
+                    <span class="status-badge ${statusBadgeClass}">${schedule.status}</span>
+                </div>
+                <div class="schedule-details">
+                    <p><i class="fa fa-calendar"></i> <strong>Start:</strong> ${formattedStartDate}</p>
+                    <p><i class="fa fa-calendar-check"></i> <strong>End:</strong> ${formattedEndDate}</p>
+                    <p><i class="fa fa-users"></i> <strong>Slots:</strong> ${schedule.slots_available} available / ${schedule.total_slots} total</p>
+                </div>
+                <div class="button-group">
+                    <button type="button" onclick="editSchedule('${schedule.schedule_id}')" class="form-submit edit-btn">
+                        <i class="fa fa-edit"></i> Edit
+                    </button>
+                    <a href="/tour_app/itinerary/${schedule.schedule_id}/" class="form-submit itinerary-btn">
+                        <i class="fa fa-list"></i> Add Itinerary
+                    </a>
+                </div>
+            `;
+            schedulesList.appendChild(scheduleItem);
+        });
+    } catch (error) {
+        console.error('Error fetching schedules:', error);
+        document.getElementById('schedulesList').innerHTML = 
+            '<p class="error-message">Error loading schedules: ' + error.message + '</p>';
+    }
+}
+
+// Function to edit a specific schedule
+async function editSchedule(scheduleId) {
+    try {
+        console.log('Editing schedule with ID:', scheduleId);
+        
+        // Fetch schedule details
+        const response = await fetch(`/tour_app/schedule/${scheduleId}/`);
+        
+        if (!response.ok) {
+            throw new Error(`Server returned ${response.status}: ${response.statusText}`);
+        }
+        
+        const schedule = await response.json();
+        console.log('Schedule data received:', schedule);
+        
+        // Populate form with schedule data
+        document.getElementById('edit_schedule_id').value = schedule.schedule_id;
+        document.getElementById('edit_schedule_label').textContent = `#${schedule.schedule_id}`;
+        document.getElementById('slots_booked').value = schedule.slots_booked;
+        
+        // Format dates for datetime-local input
+        const startTime = new Date(schedule.start_time);
+        const endTime = new Date(schedule.end_time);
+        
+        // Format as YYYY-MM-DDThh:mm (required format for datetime-local)
+        const formatDateForInput = (date) => {
+            return date.getFullYear() + '-' + 
+                   String(date.getMonth() + 1).padStart(2, '0') + '-' + 
+                   String(date.getDate()).padStart(2, '0') + 'T' + 
+                   String(date.getHours()).padStart(2, '0') + ':' + 
+                   String(date.getMinutes()).padStart(2, '0');
+        };
+        
+        document.getElementById('start_time').value = formatDateForInput(startTime);
+        document.getElementById('end_time').value = formatDateForInput(endTime);
+        document.getElementById('total_slots').value = schedule.total_slots;
+        document.getElementById('slots_available').value = schedule.slots_available;
+        
+        // Set up event listener for total_slots input to update slots_available
+        document.getElementById('total_slots').addEventListener('change', function() {
+            const totalSlots = parseInt(this.value) || 0;
+            const slotsBooked = parseInt(document.getElementById('slots_booked').value) || 0;
+            // Calculate available slots based on total and booked
+            const availableSlots = Math.max(0, totalSlots - slotsBooked);
+            document.getElementById('slots_available').value = availableSlots;
+        });
+        
+        // Clear existing payables
+        document.getElementById('payablesList').innerHTML = '';
+        
+        // Load payables
+        await loadPayablesForSchedule(scheduleId);
+        
+        // Show the edit form and hide the schedules list
+        document.getElementById('schedulesList').style.display = 'none';
+        document.getElementById('editScheduleForm').style.display = 'block';
+        
+    } catch (error) {
+        console.error('Error loading schedule details:', error);
+        alert('Error loading schedule details: ' + error.message);
+    }
+}
+
+// Function to load payables for a schedule
+async function loadPayablesForSchedule(scheduleId) {
+    try {
+        console.log('Loading payables for schedule ID:', scheduleId);
+        const response = await fetch(`/tour_app/schedule/${scheduleId}/payables/`);
+        
+        if (!response.ok) {
+            throw new Error(`Server returned ${response.status}: ${response.statusText}`);
+        }
+        
+        const payables = await response.json();
+        console.log('Payables received:', payables);
+        
+        const payablesList = document.getElementById('payablesList');
+        payablesList.innerHTML = '';
+        
+        if (payables.length === 0) {
+            // If no payables, add an empty one
+            const payableDiv = createPayableInput(0);
+            payablesList.appendChild(payableDiv);
+        } else {
+            // Add existing payables
+            payables.forEach((payable, index) => {
+                const payableDiv = createPayableInput(index, payable);
+                payablesList.appendChild(payableDiv);
+            });
+        }
+        
+        // Calculate and display total price
+        calculateTotalPrice();
+        
+    } catch (error) {
+        console.error('Error loading payables:', error);
+        // If error, add an empty payable input
+        const payablesList = document.getElementById('payablesList');
+        const payableDiv = createPayableInput(0);
+        payablesList.appendChild(payableDiv);
+    }
+}
+
+// Function to create a payable input group
+function createPayableInput(index, payable = null) {
+    const payableDiv = document.createElement('div');
+    payableDiv.className = 'payable-group';
+    
+    // Create admission type selector
+    const selectEl = document.createElement('select');
+    selectEl.className = 'payable-select';
+    selectEl.name = `admission_type_${index}`;
+    selectEl.required = true;
+    
+    // Add default option
+    const defaultOption = document.createElement('option');
+    defaultOption.value = '';
+    defaultOption.textContent = '-- Select Admission Type --';
+    selectEl.appendChild(defaultOption);
+    
+    // Add options from admission rates
+    admissionRates.forEach(rate => {
+        const option = document.createElement('option');
+        option.value = rate.rate_id;
+        option.textContent = `${rate.payables} - ₱${rate.price}`;
+        
+        // Select the option if it matches the payable
+        if (payable && payable.rate_id.toString() === rate.rate_id.toString()) {
+            option.selected = true;
+        }
+        
+        selectEl.appendChild(option);
+    });
+    
+    // Create price input
+    const priceInput = document.createElement('input');
+    priceInput.className = 'price-input';
+    priceInput.type = 'number';
+    priceInput.name = `price_${index}`;
+    priceInput.placeholder = 'Price';
+    priceInput.readOnly = true;
+    
+    // Set price if payable exists
+    if (payable) {
+        priceInput.value = payable.amount;
+    }
+    
+    // Update price when admission type changes
+    selectEl.onchange = function() {
+        const selectedRate = admissionRates.find(rate => rate.rate_id.toString() === this.value);
+        if (selectedRate) {
+            priceInput.value = selectedRate.price;
+            calculateTotalPrice();
+        }
+    };
+    
+    // If this is an existing payable, trigger onchange to set price
+    if (payable) {
+        const event = new Event('change');
+        selectEl.dispatchEvent(event);
+    }
+    
+    // Create hidden input for payable ID
+    if (payable && payable.admission_id) {
+        const hiddenInput = document.createElement('input');
+        hiddenInput.type = 'hidden';
+        hiddenInput.name = `payable_id_${index}`;
+        hiddenInput.value = payable.admission_id;
+        payableDiv.appendChild(hiddenInput);
+    }
+    
+    // Create remove button
+    const removeBtn = document.createElement('button');
+    removeBtn.type = 'button';
+    removeBtn.className = 'remove-btn';
+    removeBtn.textContent = '✕';
+    
+    removeBtn.onclick = function() {
+        payableDiv.remove();
+        calculateTotalPrice();
+    };
+    
+    // Add elements to payable div
+    payableDiv.appendChild(selectEl);
+    payableDiv.appendChild(priceInput);
+    payableDiv.appendChild(removeBtn);
+    
+    return payableDiv;
+}
+
+// Function to calculate total price
+function calculateTotalPrice() {
+    const priceInputs = document.querySelectorAll('.price-input');
+    let total = 0;
+    
+    priceInputs.forEach(input => {
+        if (input.value) {
+            total += parseFloat(input.value);
+        }
+    });
+    
+    document.getElementById('price').value = '₱' + total.toFixed(2);
+}
+
+// Function to fetch schedules for itinerary
+async function fetchSchedulesForItinerary() {
+    try {
+        console.log('Fetching schedules for tour ID:', currentTourId);
+        const response = await fetch(`/tour_app/tour/${currentTourId}/schedules/`);
+        
+        if (!response.ok) {
+            throw new Error(`Server returned ${response.status}: ${response.statusText}`);
+        }
+        
+        const schedules = await response.json();
+        console.log('Schedules data received:', schedules);
+        
+        // Clear previous schedules from dropdown
+        const scheduleSelect = document.getElementById('itinerary_schedule_select');
+        scheduleSelect.innerHTML = '<option value="">-- Select a Schedule --</option>';
+        
+        if (schedules.length === 0) {
+            alert('No schedules found for this tour. Please create a schedule first.');
+            return;
+        }
+        
+        // Add schedules to dropdown
+        schedules.forEach(schedule => {
+            const option = document.createElement('option');
+            option.value = schedule.schedule_id;
+            option.textContent = `Schedule ${schedule.schedule_id} (${new Date(schedule.start_time).toLocaleString()})`;
+            scheduleSelect.appendChild(option);
+        });
+        
+        // Add event listener to dropdown
+        scheduleSelect.onchange = function() {
+            if (this.value) {
+                fetchEventsForItinerary(this.value);
+                document.getElementById('selectedScheduleLabel').textContent = 
+                    this.options[this.selectedIndex].textContent;
+                document.getElementById('itineraryEventsContainer').style.display = 'block';
+            } else {
+                document.getElementById('itineraryEventsContainer').style.display = 'none';
+            }
+        };
+    } catch (error) {
+        console.error('Error fetching schedules:', error);
+        alert('Error loading schedules: ' + error.message);
+    }
+}
+
+// Function to fetch events for the itinerary table
+async function fetchEventsForItinerary(scheduleId) {
+    try {
+        console.log('Fetching events for schedule ID:', scheduleId);
+        const response = await fetch(`/tour_app/schedule/${scheduleId}/events/`);
+        
+        if (!response.ok) {
+            throw new Error(`Server returned ${response.status}: ${response.statusText}`);
+        }
+        
+        const events = await response.json();
+        console.log('Events data received:', events);
+        
+        const eventsTableBody = document.getElementById('eventsTableBody');
+        eventsTableBody.innerHTML = '';
+        
+        const noEventsMessage = document.getElementById('noEventsMessage');
+        const eventsTable = document.getElementById('eventsTable');
+        
+        if (events.length === 0) {
+            noEventsMessage.style.display = 'block';
+            eventsTable.style.display = 'none';
+        } else {
+            noEventsMessage.style.display = 'none';
+            eventsTable.style.display = 'table';
+            
+            // Update table headers to include image column
+            const tableHead = document.querySelector('#eventsTable thead tr');
+            if (tableHead) {
+                tableHead.innerHTML = `
+                    <th style="padding: 12px; text-align: left;">Time</th>
+                    <th style="padding: 12px; text-align: left;">Event Name</th>
+                    <th style="padding: 12px; text-align: left;">Description</th>
+                    <th style="padding: 12px; text-align: left;">Image</th>
+                    <th style="padding: 12px; text-align: left;">Actions</th>
+                `;
+            }
+            
+            events.forEach(event => {
+                // Ensure event.event_id exists (handle both event_id and event_ID)
+                const eventId = event.event_id || event.event_ID || 'unknown';
+                
+                const row = document.createElement('tr');
+                row.id = `event_row_${eventId}`;
+                row.style.borderBottom = '1px solid #eee';
+                
+                // Time cell
+                const timeCell = document.createElement('td');
+                timeCell.style.padding = '12px';
+                timeCell.textContent = event.event_time;
+                
+                // Name cell
+                const nameCell = document.createElement('td');
+                nameCell.style.padding = '12px';
+                nameCell.textContent = event.event_name;
+                
+                // Description cell
+                const descCell = document.createElement('td');
+                descCell.style.padding = '12px';
+                descCell.textContent = event.event_description;
+                
+                // Image cell
+                const imageCell = document.createElement('td');
+                imageCell.style.padding = '12px';
+                imageCell.style.textAlign = 'center';
+                
+                if (event.has_image && event.image_url) {
+                    const img = document.createElement('img');
+                    img.src = event.image_url;
+                    img.alt = "Event Image";
+                    img.style.maxWidth = '100px';
+                    img.style.maxHeight = '60px';
+                    img.style.borderRadius = '4px';
+                    img.style.boxShadow = '0 2px 4px rgba(0,0,0,0.1)';
+                    imageCell.appendChild(img);
+                } else {
+                    imageCell.textContent = 'No image';
+                    imageCell.style.color = '#999';
+                    imageCell.style.fontStyle = 'italic';
+                }
+                
+                // Actions cell
+                const actionCell = document.createElement('td');
+                actionCell.style.padding = '12px';
+                
+                // Edit button
+                const editBtn = document.createElement('button');
+                editBtn.textContent = 'Edit';
+                editBtn.className = 'event-edit-btn';
+                editBtn.style.marginRight = '5px';
+                editBtn.onclick = function() {
+                    openEditEventModal(eventId, event.event_time, event.event_name, 
+                                     event.event_description, scheduleId);
+                };
+                
+                // Delete button
+                const deleteBtn = document.createElement('button');
+                deleteBtn.textContent = 'Delete';
+                deleteBtn.className = 'delete-btn';
+                deleteBtn.style.padding = '8px 15px';
+                deleteBtn.style.float = 'none';
+                deleteBtn.onclick = function() {
+                    if (confirm('Are you sure you want to delete this event?')) {
+                        deleteItineraryEvent(eventId, scheduleId);
+                    }
+                };
+                
+                actionCell.appendChild(editBtn);
+                actionCell.appendChild(deleteBtn);
+                
+                // Add cells to row
+                row.appendChild(timeCell);
+                row.appendChild(nameCell);
+                row.appendChild(descCell);
+                row.appendChild(imageCell);
+                row.appendChild(actionCell);
+                
+                eventsTableBody.appendChild(row);
+            });
+            
+            // Add a row for adding new event
+            const addRow = document.createElement('tr');
+            addRow.style.backgroundColor = '#f9f9f9';
+            
+            // Add empty cells for each column (now 5 columns instead of 4)
+            for (let i = 0; i < 4; i++) {
+                const cell = document.createElement('td');
+                cell.style.padding = '12px';
+                addRow.appendChild(cell);
+            }
+            
+            // Add button cell
+            const addBtnCell = document.createElement('td');
+            addBtnCell.style.padding = '12px';
+            
+            const addBtn = document.createElement('button');
+            addBtn.textContent = 'Add New Event';
+            addBtn.className = 'add-btn';
+            addBtn.style.backgroundColor = '#2ecc71';
+            addBtn.style.padding = '8px 15px';
+            addBtn.onclick = function() {
+                openAddEventModal(scheduleId);
+            };
+            
+            addBtnCell.appendChild(addBtn);
+            addRow.appendChild(addBtnCell);
+            
+            eventsTableBody.appendChild(addRow);
+        }
+    } catch (error) {
+        console.error('Error fetching events:', error);
+        alert('Error loading events: ' + error.message);
+    }
+}
+
+// Function to open modal for editing an event
+function openEditEventModal(eventId, eventTime, eventName, eventDesc, scheduleId) {
+    // Create a simple form in the modal
+    const modalDiv = document.createElement('div');
+    modalDiv.className = 'modal';
+    modalDiv.id = 'eventEditModal';
+    modalDiv.style.display = 'block';
+    
+    // Create modal content
+    const modalContent = document.createElement('div');
+    modalContent.className = 'modal-content';
+    modalContent.style.width = '500px';
+    
+    // Create close button
+    const closeBtn = document.createElement('span');
+    closeBtn.className = 'close';
+    closeBtn.innerHTML = '&times;';
+    closeBtn.style.position = 'absolute';
+    closeBtn.style.top = '10px';
+    closeBtn.style.right = '15px';
+    closeBtn.style.fontSize = '24px';
+    closeBtn.style.cursor = 'pointer';
+    closeBtn.onclick = function() {
+        document.body.removeChild(modalDiv);
+    };
+    
+    // Fetch event details to get the image
+    fetch(`/tour_app/event/${eventId}/details/`)
+        .then(response => response.json())
+        .then(event => {
+            // Create form content with image preview
+            const content = `
+                <h3 class="modal-title">Edit Event</h3>
+                <form id="editEventForm" class="update-form" enctype="multipart/form-data">
+                    <div class="form-group">
+                        <label for="edit_event_time">Event Time:</label>
+                        <input type="time" id="edit_event_time" class="form-control" value="${eventTime}" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="edit_event_name">Event Name:</label>
+                        <input type="text" id="edit_event_name" class="form-control" value="${eventName}" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="edit_event_desc">Event Description:</label>
+                        <textarea id="edit_event_desc" class="form-control" required>${eventDesc}</textarea>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Current Image:</label>
+                        <div id="current_event_image_preview" style="border: 1px solid #ddd; padding: 10px; border-radius: 4px; text-align: center; margin-bottom: 15px;">
+                            ${event.has_image ? 
+                                `<img src="${event.image_url}" alt="Event Image" style="max-width: 100%; max-height: 200px;">` : 
+                                `<p>No image uploaded</p>`}
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="new_event_image">Upload New Image (optional):</label>
+                        <input type="file" id="new_event_image" name="image" class="form-control" accept="image/*">
+                    </div>
+                    
+                    <button type="button" class="form-submit" onclick="saveItineraryEvent('${eventId}', '${scheduleId}');">
+                        Save Changes
+                    </button>
+                </form>
+            `;
+            
+            // Add content to modal
+            modalContent.innerHTML = content;
+            modalContent.appendChild(closeBtn);
+            modalDiv.appendChild(modalContent);
+            
+            // Add modal to body
+            document.body.appendChild(modalDiv);
+        })
+        .catch(error => {
+            console.error('Error fetching event details:', error);
+            
+            // Create basic form without image preview if there's an error
+            const content = `
+                <h3 class="modal-title">Edit Event</h3>
+                <form id="editEventForm" class="update-form" enctype="multipart/form-data">
+                    <div class="form-group">
+                        <label for="edit_event_time">Event Time:</label>
+                        <input type="time" id="edit_event_time" class="form-control" value="${eventTime}" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="edit_event_name">Event Name:</label>
+                        <input type="text" id="edit_event_name" class="form-control" value="${eventName}" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="edit_event_desc">Event Description:</label>
+                        <textarea id="edit_event_desc" class="form-control" required>${eventDesc}</textarea>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="new_event_image">Upload Image to change image or leave empty to keep image:</label>
+                        <input type="file" id="new_event_image" name="image" class="form-control" accept="image/*">
+                    </div>
+                    
+                    <button type="button" class="form-submit" onclick="saveItineraryEvent('${eventId}', '${scheduleId}');">
+                        Save Changes
+                    </button>
+                </form>
+            `;
+            
+            // Add content to modal
+            modalContent.innerHTML = content;
+            modalContent.appendChild(closeBtn);
+            modalDiv.appendChild(modalContent);
+            
+            // Add modal to body
+            document.body.appendChild(modalDiv);
+        });
+}
+
+// Function to open modal for adding a new event
+function openAddEventModal(scheduleId) {
+    // Create a simple form in the modal
+    const modalDiv = document.createElement('div');
+    modalDiv.className = 'modal';
+    modalDiv.id = 'eventAddModal';
+    modalDiv.style.display = 'block';
+    
+    // Create modal content
+    const modalContent = document.createElement('div');
+    modalContent.className = 'modal-content';
+    modalContent.style.width = '500px';
+    
+    // Create close button
+    const closeBtn = document.createElement('span');
+    closeBtn.className = 'close';
+    closeBtn.innerHTML = '&times;';
+    closeBtn.style.position = 'absolute';
+    closeBtn.style.top = '10px';
+    closeBtn.style.right = '15px';
+    closeBtn.style.fontSize = '24px';
+    closeBtn.style.cursor = 'pointer';
+    closeBtn.onclick = function() {
+        document.body.removeChild(modalDiv);
+    };
+    
+    // Create form content
+    const content = `
+        <h3 class="modal-title">Add New Event</h3>
+        <form id="addEventForm" class="update-form" enctype="multipart/form-data">
+            <div class="form-group">
+                <label for="new_event_time">Event Time:</label>
+                <input type="time" id="new_event_time" class="form-control" required>
+            </div>
+            
+            <div class="form-group">
+                <label for="new_event_name">Event Name:</label>
+                <input type="text" id="new_event_name" class="form-control" required>
+            </div>
+            
+            <div class="form-group">
+                <label for="new_event_desc">Event Description:</label>
+                <textarea id="new_event_desc" class="form-control" required></textarea>
+            </div>
+            
+            <div class="form-group">
+                <label for="event_image">Upload Image (optional):</label>
+                <input type="file" id="event_image" name="image" class="form-control" accept="image/*">
+            </div>
+            
+            <button type="button" class="form-submit" onclick="addItineraryEvent('${scheduleId}');">
+                Add Event
+            </button>
+        </form>
+    `;
+    
+    // Add content to modal
+    modalContent.innerHTML = content;
+    modalContent.appendChild(closeBtn);
+    modalDiv.appendChild(modalContent);
+    
+    // Add modal to body
+    document.body.appendChild(modalDiv);
+}
+
+// Function to save an edited event
+async function saveItineraryEvent(eventId, scheduleId) {
+    try {
+        const time = document.getElementById('edit_event_time').value;
+        const name = document.getElementById('edit_event_name').value;
+        const description = document.getElementById('edit_event_desc').value;
+        const imageInput = document.getElementById('new_event_image');
+        
+        if (!time || !name || !description) {
+            alert('Please fill in all fields');
+            return;
+        }
+        
+        // Create form data
+        const formData = new FormData();
+        formData.append('event_id', eventId);
+        formData.append('event_time', time);
+        formData.append('event_name', name);
+        formData.append('event_description', description);
+        formData.append('action', 'update');
+        formData.append('csrfmiddlewaretoken', document.querySelector('[name=csrfmiddlewaretoken]').value);
+        
+        // Add image if uploaded
+        if (imageInput && imageInput.files.length > 0) {
+            formData.append('image', imageInput.files[0]);
+        }
+        
+        // Send AJAX request
+        const response = await fetch(`/tour_app/event/${eventId}/update/`, {
+            method: 'POST',
+            body: formData
+        });
+        
+        if (!response.ok) {
+            throw new Error(`Server returned ${response.status}: ${response.statusText}`);
+        }
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            alert('Event updated successfully!');
+            // Close the modal
+            document.body.removeChild(document.getElementById('eventEditModal'));
+            // Refresh events
+            fetchEventsForItinerary(scheduleId);
+        } else {
+            alert('Error updating event: ' + (result.message || 'Unknown error'));
+        }
+    } catch (error) {
+        console.error('Error updating event:', error);
+        alert('Error updating event: ' + error.message);
+    }
+}
+
+// Function to add a new event
+async function addItineraryEvent(scheduleId) {
+    try {
+        const time = document.getElementById('new_event_time').value;
+        const name = document.getElementById('new_event_name').value;
+        const description = document.getElementById('new_event_desc').value;
+        const imageInput = document.getElementById('event_image');
+        
+        if (!time || !name || !description) {
+            alert('Please fill in all fields');
+            return;
+        }
+        
+        // Create form data
+        const formData = new FormData();
+        formData.append('event_time', time);
+        formData.append('event_name', name);
+        formData.append('event_description', description);
+        formData.append('action', 'add');
+        formData.append('csrfmiddlewaretoken', document.querySelector('[name=csrfmiddlewaretoken]').value);
+        
+        // Add image if uploaded
+        if (imageInput && imageInput.files.length > 0) {
+            formData.append('image', imageInput.files[0]);
+        }
+        
+        // Send AJAX request
+        const response = await fetch(`/tour_app/schedule/${scheduleId}/events/add/`, {
+            method: 'POST',
+            body: formData
+        });
+        
+        if (!response.ok) {
+            throw new Error(`Server returned ${response.status}: ${response.statusText}`);
+        }
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            alert('Event added successfully!');
+            // Close the modal
+            document.body.removeChild(document.getElementById('eventAddModal'));
+            // Refresh events
+            fetchEventsForItinerary(scheduleId);
+        } else {
+            alert('Error adding event: ' + (result.message || 'Unknown error'));
+        }
+    } catch (error) {
+        console.error('Error adding event:', error);
+        alert('Error adding event: ' + error.message);
+    }
+}
+
+// Function to delete an event
+async function deleteItineraryEvent(eventId, scheduleId) {
+    try {
+        console.log('Deleting event with ID:', eventId);
+        
+        // Create form data
+        const formData = new FormData();
+        formData.append('event_id', eventId);
+        formData.append('action', 'delete');
+        formData.append('csrfmiddlewaretoken', document.querySelector('[name=csrfmiddlewaretoken]').value);
+        
+        // Send AJAX request
+        const response = await fetch(`/tour_app/event/${eventId}/delete/`, {
+            method: 'POST',
+            body: formData
+        });
+        
+        if (!response.ok) {
+            throw new Error(`Server returned ${response.status}: ${response.statusText}`);
+        }
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            alert('Event deleted successfully!');
+            // Refresh events
+            fetchEventsForItinerary(scheduleId);
+        } else {
+            alert('Error deleting event: ' + (result.message || 'Unknown error'));
+        }
+    } catch (error) {
+        console.error('Error deleting event:', error);
+        alert('Error deleting event: ' + error.message);
+    }
+}
+
+// Function to confirm and delete a tour
+function confirmDeleteTour(tourId) {
+    if (confirm('Are you sure you want to delete this tour? This action cannot be undone and will remove all schedules and events associated with this tour.')) {
+        // Create form data
+        const formData = new FormData();
+        formData.append('tour_id', tourId);
+        formData.append('action', 'delete');
+        formData.append('csrfmiddlewaretoken', document.querySelector('[name=csrfmiddlewaretoken]').value);
+        
+        // Send AJAX request
+        fetch(`/tour_app/tour/${tourId}/delete/`, {
+            method: 'POST',
+            body: formData
+        })
+        .then(response => {
+            if (!response.ok) {
+                throw new Error(`Server returned ${response.status}: ${response.statusText}`);
+            }
+            return response.json();
+        })
+        .then(result => {
+            if (result.success) {
+                alert('Tour deleted successfully!');
+                // Refresh the page to update the tours list
+                window.location.reload();
+            } else {
+                alert('Error deleting tour: ' + (result.message || 'Unknown error'));
+            }
+        })
+        .catch(error => {
+            console.error('Error deleting tour:', error);
+            alert('Error deleting tour: ' + error.message);
+        });
+    }
+}
+</script>
+</html>

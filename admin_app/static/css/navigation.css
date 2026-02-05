@@ -1,0 +1,345 @@
+/* Ibayaw Tour Navigation Styles */
+
+/* CSS Variables */
+:root {
+  /* Brand Colors */
+  --primary-color: #875a34;
+  --primary-light: #e99c59;
+  --primary-dark: #6d4827;
+  --secondary-color: #8c6e5d;
+  
+  /* Status Colors */
+  --success-color: #34a853;
+  --warning-color: #fbbc05;
+  --error-color: #ea4335;
+  --info-color: #4285f4;
+  
+  /* Neutral Colors */
+  --bg-color: #f4f7fc;
+  --text-dark: #333;
+  --text-medium: #666;
+  --text-light: #9e9e9e;
+  --white: #fff;
+  
+  /* UI Elements */
+  --card-bg: #fff;
+  --border-color: #eee;
+  --shadow-sm: 0 2px 4px rgba(0,0,0,0.05);
+  --shadow-md: 0 4px 6px rgba(0,0,0,0.1);
+  --shadow-lg: 0 10px 15px rgba(0,0,0,0.1);
+  
+  /* Spacing */
+  --spacing-xs: 4px;
+  --spacing-sm: 8px;
+  --spacing-md: 16px;
+  --spacing-lg: 24px;
+  --spacing-xl: 32px;
+  
+  /* Border Radius */
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 20px;
+  
+  /* Transitions */
+  --transition-fast: 0.2s ease;
+  --transition-normal: 0.3s ease;
+}
+
+/* Navigation sidebar */
+.nav-sidebar {
+  height: 100%;
+  padding: var(--spacing-md) 0;
+}
+
+/* Logo container */
+.nav-logo {
+  text-align: center;
+  padding: 0 var(--spacing-md) var(--spacing-lg);
+  margin-bottom: var(--spacing-md);
+  border-bottom: 1px solid var(--border-color);
+}
+
+.nav-logo svg {
+  height: 50px;
+  width: auto;
+}
+
+/* Menu section */
+.nav-section {
+  margin: var(--spacing-md) 0 var(--spacing-xs);
+  padding: 0 var(--spacing-lg);
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-light);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* Navigation links */
+.nav-menu {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.nav-item {
+  margin: 3px var(--spacing-sm);
+}
+
+.nav-link {
+  display: flex;
+  align-items: center;
+  padding: 10px var(--spacing-md);
+  text-decoration: none;
+  color: var(--text-dark);
+  border-radius: var(--radius-sm);
+  transition: all var(--transition-fast);
+  font-weight: 500;
+  position: relative;
+}
+
+.nav-link:hover {
+  background-color: #f9e8d9;
+  color: var(--primary-color);
+  transform: translateX(3px);
+}
+
+.nav-link.active {
+  background-color: #E6D7C9;
+  color: var(--primary-color);
+  font-weight: 600;
+}
+
+.nav-link.active::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 30%;
+  height: 40%;
+  width: 3px;
+  background-color: var(--primary-light);
+  border-radius: 0 2px 2px 0;
+}
+
+.nav-icon {
+  margin-right: var(--spacing-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+}
+
+/* Logout section */
+.nav-footer {
+  margin-top: auto;
+  padding-top: var(--spacing-md);
+  border-top: 1px solid var(--border-color);
+  margin: var(--spacing-lg) var(--spacing-sm) 0;
+}
+
+.logout-link {
+  display: flex;
+  align-items: center;
+  padding: 10px var(--spacing-md);
+  text-decoration: none;
+  color: var(--error-color);
+  font-weight: 500;
+  border-radius: var(--radius-sm);
+  transition: all var(--transition-fast);
+}
+
+.logout-link:hover {
+  background-color: #ffebe9;
+  transform: translateX(3px);
+}
+
+/* Navigation container (for fixed positioning) */
+.navigation {
+  width: 250px;
+  background-color: var(--bg-color);
+  position: fixed;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  height: 100vh;
+  overflow-y: auto;
+  padding: 15px;
+  z-index: 100;
+  box-sizing: border-box;
+  transition: box-shadow 0.3s ease;
+}
+
+.navigation.scrolled {
+  box-shadow: 0 0 15px rgba(0, 0, 0, 0.1);
+}
+
+/* Handle content margin */
+.content {
+  margin-left: 250px;
+}
+
+/* Responsive design */
+@media (max-width: 768px) {
+  .navigation {
+    width: 100%;
+    height: auto;
+    position: relative;
+    padding: 10px;
+  }
+  
+  .content {
+    margin-left: 0;
+  }
+}
+
+/* Access Denied Message */
+.access-denied-container {
+  background-color: #f8f9fa;
+  padding: 20px;
+  text-align: center;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+.access-denied-message {
+  margin: 0;
+  color: #666;
+}
+
+.access-denied-link {
+  color: var(--primary-light);
+  text-decoration: none;
+  font-weight: 500;
+}
+
+.access-denied-link:hover {
+  text-decoration: underline;
+}
+
+/* Fallback styles for when CSS variables aren't available */
+@supports not (--test: green) {
+  .nav-link:hover {
+    background-color: #f9e8d9;
+    color: #875a34;
+  }
+  
+  .nav-link.active {
+    background-color: #E6D7C9;
+    color: #875a34;
+  }
+  
+  .nav-link.active::before {
+    background-color: #e99c59;
+  }
+  
+  .logout-link {
+    color: #ea4335;
+  }
+  
+  .nav-section {
+    color: #9e9e9e;
+  }
+  
+  .nav-logo, .nav-footer {
+    border-color: #eee;
+  }
+  
+  .access-denied-link {
+    color: #e99c59;
+  }
+}
+
+/* Responsive classes */
+body.desktop-view .navigation {
+  position: fixed;
+  width: 250px;
+  height: 100vh;
+}
+
+body.desktop-view .content {
+  margin-left: 250px;
+}
+
+body.mobile-view .navigation {
+  position: relative;
+  width: 100%;
+  height: auto;
+}
+
+body.mobile-view .content {
+  margin-left: 0;
+}
+
+/* Add submenu styles to the existing navigation.css file */
+.nav-submenu {
+    list-style: none;
+    padding: 0;
+    margin: 0 0 0 20px;
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.3s ease;
+}
+
+.nav-item:hover .nav-submenu,
+.nav-item:focus-within .nav-submenu,
+.nav-item.active .nav-submenu {
+    max-height: 500px; /* Large enough to contain all items */
+}
+
+.nav-subitem {
+    margin: 4px 0;
+}
+
+.nav-sublink {
+    display: flex;
+    align-items: center;
+    padding: 8px 12px;
+    color: var(--text-medium, #666);
+    text-decoration: none;
+    border-radius: 6px;
+    font-size: 0.9rem;
+    transition: all 0.2s ease;
+}
+
+.nav-sublink:hover {
+    background-color: rgba(137, 90, 52, 0.05);
+    color: var(--primary-color, #875a34);
+}
+
+.nav-sublink.active {
+    background-color: rgba(137, 90, 52, 0.1);
+    color: var(--primary-color, #875a34);
+    font-weight: 500;
+}
+
+.nav-sublink .nav-icon {
+    display: flex;
+    margin-right: 10px;
+    color: var(--text-light, #9e9e9e);
+}
+
+.nav-sublink:hover .nav-icon,
+.nav-sublink.active .nav-icon {
+    color: var(--primary-color, #875a34);
+}
+
+/* Indicator for menu items with submenus */
+.nav-item:has(.nav-submenu) > .nav-link::after {
+    content: '';
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    border-right: 2px solid;
+    border-bottom: 2px solid;
+    margin-left: auto;
+    transform: rotate(45deg);
+    transition: transform 0.2s ease;
+}
+
+.nav-item:has(.nav-submenu):hover > .nav-link::after,
+.nav-item:has(.nav-submenu):focus-within > .nav-link::after,
+.nav-item:has(.nav-submenu).active > .nav-link::after {
+    transform: rotate(-135deg);
+} 

@@ -1,0 +1,36 @@
+{% load static %}
+{# This file is kept for backward compatibility #}
+{# It now forwards to the new components/navigation.html template #}
+{% include 'components/navigation.html' %} 
+
+<div class="button-group">
+    <button type="submit">
+        {% if tour_id %}
+            Save Changes
+        {% else %}
+            Save Tour
+        {% endif %}
+    </button>
+    <button type="button" onclick="window.location.href='{% url 'tour_app:home' %}'">
+        Cancel
+    </button>
+</div> 
+
+<style>
+.button-group {
+    display: flex;
+    gap: 10px;
+    justify-content: center;
+    margin-top: 30px;
+}
+
+button[type="submit"],
+button[type="button"] {
+    padding: 12px 20px;
+    border-radius: 5px;
+    cursor: pointer;
+    font-size: 16px;
+    font-weight: 500;
+    transition: all 0.3s;
+}
+</style> 

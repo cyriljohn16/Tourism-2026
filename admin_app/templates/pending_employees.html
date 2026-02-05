@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+{% load static %}
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Employees</title>
+  <!-- Bootstrap JS dependencies (needed for modal) -->
+  <script src="https://code.jquery.com/jquery-3.3.1.slim.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.14.7/umd/popper.min.js"></script>
+  <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/js/bootstrap.min.js"></script>
+  <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/css/bootstrap.min.css">
+  <link rel="stylesheet" href="{% static 'css/navigation.css' %}">
+
+  <style>
+    :root {
+      /* Brand Colors */
+      --primary-color: #875a34;    /* Main brand color */
+      --primary-light: #e99c59;   /* Lighter version for accents */
+      --primary-dark: #6d4827;    /* Darker version for hover states */
+      --secondary-color: #8c6e5d; /* Secondary brand color */
+      
+      /* Status Colors */
+      --success-color: #34a853;   /* Green for success states */
+      --warning-color: #fbbc05;   /* Yellow for warnings */
+      --error-color: #ea4335;     /* Red for errors */
+      --info-color: #4285f4;      /* Blue for information */
+      
+      /* Neutral Colors */
+      --bg-color: #f4f7fc;        /* Light background */
+      --text-dark: #333;          /* Dark text */
+      --text-medium: #666;        /* Medium text */
+      --text-light: #9e9e9e;      /* Light text */
+      --white: #fff;              /* White */
+    }
+
+    body {
+      font-family: 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      background-color: var(--bg-color);
+      margin: 0;
+      padding: 0;
+      color: var(--text-dark);
+      line-height: 1.5;
+    }
+    
+    .dashboard-container {
+      display: flex;
+      min-height: 100vh;
+    }
+    
+    .content {
+      flex: 1;
+      padding: 32px;
+      box-sizing: border-box;
+    }
+    
+    .container {
+      max-width: 1100px;
+      margin: 0 auto;
+      background: #fff;
+      padding: 20px;
+      border-radius: 8px;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+    }
+    
+    h1, h2 {
+      color: var(--text-dark);
+      margin-top: 20px;
+      margin-bottom: 20px;
+    }
+    
+    h2 {
+      border-bottom: 2px solid var(--primary-color);
+      padding-bottom: 10px;
+    }
+    
+    /* Table Styles */
+    .employee-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 20px;
+      border-radius: 4px;
+      overflow: hidden;
+    }
+    
+    .employee-table th, 
+    .employee-table td {
+      padding: 12px;
+      border: 1px solid #ddd;
+      text-align: left;
+    }
+    
+    .employee-table th {
+      background-color: var(--primary-color);
+      color: #fff;
+      font-weight: 500;
+    }
+    
+    .employee-table tr:nth-child(even) {
+      background-color: #f9f9f9;
+    }
+    
+    .employee-table tr:hover {
+      background-color: #f1f1f1;
+    }
+    
+    /* Button Styles */
+    .action-btn {
+      background-color: var(--info-color);
+      color: white;
+      border: none;
+      padding: 8px 12px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: 500;
+      transition: background-color 0.3s;
+    }
+    
+    .action-btn:hover {
+      background-color: #1a73e8;
+    }
+    
+    /* Status Badge */
+    .status-badge {
+      display: inline-block;
+      padding: 4px 8px;
+      border-radius: 12px;
+      font-size: 12px;
+      font-weight: 500;
+      text-transform: uppercase;
+    }
+    
+    .status-accepted {
+      background-color: var(--success-color);
+      color: white;
+    }
+    
+    .status-declined {
+      background-color: var(--error-color);
+      color: white;
+    }
+    
+    /* Form improvements */
+    .modal-content {
+      border-radius: 8px;
+      overflow: hidden;
+    }
+    
+    .modal-header {
+      background-color: var(--primary-color);
+      color: white;
+      border-bottom: none;
+    }
+    
+    .modal-title {
+      font-weight: 500;
+    }
+    
+    .close {
+      color: white;
+      opacity: 0.8;
+    }
+    
+    .close:hover {
+      opacity: 1;
+      color: white;
+    }
+    
+    .modal-footer {
+      border-top: none;
+      padding-top: 0;
+    }
+    
+    .btn-primary {
+      background-color: var(--primary-color);
+      border-color: var(--primary-color);
+    }
+    
+    .btn-primary:hover {
+      background-color: var(--primary-dark);
+      border-color: var(--primary-dark);
+    }
+    
+    .form-control:focus {
+      border-color: var(--primary-color);
+      box-shadow: 0 0 0 0.2rem rgba(135, 90, 52, 0.25);
+    }
+    
+    #current_profile_picture {
+      max-width: 100px;
+      border-radius: 4px;
+      margin-top: 8px;
+    }
+  </style>
+
+</head>
+<body>
+  <div class="dashboard-container">
+    <div class="navigation">
+      {% include 'components/navigation.html' %}
+    </div>
+    <div class="content">
+        <div class="container">
+          <h2>Employees</h2>
+          <table class="employee-table">
+            <thead>
+              <tr>
+                <th>Emp ID</th>
+                <th>Name</th>
+                <th>Role</th>
+                <th>Status</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for employee in employees %}
+              <tr>
+                <td>{{ employee.emp_id }}</td>
+                <td>{{ employee.first_name }} {{ employee.last_name }}</td>
+                <td>{{ employee.role }}</td>
+                <td>
+                  <span class="status-badge status-{{ employee.status|lower }}">
+                    {{ employee.status }}
+                  </span>
+                </td>
+                <td>
+                  <button type="button" class="action-btn update-btn"
+                    data-toggle="modal" data-target="#employeeModal"
+                    data-id="{{ employee.emp_id }}"
+                    data-first-name="{{ employee.first_name }}"
+                    data-last-name="{{ employee.last_name }}"
+                    data-middle-name="{{ employee.middle_name }}"
+                    data-phone="{{ employee.phone_number }}"
+                    data-email="{{ employee.email }}"
+                    data-age="{{ employee.age }}"
+                    data-sex="{{ employee.sex }}"
+                    data-role="{{ employee.role }}"
+                    data-status="{{ employee.status }}"
+                    data-profile="{% if employee.profile_picture %}{{ employee.profile_picture.url }}{% endif %}">
+                    Update
+                  </button>
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Modal for updating employee details -->
+        <div class="modal fade" id="employeeModal" tabindex="-1" role="dialog" aria-labelledby="employeeModalLabel" aria-hidden="true">
+          <div class="modal-dialog" role="document">
+            <div class="modal-content">
+              <!-- The form action will be set dynamically -->
+              <form method="post" id="updateForm" enctype="multipart/form-data">
+                {% csrf_token %}
+                <div class="modal-header">
+                  <h5 class="modal-title" id="employeeModalLabel">Update Employee Details</h5>
+                  <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                  </button>
+                </div>
+                <div class="modal-body">
+                  <!-- Hidden field for employee id -->
+                  <input type="hidden" name="emp_id" id="emp_id">
+                  <div class="form-group">
+                    <label for="first_name">First Name</label>
+                    <input type="text" name="first_name" id="first_name" class="form-control">
+                  </div>
+                  <div class="form-group">
+                    <label for="last_name">Last Name</label>
+                    <input type="text" name="last_name" id="last_name" class="form-control">
+                  </div>
+                  <div class="form-group">
+                    <label for="middle_name">Middle Name</label>
+                    <input type="text" name="middle_name" id="middle_name" class="form-control">
+                  </div>
+                  <div class="form-group">
+                    <label for="phone_number">Phone Number</label>
+                    <input type="text" name="phone_number" id="phone_number" class="form-control">
+                  </div>
+                  <div class="form-group">
+                    <label for="email">Email</label>
+                    <input type="email" name="email" id="email" class="form-control">
+                  </div>
+                  <div class="form-group">
+                    <label for="age">Age</label>
+                    <input type="text" name="age" id="age" class="form-control">
+                  </div>
+                  <div class="form-group">
+                    <label for="sex">Sex</label>
+                    <select name="sex" id="sex" class="form-control">
+                      <option value="M">Male</option>
+                      <option value="F">Female</option>
+                    </select>
+                  </div>
+                  <div class="form-group">
+                    <label for="role">Role</label>
+                    <select name="role" id="role" class="form-control">
+                      <option value="Employee">Employee</option>
+                      <option value="Admin">Admin</option>
+                    </select>
+                  </div>
+                  <div class="form-group">
+                    <label for="status">Status</label>
+                    <select name="status" id="status" class="form-control">
+                      <option value="accepted">Accepted</option>
+                      <option value="declined">Declined</option>
+                    </select>
+                  </div>
+                  <div class="form-group">
+                    <label for="profile_picture">Profile Picture</label>
+                    <input type="file" name="profile_picture" id="profile_picture" class="form-control-file">
+                    <div id="profile_picture_container" class="mt-2">
+                      <img id="current_profile_picture" src="" alt="Current Profile Picture">
+                    </div>
+                  </div>
+                </div>
+                <div class="modal-footer">
+                  <button type="submit" class="btn btn-primary">Update</button>
+                  <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      </div>
+  
+  <script>
+    // When the update button is clicked, populate the modal fields and update the form action.
+    $('#employeeModal').on('show.bs.modal', function (event) {
+      var button = $(event.relatedTarget); // the button that triggered the modal
+      var modal = $(this);
+      var empId = button.data('id');
+
+      // Populate each field using data attributes from the button.
+      modal.find('#emp_id').val(empId);
+      modal.find('#first_name').val(button.data('first-name'));
+      modal.find('#last_name').val(button.data('last-name'));
+      modal.find('#middle_name').val(button.data('middle-name'));
+      modal.find('#phone_number').val(button.data('phone'));
+      modal.find('#email').val(button.data('email'));
+      modal.find('#age').val(button.data('age'));
+      modal.find('#sex').val(button.data('sex'));
+      modal.find('#role').val(button.data('role'));
+      modal.find('#status').val(button.data('status'));
+
+      // Set the current profile picture (or a placeholder if none exists)
+      var profile = button.data('profile');
+      if (profile) {
+        modal.find('#current_profile_picture').attr('src', profile);
+      } else {
+        modal.find('#current_profile_picture').attr('src', 'https://via.placeholder.com/150');
+      }
+
+      // Update the form action dynamically with the employee ID.
+      var updateUrl = "/admin_app/employees/update/" + empId + "/";
+      $('#updateForm').attr('action', updateUrl);
+    });
+  </script>
+  
+  <!-- Add navigation handling script -->
+  <script>
+    document.addEventListener('DOMContentLoaded', function() {
+      // Function to handle responsive navigation
+      function handleResponsiveNavigation() {
+        // Check if screen is mobile
+        if (window.innerWidth <= 768) {
+          document.body.classList.add('mobile-view');
+          document.body.classList.remove('desktop-view');
+        } else {
+          document.body.classList.add('desktop-view');
+          document.body.classList.remove('mobile-view');
+        }
+      }
+      
+      // Initial check
+      handleResponsiveNavigation();
+      
+      // Add resize event listener
+      window.addEventListener('resize', handleResponsiveNavigation);
+      
+      // Add scroll class when scrolling
+      const navigation = document.querySelector('.navigation');
+      window.addEventListener('scroll', function() {
+        if (window.scrollY > 50) {
+          navigation.classList.add('scrolled');
+        } else {
+          navigation.classList.remove('scrolled');
+        }
+      });
+    });
+  </script>
+</body>
+</html>

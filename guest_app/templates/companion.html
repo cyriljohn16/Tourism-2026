@@ -1,0 +1,3937 @@
+<!DOCTYPE html>
+{% load static %}
+{% load companion_tags %}
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Companion Management</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
+    <style>
+        /* Reset and base styles */
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f8f9fa;
+            color: #333;
+            line-height: 1.6;
+            margin: 0;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        
+        h1 {
+            margin-bottom: 30px;
+            color: #4a6741;
+            text-align: center;
+            font-size: 2.2rem;
+            position: relative;
+            padding-bottom: 15px;
+        }
+        
+        h1:after {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 100px;
+            height: 3px;
+            background-color: #4a6741;
+            border-radius: 3px;
+        }
+        
+        /* Group section styling */
+        .group-section {
+            margin-bottom: 30px;
+            border: 1px solid #e0e0e0;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+            transition: all 0.3s ease;
+        }
+        
+        .group-section:hover {
+            box-shadow: 0 8px 20px rgba(0,0,0,0.1);
+        }
+        
+        .group-header {
+            background-color: #f0f4ee;
+            padding: 18px;
+            border-bottom: 1px solid #e0e0e0;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            font-size: 1.3rem;
+            color: #4a6741;
+            font-weight: 600;
+        }
+        
+        .group-header i {
+            margin-right: 12px;
+            font-size: 1.2rem;
+        }
+        
+        .group-member-count {
+            font-size: 0.9rem;
+            color: #666;
+            font-weight: normal;
+            background-color: #e8f0e4;
+            padding: 6px 12px;
+            border-radius: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        }
+        
+        /* Companions list styling */
+        .companions-list {
+            max-height: 600px;
+            overflow-y: auto;
+            padding: 15px;
+        }
+        
+        /* Companion card improvements */
+        .companion-card {
+            display: flex;
+            border: 1px solid #e0e0e0;
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 20px;
+            align-items: center;
+            background-color: #ffffff;
+            transition: all 0.3s ease;
+            box-shadow: 0 3px 10px rgba(0,0,0,0.05);
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .companion-card:before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 5px;
+            height: 100%;
+            background-color: #4a6741;
+            opacity: 0.7;
+        }
+        
+        .companion-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 8px 20px rgba(0,0,0,0.1);
+        }
+        
+        .companion-image {
+            width: 90px;
+            height: 90px;
+            border-radius: 50%;
+            object-fit: cover;
+            margin-right: 25px;
+            border: 3px solid #e8f0e4;
+            box-shadow: 0 3px 8px rgba(0,0,0,0.1);
+        }
+        
+        .companion-info {
+            flex: 1;
+            padding-left: 10px;
+        }
+        
+        .companion-info h3 {
+            font-size: 1.3rem;
+            font-weight: 600;
+            color: #4a6741;
+            margin: 0 0 8px 0;
+        }
+        
+        .companion-info p {
+            margin: 5px 0;
+            color: #555;
+            display: flex;
+            align-items: center;
+        }
+        
+        .companion-info p strong {
+            margin-right: 5px;
+            color: #333;
+        }
+        
+        .companion-info p i {
+            margin-right: 8px;
+            color: #4a6741;
+            width: 16px;
+            text-align: center;
+        }
+        
+        .companion-group-tag {
+            display: inline-flex;
+            align-items: center;
+            padding: 5px 12px;
+            background-color: #4a6741;
+            color: white;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            margin-top: 10px;
+            box-shadow: 0 2px 5px rgba(74, 103, 65, 0.2);
+        }
+        
+        .companion-group-tag i {
+            margin-right: 5px;
+        }
+        
+        /* Animation keyframes */
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        @keyframes slideInFromLeft {
+            from { opacity: 0; transform: translateX(-20px); }
+            to { opacity: 1; transform: translateX(0); }
+        }
+        
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+            100% { transform: scale(1); }
+        }
+        
+        /* Apply animations */
+        .group-section {
+            animation: fadeIn 0.5s ease forwards;
+        }
+        
+        .companion-card {
+            animation: slideInFromLeft 0.5s ease forwards;
+            animation-delay: calc(0.1s * var(--animation-order, 0));
+            opacity: 0;
+        }
+        
+        .section-header.active {
+            animation: pulse 1s ease;
+        }
+        
+        /* Staggered animations for companion cards */
+        .companions-list .companion-card:nth-child(1) { --animation-order: 1; }
+        .companions-list .companion-card:nth-child(2) { --animation-order: 2; }
+        .companions-list .companion-card:nth-child(3) { --animation-order: 3; }
+        .companions-list .companion-card:nth-child(4) { --animation-order: 4; }
+        .companions-list .companion-card:nth-child(5) { --animation-order: 5; }
+        .companions-list .companion-card:nth-child(6) { --animation-order: 6; }
+        .companions-list .companion-card:nth-child(7) { --animation-order: 7; }
+        .companions-list .companion-card:nth-child(8) { --animation-order: 8; }
+        
+        /* Enhanced action buttons */
+        .action-button {
+            padding: 8px 15px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 0.95rem;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .action-button:after {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 5px;
+            height: 5px;
+            background: rgba(255, 255, 255, 0.5);
+            opacity: 0;
+            border-radius: 100%;
+            transform: scale(1, 1) translate(-50%, -50%);
+            transform-origin: 50% 50%;
+        }
+        
+        .action-button:focus:not(:active)::after {
+            animation: ripple 1s ease-out;
+        }
+        
+        @keyframes ripple {
+            0% {
+                transform: scale(0, 0);
+                opacity: 0.5;
+            }
+            20% {
+                transform: scale(25, 25);
+                opacity: 0.3;
+            }
+            100% {
+                opacity: 0;
+                transform: scale(40, 40);
+            }
+        }
+        
+        /* Loading animation for forms */
+        .submit-button {
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .submit-button.loading:before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(
+                90deg, 
+                transparent, 
+                rgba(255, 255, 255, 0.2), 
+                transparent
+            );
+            animation: loading 1.5s infinite;
+        }
+        
+        @keyframes loading {
+            0% { left: -100%; }
+            100% { left: 100%; }
+        }
+        
+        /* Improved no companions message */
+        .no-companions {
+            text-align: center;
+            padding: 50px 20px;
+            background-color: #f9f9f9;
+            border-radius: 12px;
+            border: 1px dashed #ccc;
+            animation: fadeIn 0.5s ease forwards;
+        }
+        
+        .no-companions i {
+            font-size: 3.5rem !important;
+            color: #4a6741;
+            margin-bottom: 20px;
+            opacity: 0.7;
+            animation: pulse 2s ease infinite;
+        }
+        
+        /* Page load animation */
+        .container {
+            animation: fadeIn 0.5s ease forwards;
+        }
+        
+        /* Improved form experience */
+        .form-control:focus {
+            border-color: #4a6741;
+            outline: none;
+            box-shadow: 0 0 0 3px rgba(74, 103, 65, 0.2);
+            transform: translateY(-2px);
+        }
+        
+        /* Form styles */
+        .form-container {
+            margin-top: 30px;
+            background-color: #ffffff;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.05);
+            border: 1px solid #e0e0e0;
+        }
+        
+        .form-group {
+            margin-bottom: 20px;
+        }
+        
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #4a6741;
+            font-size: 0.95rem;
+        }
+        
+        .form-control {
+            width: 100%;
+            padding: 12px 15px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            font-size: 1rem;
+            transition: all 0.3s ease;
+            background-color: #f9f9f9;
+        }
+        
+        .form-control:focus {
+            border-color: #4a6741;
+            outline: none;
+            box-shadow: 0 0 0 3px rgba(74, 103, 65, 0.2);
+        }
+        
+        .form-row {
+            display: flex;
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+        
+        .form-col {
+            flex: 1;
+        }
+        
+        .checkbox-group {
+            margin: 10px 0;
+        }
+        
+        .submit-button {
+            background-color: #4a6741;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: background-color 0.3s;
+        }
+        
+        .submit-button:hover {
+            background-color: #3c5435;
+        }
+        
+        .error-message {
+            color: #e74c3c;
+            font-size: 0.9rem;
+            margin-top: 5px;
+        }
+        
+        .add-companion-button {
+            display: block;
+            width: 200px;
+            margin: 20px auto;
+            padding: 10px 15px;
+            background-color: #4a6741;
+            color: white;
+            text-align: center;
+            text-decoration: none;
+            border-radius: 5px;
+            transition: background-color 0.3s;
+            cursor: pointer;
+        }
+        
+        .add-companion-button:hover {
+            background-color: #3c5435;
+        }
+        
+        /* Messages styles */
+        .messages {
+            margin-bottom: 20px;
+            padding: 0;
+            list-style: none;
+        }
+        
+        .message {
+            padding: 10px 15px;
+            margin-bottom: 10px;
+            border-radius: 5px;
+        }
+        
+        .success {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        
+        .error {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        
+        /* Action Bar Styles */
+        .action-bar {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 30px;
+            background-color: #ffffff;
+            padding: 15px 20px;
+            border-radius: 12px;
+            box-shadow: 0 3px 10px rgba(0,0,0,0.05);
+            border: 1px solid #e0e0e0;
+        }
+        
+        .left-actions, .right-actions {
+            display: flex;
+            gap: 15px;
+        }
+        
+        .action-button {
+            padding: 10px 18px;
+            border-radius: 8px;
+            font-size: 1rem;
+            font-weight: 500;
+            transition: all 0.3s ease;
+        }
+        
+        /* Tab Styles */
+        .view-tabs {
+            display: flex;
+            margin-bottom: 25px;
+            position: relative;
+            z-index: 1;
+        }
+        
+        .view-tab {
+            padding: 12px 24px;
+            background-color: #f5f5f5;
+            border: 1px solid #e0e0e0;
+            border-radius: 12px;
+            margin-right: 15px;
+            cursor: pointer;
+            font-size: 1rem;
+            color: #555;
+            transition: all 0.3s ease;
+            font-weight: 500;
+            display: flex;
+            align-items: center;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+        }
+        
+        .view-tab i {
+            margin-right: 10px;
+        }
+        
+        .view-tab.active {
+            background-color: #4a6741;
+            color: white;
+            border-color: #4a6741;
+            box-shadow: 0 4px 10px rgba(74, 103, 65, 0.3);
+        }
+        
+        .view-tab:hover:not(.active) {
+            background-color: #e8e8e8;
+            transform: translateY(-2px);
+        }
+        
+        /* Unified Companion Box */
+        .unified-companion-box {
+            border: 1px solid #e0e0e0;
+            border-radius: 12px;
+            background-color: #fff;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.08);
+            margin-bottom: 40px;
+            overflow: hidden;
+            transition: all 0.3s ease;
+        }
+        
+        .unified-companion-box:hover {
+            box-shadow: 0 8px 25px rgba(0,0,0,0.12);
+        }
+        
+        .section-headers {
+            display: flex;
+            background-color: #f5f5f5;
+            border-bottom: 1px solid #e0e0e0;
+        }
+        
+        .section-header {
+            padding: 18px 24px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            color: #555;
+            flex: 1;
+            text-align: center;
+            border-right: 1px solid #e0e0e0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.05rem;
+        }
+        
+        .section-header:last-child {
+            border-right: none;
+        }
+        
+        .section-header i {
+            margin-right: 10px;
+            font-size: 1.1rem;
+        }
+        
+        .section-header:hover:not(.active) {
+            background-color: #eaeaea;
+        }
+        
+        .section-header.active {
+            background-color: #4a6741;
+            color: white;
+            box-shadow: 0 2px 6px rgba(74, 103, 65, 0.2) inset;
+        }
+        
+        .sections-container {
+            padding: 25px;
+        }
+        
+        /* Group Filter Styles */
+        .group-filter-bar {
+            background-color: #f9f9f9;
+            padding: 18px;
+            border-radius: 10px;
+            margin-bottom: 25px;
+            border: 1px solid #eaeaea;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+        }
+        
+        .filter-label {
+            font-weight: 600;
+            margin-bottom: 12px;
+            color: #4a6741;
+            font-size: 1.05rem;
+        }
+        
+        .filter-options {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+        }
+        
+        .filter-option {
+            display: inline-block;
+            padding: 8px 16px;
+            background-color: #f0f0f0;
+            color: #555;
+            border-radius: 25px;
+            text-decoration: none;
+            transition: all 0.3s ease;
+            font-size: 0.95rem;
+            border: 1px solid #e5e5e5;
+        }
+        
+        .filter-option:hover {
+            background-color: #e0e0e0;
+            transform: translateY(-2px);
+        }
+        
+        .filter-option.active {
+            background-color: #4a6741;
+            color: white;
+            border-color: #4a6741;
+            box-shadow: 0 3px 8px rgba(74, 103, 65, 0.25);
+        }
+        
+        /* No companions message */
+        .no-companions {
+            text-align: center;
+            padding: 50px 20px;
+            background-color: #f9f9f9;
+            border-radius: 12px;
+            border: 1px dashed #ccc;
+        }
+        
+        .no-companions i {
+            font-size: 3.5rem !important;
+            color: #4a6741;
+            margin-bottom: 20px;
+            opacity: 0.7;
+        }
+        
+        .no-companions h3 {
+            color: #4a6741;
+            margin-bottom: 10px;
+            font-size: 1.5rem;
+        }
+        
+        .no-companions p {
+            color: #666;
+            max-width: 400px;
+            margin: 0 auto;
+        }
+        
+        /* Footer styling */
+        .footer {
+            background-color: #3c5435;
+            color: #fff;
+            padding-top: 40px;
+            margin-top: 60px;
+        }
+        
+        .footer-content {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: space-between;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 20px 30px;
+        }
+        
+        .footer-logo {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+        
+        .footer-logo img {
+            width: 80px;
+            height: auto;
+            margin-bottom: 10px;
+        }
+        
+        .footer-title {
+            font-size: 1.5rem;
+            font-weight: bold;
+            letter-spacing: 1px;
+        }
+        
+        .footer-links, .footer-contact {
+            margin-bottom: 20px;
+        }
+        
+        .footer-links h3, .footer-contact h3 {
+            font-size: 1.2rem;
+            margin-bottom: 15px;
+            position: relative;
+            padding-bottom: 10px;
+        }
+        
+        .footer-links h3:after, .footer-contact h3:after {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 40px;
+            height: 2px;
+            background-color: #fff;
+        }
+        
+        .footer-links a {
+            display: block;
+            color: #e0e0e0;
+            margin-bottom: 10px;
+            text-decoration: none;
+            transition: color 0.3s;
+        }
+        
+        .footer-links a:hover {
+            color: #fff;
+            text-decoration: underline;
+        }
+        
+        .footer-contact p {
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+        }
+        
+        .footer-contact i {
+            margin-right: 10px;
+            width: 20px;
+            text-align: center;
+        }
+        
+        .footer-bottom {
+            background-color: #2d4128;
+            text-align: center;
+            padding: 15px 0;
+            font-size: 0.9rem;
+        }
+        
+        /* User search form styling */
+        .search-input-group {
+            display: flex;
+            gap: 10px;
+        }
+        
+        .search-input-group input {
+            flex: 1;
+        }
+        
+        .search-input-group button {
+            width: auto;
+            padding: 8px 15px;
+        }
+        
+        .user-result {
+            display: flex;
+            align-items: center;
+            padding: 15px;
+            background-color: #f9f9f9;
+            border-radius: 5px;
+            margin-top: 15px;
+        }
+        
+        .user-result img {
+            margin-right: 15px;
+        }
+        
+        .user-info {
+            flex: 1;
+        }
+        
+        .user-info h3 {
+            margin: 0 0 5px 0;
+        }
+        
+        .user-info p {
+            margin: 0;
+            color: #666;
+        }
+        
+        .user-actions {
+            display: flex;
+            gap: 10px;
+        }
+        
+        .search-message {
+            padding: 10px;
+        }
+        
+        .search-message.error {
+            background-color: #f8d7da;
+            color: #721c24;
+        }
+        
+        .search-message.success {
+            background-color: #d4edda;
+            color: #155724;
+        }
+        
+        .request-count {
+            display: inline-flex;
+            justify-content: center;
+            align-items: center;
+            background-color: #e74c3c;
+            color: white;
+            border-radius: 50%;
+            width: 20px;
+            height: 20px;
+            font-size: 12px;
+            margin-left: 5px;
+        }
+        
+        .requests-btn {
+            background-color: #4a6741;
+            color: white;
+            border: none;
+            padding: 8px 15px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background-color 0.3s;
+            display: inline-flex;
+            align-items: center;
+            text-decoration: none;
+        }
+        
+        .search-btn {
+            background-color: #4a6741;
+            color: white;
+            border: none;
+            padding: 8px 15px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background-color 0.3s;
+        }
+        
+        .search-btn:hover, .requests-btn:hover {
+            background-color: #3c5435;
+        }
+        
+        /* Search User View Styles */
+        .search-form {
+            background-color: #f9f9f9;
+            padding: 20px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+        }
+        
+        .search-results, .search-message {
+            margin-top: 20px;
+            padding: 15px;
+            background-color: #f9f9f9;
+            border-radius: 5px;
+        }
+        
+        .user-result {
+            display: flex;
+            align-items: center;
+            padding: 15px;
+            background-color: #fff;
+            border-radius: 5px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+        
+        .user-result img {
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            object-fit: cover;
+            margin-right: 15px;
+        }
+        
+        .user-info {
+            flex: 1;
+        }
+        
+        .user-name {
+            font-weight: bold;
+            font-size: 1.1rem;
+            margin: 0 0 5px 0;
+        }
+        
+        .user-email {
+            color: #666;
+            margin: 0;
+        }
+        
+        .request-btn {
+            background-color: #4a6741;
+            color: white;
+            border: none;
+            padding: 8px 15px;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+        
+        .request-btn:hover {
+            background-color: #3c5435;
+        }
+        
+        .request-form {
+            background-color: #f9f9f9;
+            padding: 20px;
+            border-radius: 5px;
+            margin-top: 20px;
+        }
+        
+        .search-message {
+            color: #666;
+            text-align: center;
+            padding: 20px;
+        }
+        
+        .search-message i {
+            font-size: 2rem;
+            margin-bottom: 10px;
+            color: #4a6741;
+        }
+        
+        .badge {
+            position: absolute;
+            top: -5px;
+            right: -5px;
+            background-color: #e74c3c;
+            color: white;
+            border-radius: 50%;
+            width: 18px;
+            height: 18px;
+            font-size: 0.7rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+        }
+        
+        /* Modal styles */
+        .modal {
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.5);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .modal-content {
+            background-color: white;
+            padding: 25px;
+            border-radius: 8px;
+            width: 90%;
+            max-width: 600px;
+            max-height: 80vh;
+            overflow-y: auto;
+            position: relative;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.2);
+        }
+        
+        .close-modal {
+            position: absolute;
+            top: 10px;
+            right: 15px;
+            font-size: 24px;
+            font-weight: bold;
+            color: #aaa;
+            cursor: pointer;
+        }
+        
+        .close-modal:hover {
+            color: #333;
+        }
+        
+        /* Tab styles */
+        .view-tabs {
+            display: flex;
+            margin-bottom: 20px;
+            border-bottom: 1px solid #e0e0e0;
+            padding-bottom: 10px;
+        }
+        
+        .view-tab {
+            padding: 10px 20px;
+            margin-right: 10px;
+            background-color: #f5f5f5;
+            border: none;
+            border-radius: 5px 5px 0 0;
+            cursor: pointer;
+            font-size: 16px;
+            color: #555;
+            display: flex;
+            align-items: center;
+        }
+        
+        .view-tab i {
+            margin-right: 8px;
+        }
+        
+        .view-tab.active {
+            background-color: #4a6741;
+            color: white;
+        }
+        
+        .count-badge {
+            display: inline-flex;
+            justify-content: center;
+            align-items: center;
+            background-color: #e74c3c;
+            color: white;
+            border-radius: 50%;
+            width: 20px;
+            height: 20px;
+            font-size: 12px;
+            margin-left: 8px;
+        }
+        
+        /* Friends styling */
+        .friends-list {
+            margin-top: 20px;
+        }
+        
+        .friend-card {
+            display: flex;
+            border: 1px solid #e0e0e0;
+            border-radius: 5px;
+            padding: 15px;
+            margin-bottom: 15px;
+            align-items: center;
+            background-color: #fcfcfc;
+            transition: transform 0.2s;
+        }
+        
+        .friend-card:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+        }
+        
+        .friend-image {
+            width: 80px;
+            height: 80px;
+            border-radius: 50%;
+            object-fit: cover;
+            margin-right: 20px;
+        }
+        
+        .friend-info {
+            flex: 1;
+        }
+        
+        .friend-info h3 {
+            margin-top: 0;
+            margin-bottom: 5px;
+            color: #4a6741;
+        }
+        
+        .connection-info {
+            margin-top: 8px;
+            font-size: 0.9rem;
+            color: #777;
+        }
+        
+        .direction-badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 0.8rem;
+            margin-left: 8px;
+        }
+        
+        .direction-badge.sent {
+            background-color: #4a6741;
+            color: white;
+        }
+        
+        .direction-badge.received {
+            background-color: #3498db;
+            color: white;
+        }
+        
+        .friend-actions {
+            display: flex;
+            gap: 5px;
+        }
+        
+        .message-button {
+            background-color: #3498db;
+            color: white;
+        }
+        
+        .message-button:hover {
+            background-color: #2980b9;
+        }
+        
+        .disconnect-button {
+            background-color: #e74c3c;
+            color: white;
+        }
+        
+        .disconnect-button:hover {
+            background-color: #c0392b;
+        }
+        
+        .no-friends {
+            text-align: center;
+            padding: 40px;
+            background-color: #f9f9f9;
+            border-radius: 5px;
+        }
+        
+        .section-desc {
+            color: #666;
+            margin-bottom: 20px;
+        }
+        
+        .tab-content {
+            min-height: 400px;
+        }
+        
+        /* Group management styles */
+        .panel-section {
+            background-color: #f9f9f9;
+            border-radius: 5px;
+            padding: 20px;
+            margin-bottom: 30px;
+        }
+        
+        /* Age Display Styling */
+        .age-display {
+            margin-top: 5px;
+            padding: 5px 10px;
+            background-color: #f0f4ee;
+            border-radius: 4px;
+            display: none; /* Initially hidden until populated */
+            color: #4a6741;
+            font-size: 0.9rem;
+            border-left: 3px solid #4a6741;
+        }
+        
+        /* Read-only fields styling */
+        input[readonly].form-control {
+            background-color: #f0f4ee;
+            border-color: #ddd;
+            color: #4a6741;
+            font-weight: 600;
+            border-left: 3px solid #4a6741;
+            cursor: default;
+        }
+        
+        .panel-section h3 {
+            margin-top: 0;
+            color: #4a6741;
+            border-bottom: 1px solid #e0e0e0;
+            padding-bottom: 10px;
+            margin-bottom: 20px;
+        }
+        
+        .groups-list {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+        
+        .group-card {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background-color: #fff;
+            border: 1px solid #e0e0e0;
+            border-radius: 5px;
+            padding: 15px;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        
+        .group-card:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+        }
+        
+        .group-info {
+            flex: 1;
+        }
+        
+        .group-info h4 {
+            margin: 0 0 5px 0;
+            color: #4a6741;
+        }
+        
+        .group-info p {
+            color: #666;
+            margin: 0 0 10px 0;
+        }
+        
+        .text-muted {
+            color: #999;
+            font-style: italic;
+        }
+        
+        .group-badge {
+            display: inline-block;
+            padding: 3px 8px;
+            background-color: #f0f0f0;
+            color: #666;
+            border-radius: 12px;
+            font-size: 0.8rem;
+        }
+        
+        .group-actions {
+            display: flex;
+            gap: 10px;
+        }
+        
+        .no-groups {
+            text-align: center;
+            padding: 40px;
+            background-color: #f9f9f9;
+            border-radius: 5px;
+        }
+        
+        /* Unified Companion Box Styles */
+        .unified-companion-box {
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            background-color: #fff;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+            margin-bottom: 30px;
+            overflow: hidden;
+        }
+        
+        .section-headers {
+            display: flex;
+            background-color: #f5f5f5;
+            border-bottom: 1px solid #e0e0e0;
+        }
+        
+        .section-header {
+            padding: 15px 20px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: background-color 0.2s;
+            color: #555;
+            flex: 1;
+            text-align: center;
+            border-right: 1px solid #e0e0e0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .section-header:last-child {
+            border-right: none;
+        }
+        
+        .section-header i {
+            margin-right: 8px;
+        }
+        
+        .section-header:hover {
+            background-color: #eaeaea;
+        }
+        
+        .section-header.active {
+            background-color: #4a6741;
+            color: white;
+        }
+        
+        .sections-container {
+            padding: 20px;
+        }
+        
+        .management-section {
+            display: none;
+        }
+        
+        .management-section.active {
+            display: block;
+        }
+        
+        /* Styles for companions list in the box */
+        .companions-list {
+            max-height: 600px;
+            overflow-y: auto;
+        }
+        
+        /* Make group filter bar fit inside the box */
+        .unified-companion-box .group-filter-bar {
+            margin: -10px -10px 15px -10px;
+            border-radius: 0;
+        }
+        
+        /* Panel sections in the unified box */
+        .unified-companion-box .panel-section {
+            background-color: #f9f9f9;
+            border-radius: 5px;
+            margin-bottom: 20px;
+            padding: 15px;
+        }
+        
+        /* Person card styling - unified for both companions and friends */
+        .person-card {
+            display: flex;
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            background-color: #fff;
+            padding: 15px;
+            margin-bottom: 15px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        
+        .person-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        }
+        
+        .person-image {
+            width: 70px;
+            height: 70px;
+            border-radius: 50%;
+            object-fit: cover;
+            margin-right: 15px;
+        }
+        
+        .person-info {
+            flex: 1;
+        }
+        
+        .person-info h3 {
+            margin: 0 0 5px 0;
+            color: #4a6741;
+        }
+        
+        .person-info p {
+            margin: 0 0 5px 0;
+            color: #555;
+        }
+        
+        .person-actions {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+        
+        .person-type-badge {
+            display: inline-block;
+            padding: 3px 8px;
+            border-radius: 12px;
+            font-size: 0.75rem;
+            margin-right: 5px;
+        }
+        
+        .person-type-badge.companion {
+            background-color: #4a6741;
+            color: white;
+        }
+        
+        .person-type-badge.friend {
+            background-color: #3498db;
+            color: white;
+        }
+
+        /* Tab Styles */
+        .view-tabs {
+            display: flex;
+            margin-bottom: 25px;
+            position: relative;
+            z-index: 1;
+        }
+
+        .view-tab {
+            padding: 12px 24px;
+            background-color: #f5f5f5;
+            border: 1px solid #e0e0e0;
+            border-radius: 12px;
+            margin-right: 15px;
+            cursor: pointer;
+            font-size: 1rem;
+            color: #555;
+            transition: all 0.3s ease;
+            font-weight: 500;
+            display: flex;
+            align-items: center;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+        }
+
+        .view-tab i {
+            margin-right: 10px;
+        }
+
+        .view-tab.active {
+            background-color: #4a6741;
+            color: white;
+            border-color: #4a6741;
+            box-shadow: 0 4px 10px rgba(74, 103, 65, 0.3);
+        }
+
+        .view-tab:hover:not(.active) {
+            background-color: #e8e8e8;
+            transform: translateY(-2px);
+        }
+
+        /* People content tabs styling */
+        .people-tab-content {
+            position: relative;
+        }
+
+        .people-content {
+            opacity: 1;
+            transition: opacity 0.3s ease;
+            min-height: 300px;
+        }
+
+        .people-content:not(.active) {
+            display: none;
+        }
+
+        /* Friend card styling to match companion card */
+        .friend-card {
+            display: flex;
+            border: 1px solid #e0e0e0;
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 20px;
+            align-items: center;
+            background-color: #ffffff;
+            transition: all 0.3s ease;
+            box-shadow: 0 3px 10px rgba(0,0,0,0.05);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .friend-card:before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 5px;
+            height: 100%;
+            background-color: #3498db;
+            opacity: 0.7;
+        }
+
+        .friend-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 8px 20px rgba(0,0,0,0.1);
+        }
+
+        .friend-image {
+            width: 90px;
+            height: 90px;
+            border-radius: 50%;
+            object-fit: cover;
+            margin-right: 25px;
+            border: 3px solid #e8f0e4;
+            box-shadow: 0 3px 8px rgba(0,0,0,0.1);
+        }
+
+        .friend-info {
+            flex: 1;
+            padding-left: 10px;
+        }
+
+        .friend-info h3 {
+            font-size: 1.3rem;
+            font-weight: 600;
+            color: #4a6741;
+            margin: 0 0 8px 0;
+        }
+
+        .friend-info p {
+            margin: 5px 0;
+            color: #555;
+            display: flex;
+            align-items: center;
+        }
+
+        .connection-info {
+            margin-top: 12px;
+            font-size: 0.9rem;
+            color: #777;
+            display: flex;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 12px;
+        }
+
+        .direction-badge {
+            display: inline-flex;
+            align-items: center;
+            padding: 4px 10px;
+            border-radius: 20px;
+            font-size: 0.8rem;
+        }
+
+        .direction-badge i {
+            margin-right: 5px;
+        }
+
+        .direction-badge.sent {
+            background-color: #4a6741;
+            color: white;
+        }
+
+        .direction-badge.received {
+            background-color: #3498db;
+            color: white;
+        }
+
+        .friend-actions {
+            display: flex;
+            gap: 10px;
+        }
+
+        .message-button {
+            background-color: #3498db;
+            color: white;
+            box-shadow: 0 3px 6px rgba(52, 152, 219, 0.2);
+        }
+
+        .message-button:hover {
+            background-color: #2980b9;
+            transform: translateY(-2px);
+            box-shadow: 0 5px 10px rgba(52, 152, 219, 0.3);
+        }
+
+        .disconnect-button {
+            background-color: #e74c3c;
+            color: white;
+            box-shadow: 0 3px 6px rgba(231, 76, 60, 0.2);
+        }
+
+        .disconnect-button:hover {
+            background-color: #c0392b;
+            transform: translateY(-2px);
+            box-shadow: 0 5px 10px rgba(231, 76, 60, 0.3);
+        }
+
+        .no-friends {
+            text-align: center;
+            padding: 50px 20px;
+            background-color: #f9f9f9;
+            border-radius: 12px;
+            border: 1px dashed #ccc;
+            animation: fadeIn 0.5s ease forwards;
+        }
+
+        .no-friends i {
+            font-size: 3.5rem !important;
+            color: #4a6741;
+            margin-bottom: 20px;
+            opacity: 0.7;
+            animation: pulse 2s ease infinite;
+        }
+
+        /* Count Badge */
+        .count-badge {
+            display: inline-flex;
+            justify-content: center;
+            align-items: center;
+            background-color: #e74c3c;
+            color: white;
+            border-radius: 50%;
+            width: 20px;
+            height: 20px;
+            font-size: 12px;
+            margin-left: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        }
+    </style>
+</head>
+<body>
+    <!-- Navigation Bar -->
+    <nav class="navbar">
+        <!-- Logo -->
+        <div class="logo">
+            <a href="{% url 'main-page' %}">
+                <img src="/static/images/logo-name.png" alt="IBAYAW Tours">
+            </a>
+        </div>
+        
+        <!-- Navigation links -->
+        <div class="nav-links">
+            <a href="{% url 'main-page' %}" class="nav-link active">Home</a>
+            <a href="#about" class="nav-link">About</a>
+            <a href="{% url 'map' %}" class="nav-link">Map</a>
+            <a href="#contact" class="nav-link">Contact</a>
+        </div>
+        
+        <!-- User profile -->
+        {% if user.is_authenticated %}
+            <div class="user-profile-nav">
+                <div class="user-info" onclick="toggleUserMenu()">
+                    {% if user.picture %}
+                        <img src="{{ user.picture.url }}" alt="Profile" class="nav-profile-pic">
+                    {% else %}
+                        <img src="/static/images/default-profile.png" alt="Profile" class="nav-profile-pic">
+                    {% endif %}
+                    <span class="user-name">{{ user.first_name }}</span>
+                    <i class="fas fa-angle-down"></i>
+                </div>
+                <div class="user-dropdown" id="userDropdown">
+                    <a href="#" onclick="alert('Profile feature coming soon!'); return false;"><i class="fas fa-user"></i> My Profile</a>
+                    <div class="dropdown-divider"></div>
+                    <div class="settings-item">
+                        <a href="#" id="update-profile-link"><i class="fas fa-user-edit"></i> Update Profile</a>
+                    </div>
+                    <div class="dropdown-divider"></div>
+                    <a href="{% url 'companion' %}"><i class="fas fa-users"></i> Add Companion</a>
+                    <div class="dropdown-divider"></div>
+                    <a href="#" onclick="logoutUser()"><i class="fas fa-sign-out-alt"></i> Logout</a>
+                </div>
+            </div>
+        {% else %}
+            <button class="login-btn" onclick="loginUser()">
+                <span class="login-text">Login</span> <i class="fas fa-user-circle"></i>
+            </button>
+        {% endif %}
+    </nav>
+
+    <!-- Main Content -->
+    <div class="container">
+        <h1>Companion Management</h1>
+        
+        <!-- Top Action Bar -->
+        <div class="action-bar">
+            <div class="left-actions">
+                <a href="{% url 'list_companion_requests' %}" class="action-button">
+                    <i class="fas fa-user-plus"></i> Companion Requests
+                    <span id="companion-request-badge" class="badge" style="display: none;">0</span>
+                </a>
+                <button class="action-button" data-action="search" onclick="openSearchModal()">
+                    <i class="fas fa-search"></i> Find User
+                </button>
+                <button class="action-button" onclick="sendCompanionQRCode()" title="Generate a simple, compact QR code containing your information and companions. Note: This feature requires the qrcode and Pillow libraries to be installed. If you get an error, make sure to run 'pip install qrcode[pil]'. Remember to request a new QR code each time you add or update companions to include the latest information.">
+                    <i class="fas fa-qrcode"></i> Send QR Code to Email
+                </button>
+            </div>
+        </div>
+        
+        <!-- Display Django messages -->
+        {% if messages %}
+        <ul class="messages" style="margin-bottom: 20px;">
+            {% for message in messages %}
+            <li class="message {% if message.tags %}{{ message.tags }}{% endif %}">{{ message }}</li>
+            {% endfor %}
+        </ul>
+        {% endif %}
+        
+        <!-- Unified Companion Management Box -->
+        <div class="unified-companion-box">
+            <!-- Section Headers -->
+            <div class="section-headers">
+                <div class="section-header active" data-section="view-people">
+                    <i class="fas fa-list"></i> View People
+                </div>
+                <div class="section-header" data-section="add-companion">
+                    <i class="fas fa-plus"></i> Add Companion
+                </div>
+                <div class="section-header" data-section="manage-groups">
+                    <i class="fas fa-users"></i> Manage Groups
+                </div>
+            </div>
+            
+            <!-- Sections Container -->
+            <div class="sections-container">
+                <!-- View People Section (Combines Companions and Connected Users) -->
+                <div id="view-people-section" class="management-section active">
+                    <!-- People Type Tabs -->
+                    <div class="view-tabs" style="margin-bottom: 20px;">
+                        <button class="view-tab active" data-view="companions" onclick="switchPeopleTab('companions')">
+                            <i class="fas fa-user-friends"></i> Your Companions
+                        </button>
+                        <button class="view-tab" data-view="connected" onclick="switchPeopleTab('connected')">
+                            <i class="fas fa-handshake"></i> Connected Users
+                            {% if connected_users_count > 0 %}<span class="count-badge">{{ connected_users_count }}</span>{% endif %}
+                        </button>
+                        <button class="view-tab" data-view="requests" onclick="goToRequests()">
+                            <i class="fas fa-user-plus"></i> Requests
+                            {% if pending_request_count > 0 %}<span class="count-badge">{{ pending_request_count }}</span>{% endif %}
+                        </button>
+                    </div>
+
+                    <!-- Companion/Connected Users Content -->
+                    <div class="people-tab-content">
+                        <!-- Companions Content -->
+                        <div id="companions-content" class="people-content active">
+                            <!-- Group Filter Bar -->
+                            <div class="group-filter-bar">
+                                <div class="filter-label">Filter by group:</div>
+                                <div class="filter-options">
+                                    <a href="javascript:void(0)" onclick="filterCompanions('all')" class="filter-option active" data-group="all">All</a>
+                                    {% for group in groups %}
+                                        <a href="javascript:void(0)" 
+                                        onclick="filterCompanions('{{ group.id }}')" 
+                                        class="filter-option" 
+                                        data-group="{{ group.id }}">
+                                            {{ group.name }}
+                                            {% if group_counts %}
+                                                {% for group_id, count in group_counts.items %}
+                                                    {% if group_id == group.id and count > 0 %}
+                                                        <span class="count-badge">{{ count }}</span>
+                                                    {% endif %}
+                                                {% endfor %}
+                                            {% endif %}
+                                        </a>
+                                    {% endfor %}
+                                </div>
+                            </div>
+                            
+                            <div class="companions-section">
+                                <div class="companions-list">
+                                    {% if companions %}
+                                        <!-- Display companions organized by groups -->
+                                        {% if organized_companions %}
+                                            <!-- Display companions with groups first -->
+                                            {% for group_id, group_data in organized_companions.by_group.items %}
+                                                {% if group_data.companions %}
+                                                    <div class="group-section" data-group-id="{{ group_data.group.id }}">
+                                                        <h3 class="group-header">
+                                                            <i class="fas fa-layer-group"></i> {{ group_data.group.name }}
+                                                            <span class="group-member-count">{{ group_data.companions|length }} companion{{ group_data.companions|length|pluralize }}</span>
+                                                        </h3>
+                                                        
+                                                        {% for companion in group_data.companions %}
+                                                            <div class="companion-card" data-group-id="{{ group_data.group.id }}">
+                                                                {% if companion.picture %}
+                                                                    <img src="{{ companion.picture.url }}" alt="{{ companion.first_name }}" class="companion-image">
+                                                                {% else %}
+                                                                    <img src="/static/images/default-profile.png" alt="{{ companion.first_name }}" class="companion-image">
+                                                                {% endif %}
+                                                                <div class="companion-info">
+                                                                    <h3>{{ companion.first_name }} {{ companion.last_name }}</h3>
+                                                                    <p><strong>Email:</strong> {{ companion.email }}</p>
+                                                                    {% if companion.phone_number %}
+                                                                        <p><strong>Contact:</strong> {{ companion.phone_number }}</p>
+                                                                    {% endif %}
+                                                                    <span class="companion-group-tag">
+                                                                        <i class="fas fa-layer-group"></i> {{ group_data.group.name }}
+                                                                    </span>
+                                                                </div>
+                                                                
+                                                                <div class="companion-actions">
+                                                                    <button class="action-button edit-button" onclick="editCompanion('{{ companion.guest_id }}')"><i class="fas fa-pencil-alt"></i></button>
+                                                                    <button class="action-button delete-button" onclick="confirmDelete('{{ companion.guest_id }}', event)"><i class="fas fa-trash-alt"></i></button>
+                                                                </div>
+                                                            </div>
+                                                        {% endfor %}
+                                                    </div>
+                                                {% endif %}
+                                            {% endfor %}
+                                            
+                                            <!-- Display companions without a group -->
+                                            {% if organized_companions.no_group %}
+                                                <div class="group-section" data-group-id="none">
+                                                    <h3 class="group-header">
+                                                        <i class="fas fa-users"></i> Ungrouped Companions
+                                                        <span class="group-member-count">{{ organized_companions.no_group|length }} companion{{ organized_companions.no_group|length|pluralize }}</span>
+                                                    </h3>
+                                                    
+                                                    {% for companion in organized_companions.no_group %}
+                                                        <div class="companion-card" data-group-id="none">
+                                                            {% if companion.picture %}
+                                                                <img src="{{ companion.picture.url }}" alt="{{ companion.first_name }}" class="companion-image">
+                                                            {% else %}
+                                                                <img src="/static/images/default-profile.png" alt="{{ companion.first_name }}" class="companion-image">
+                                                            {% endif %}
+                                                            <div class="companion-info">
+                                                                <h3>{{ companion.first_name }} {{ companion.last_name }}</h3>
+                                                                <p><strong>Email:</strong> {{ companion.email }}</p>
+                                                                {% if companion.phone_number %}
+                                                                    <p><strong>Contact:</strong> {{ companion.phone_number }}</p>
+                                                                {% endif %}
+                                                            </div>
+                                                            
+                                                            <div class="companion-actions">
+                                                                <button class="action-button edit-button" onclick="editCompanion('{{ companion.guest_id }}')"><i class="fas fa-pencil-alt"></i></button>
+                                                                <button class="action-button delete-button" onclick="confirmDelete('{{ companion.guest_id }}', event)"><i class="fas fa-trash-alt"></i></button>
+                                                            </div>
+                                                        </div>
+                                                    {% endfor %}
+                                                </div>
+                                            {% endif %}
+                                        {% else %}
+                                            <!-- Fallback to original companions display -->
+                                            {% for companion in companions %}
+                                                <div class="companion-card" data-group-id="{% if companion.group %}{{ companion.group.id }}{% else %}none{% endif %}">
+                                                    {% if companion.picture %}
+                                                        <img src="{{ companion.picture.url }}" alt="{{ companion.first_name }}" class="companion-image">
+                                                    {% else %}
+                                                        <img src="/static/images/default-profile.png" alt="{{ companion.first_name }}" class="companion-image">
+                                                    {% endif %}
+                                                    <div class="companion-info">
+                                                        <h3>{{ companion.first_name }} {{ companion.last_name }}</h3>
+                                                        <p><strong>Email:</strong> {{ companion.email }}</p>
+                                                        {% if companion.phone_number %}
+                                                            <p><strong>Contact:</strong> {{ companion.phone_number }}</p>
+                                                        {% endif %}
+                                                        {% if companion.group %}
+                                                            <span class="companion-group-tag">
+                                                                <i class="fas fa-layer-group"></i> {{ companion.group.name }}
+                                                            </span>
+                                                        {% endif %}
+                                                    </div>
+                                                    
+                                                    <div class="companion-actions">
+                                                        <button class="action-button edit-button" onclick="editCompanion('{{ companion.guest_id }}')"><i class="fas fa-pencil-alt"></i></button>
+                                                        <button class="action-button delete-button" onclick="confirmDelete('{{ companion.guest_id }}', event)"><i class="fas fa-trash-alt"></i></button>
+                                                    </div>
+                                                </div>
+                                            {% endfor %}
+                                        {% endif %}
+                                    {% else %}
+                                        <div class="no-companions">
+                                            <i class="fas fa-users fa-3x" style="color: #4a6741; margin-bottom: 20px;"></i>
+                                            <h3>No companions added yet</h3>
+                                            <p>You haven't added any companions to your account. Add companions to make booking faster in the future.</p>
+                                        </div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Connected Users Content -->
+                        <div id="connected-content" class="people-content" style="display: none;">
+                            <!-- Connected Users Filter -->
+                            <div class="group-filter-bar">
+                                <div class="filter-label">Filter connected users:</div>
+                                <div class="filter-options">
+                                    <a href="javascript:void(0)" onclick="filterConnectedUsers('all')" class="filter-option active" data-group="all">All</a>
+                                    <a href="javascript:void(0)" onclick="filterConnectedUsers('sent')" class="filter-option" data-group="sent">
+                                        <i class="fas fa-paper-plane"></i> Sent
+                                    </a>
+                                    <a href="javascript:void(0)" onclick="filterConnectedUsers('received')" class="filter-option" data-group="received">
+                                        <i class="fas fa-inbox"></i> Received
+                                    </a>
+                                </div>
+                            </div>
+                            
+                            <div class="friends-list">
+                                {% if friends %}
+                                    {% for friend in friends %}
+                                        <div class="friend-card" data-connection-type="{% if friend.direction == 'sent' %}sent{% else %}received{% endif %}">
+                                            {% if friend.picture %}
+                                                <img src="{{ friend.picture.url }}" alt="{{ friend.name }}" class="friend-image">
+                                            {% else %}
+                                                <img src="/static/images/default-profile.png" alt="{{ friend.name }}" class="friend-image">
+                                            {% endif %}
+                                            <div class="friend-info">
+                                                <h3>{{ friend.name }}</h3>
+                                                <p>{{ friend.email }}</p>
+                                                <div class="connection-info">
+                                                    <span>Connected since: {{ friend.connected_date|date:"F j, Y" }}</span>
+                                                    <span class="direction-badge {% if friend.direction == 'sent' %}sent{% else %}received{% endif %}">
+                                                        {% if friend.direction == 'sent' %}
+                                                            <i class="fas fa-paper-plane"></i> Sent by you
+                                                        {% else %}
+                                                            <i class="fas fa-inbox"></i> Received
+                                                        {% endif %}
+                                                    </span>
+                                                </div>
+                                            </div>
+                                            <div class="friend-actions">
+                                                {% if messaging_enabled %}
+                                                <button class="action-button message-button" onclick="messageUser('{{ friend.id }}')">
+                                                    <i class="fas fa-envelope"></i> Message
+                                                </button>
+                                                {% endif %}
+                                                <button class="action-button disconnect-button" onclick="confirmDisconnect('{{ friend.request_id }}')">
+                                                    <i class="fas fa-unlink"></i> Disconnect
+                                                </button>
+                                            </div>
+                                        </div>
+                                    {% endfor %}
+                                {% else %}
+                                    <div class="no-friends">
+                                        <i class="fas fa-handshake fa-3x" style="color: #4a6741; margin-bottom: 20px;"></i>
+                                        <h3>No connections yet</h3>
+                                        <p>You haven't connected with any users yet. Use the "Find User" button to search for and connect with other users.</p>
+                                    </div>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Keep existing sections -->
+                <!-- Add Companion Section -->
+                <div id="add-companion-section" class="management-section">
+                    <h3>Add New Companion</h3>
+                    <form method="post" enctype="multipart/form-data">
+                        {% csrf_token %}
+                        
+                        <div class="form-row">
+                            <div class="form-col">
+                                <div class="form-group">
+                                    <label for="{{ form.first_name.id_for_label }}">First Name*</label>
+                                    {{ form.first_name }}
+                                    {% if form.first_name.errors %}
+                                    <span class="error-message">{{ form.first_name.errors.0 }}</span>
+                                    {% endif %}
+                                </div>
+                            </div>
+                            <div class="form-col">
+                                <div class="form-group">
+                                    <label for="{{ form.middle_initial.id_for_label }}">Middle Initial</label>
+                                    {{ form.middle_initial }}
+                                    {% if form.middle_initial.errors %}
+                                    <span class="error-message">{{ form.middle_initial.errors.0 }}</span>
+                                    {% endif %}
+                                </div>
+                            </div>
+                            <div class="form-col">
+                                <div class="form-group">
+                                    <label for="{{ form.last_name.id_for_label }}">Last Name*</label>
+                                    {{ form.last_name }}
+                                    {% if form.last_name.errors %}
+                                    <span class="error-message">{{ form.last_name.errors.0 }}</span>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="form-row">
+                            <div class="form-col">
+                                <div class="form-group">
+                                    <label for="{{ form.birthday.id_for_label }}">Birthday*</label>
+                                    {{ form.birthday }}
+                                    {% if form.birthday.errors %}
+                                    <span class="error-message">{{ form.birthday.errors.0 }}</span>
+                                    {% endif %}
+                                </div>
+                            </div>
+                            <div class="form-col">
+                                <div class="form-group">
+                                    <label for="calculated-age">Age</label>
+                                    <input type="text" id="calculated-age" class="form-control" readonly>
+                                </div>
+                            </div>
+                            <div class="form-col">
+                                <div class="form-group">
+                                    <label for="age-category">Age Category</label>
+                                    <input type="text" id="age-category" class="form-control" readonly>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="form-row">
+                            <div class="form-col">
+                                <div class="form-group">
+                                    <label for="{{ form.sex.id_for_label }}">Sex*</label>
+                                    {{ form.sex }}
+                                    {% if form.sex.errors %}
+                                    <span class="error-message">{{ form.sex.errors.0 }}</span>
+                                    {% endif %}
+                                </div>
+                            </div>
+                            <div class="form-col">
+                                <div class="form-group">
+                                    <label for="{{ form.email.id_for_label }}">Email*</label>
+                                    {{ form.email }}
+                                    {% if form.email.errors %}
+                                    <span class="error-message">{{ form.email.errors.0 }}</span>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="form-row">
+                            <div class="form-col">
+                                <div class="form-group">
+                                    <label for="{{ form.phone_number.id_for_label }}">Phone Number*</label>
+                                    {{ form.phone_number }}
+                                    {% if form.phone_number.errors %}
+                                    <span class="error-message">{{ form.phone_number.errors.0 }}</span>
+                                    {% endif %}
+                                </div>
+                            </div>
+                            <div class="form-col">
+                                <div class="form-group">
+                                    <label for="{{ form.country_of_origin.id_for_label }}">Country of Origin*</label>
+                                    {{ form.country_of_origin }}
+                                    {% if form.country_of_origin.errors %}
+                                    <span class="error-message">{{ form.country_of_origin.errors.0 }}</span>
+                                    {% endif %}
+                                </div>
+                            </div>
+                            <div class="form-col">
+                                <div class="form-group">
+                                    <label for="{{ form.city.id_for_label }}">City*</label>
+                                    {{ form.city }}
+                                    {% if form.city.errors %}
+                                    <span class="error-message">{{ form.city.errors.0 }}</span>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="{{ form.company_name.id_for_label }}">Company Name (Optional)</label>
+                            {{ form.company_name }}
+                            {% if form.company_name.errors %}
+                            <span class="error-message">{{ form.company_name.errors.0 }}</span>
+                            {% endif %}
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="{{ form.picture.id_for_label }}">Profile Picture (Optional)</label>
+                            {{ form.picture }}
+                            {% if form.picture.errors %}
+                            <span class="error-message">{{ form.picture.errors.0 }}</span>
+                            {% endif %}
+                        </div>
+                        
+                        <div class="checkbox-group">
+                            <label>
+                                {{ form.has_disability }} Has Disability
+                            </label>
+                            {% if form.has_disability.errors %}
+                            <span class="error-message">{{ form.has_disability.errors.0 }}</span>
+                            {% endif %}
+                        </div>
+                        
+                        <div class="form-group" id="disabilityTypeGroup" style="display: none;">
+                            <label for="{{ form.disability_type.id_for_label }}">Disability Type</label>
+                            {{ form.disability_type }}
+                            {% if form.disability_type.errors %}
+                            <span class="error-message">{{ form.disability_type.errors.0 }}</span>
+                            {% endif %}
+                        </div>
+                        
+                        <div class="form-group" id="disabilityDocumentsGroup" style="display: none;">
+                            <label for="{{ form.disability_documents.id_for_label }}">Disability Documents (Optional)</label>
+                            {{ form.disability_documents }}
+                            {% if form.disability_documents.errors %}
+                            <span class="error-message">{{ form.disability_documents.errors.0 }}</span>
+                            {% endif %}
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="{{ form.credentials.id_for_label }}">Identification Documents (Optional)</label>
+                            {{ form.credentials }}
+                            {% if form.credentials.errors %}
+                            <span class="error-message">{{ form.credentials.errors.0 }}</span>
+                            {% endif %}
+                            <small>Upload documents like ID cards, passport, etc.</small>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="group">Group (Optional)</label>
+                            <select id="group" name="group" class="form-control">
+                                <option value="">Select a group (optional)</option>
+                                {% for group in groups %}
+                                    <option value="{{ group.id }}">{{ group.name }}</option>
+                                {% endfor %}
+                            </select>
+                            <small class="help-text">Organize your companions by assigning them to groups</small>
+                        </div>
+                        
+                        <div style="text-align: center; margin-top: 20px;">
+                            <button type="submit" class="submit-button">Add Companion</button>
+                        </div>
+                    </form>
+                </div>
+                
+                <!-- Manage Groups Section -->
+                <div id="manage-groups-section" class="management-section">
+                    <div class="group-management">
+                        <!-- Create Group Form -->
+                        <div class="panel-section">
+                            <h3><i class="fas fa-plus-circle"></i> Create New Group</h3>
+                            <form method="post" action="{% url 'companion' %}">
+                                {% csrf_token %}
+                                <input type="hidden" name="create_group" value="true">
+                                <div class="form-group">
+                                    <label for="group_name">Group Name*</label>
+                                    <input type="text" id="group_name" name="group_name" class="form-control" required>
+                                </div>
+                                <div class="form-group">
+                                    <label for="group_description">Description (Optional)</label>
+                                    <textarea id="group_description" name="group_description" class="form-control" rows="3"></textarea>
+                                </div>
+                                <button type="submit" class="submit-button">Create Group</button>
+                            </form>
+                        </div>
+                        
+                        <!-- Existing Groups -->
+                        <div class="panel-section">
+                            <h3><i class="fas fa-layer-group"></i> Your Groups</h3>
+                            
+                            {% if groups %}
+                                <div class="groups-list">
+                                    {% for group in groups %}
+                                        <div class="group-card" data-group-id="{{ group.id }}">
+                                            <div class="group-info">
+                                                <h4>{{ group.name }}</h4>
+                                                {% if group.description %}
+                                                    <p>{{ group.description }}</p>
+                                                {% else %}
+                                                    <p class="text-muted">No description</p>
+                                                {% endif %}
+                                                <span class="group-badge">
+                                                    <i class="fas fa-user-friends"></i> 
+                                                    {% with count=0 %}
+                                                        {% for companion in companions %}
+                                                            {% if companion.group.id == group.id %}
+                                                                {% with count=count|add:1 %}{% endwith %}
+                                                            {% endif %}
+                                                        {% endfor %}
+                                                        {% if count == 1 %}
+                                                            1 companion
+                                                        {% else %}
+                                                            {{ count }} companions
+                                                        {% endif %}
+                                                    {% endwith %}
+                                                </span>
+                                            </div>
+                                            <div class="group-actions">
+                                                <button class="action-button edit-button" onclick="showEditGroupForm('{{ group.id }}', '{{ group.name|escapejs }}', '{{ group.description|escapejs }}')">
+                                                    <i class="fas fa-edit"></i>
+                                                </button>
+                                                <button class="action-button delete-button" onclick="confirmDeleteGroup('{{ group.id }}', '{{ group.name|escapejs }}')">
+                                                    <i class="fas fa-trash-alt"></i>
+                                                </button>
+                                            </div>
+                                        </div>
+                                    {% endfor %}
+                                </div>
+                            {% else %}
+                                <div class="no-groups">
+                                    <i class="fas fa-layer-group fa-3x" style="color: #4a6741; margin-bottom: 20px;"></i>
+                                    <h3>No groups created yet</h3>
+                                    <p>Create groups to better organize your companions</p>
+                                </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div style="text-align: center;">
+            <a href="{% url 'main-page' %}" class="back-button">
+                <i class="fas fa-arrow-left"></i> Back to Home
+            </a>
+        </div>
+    </div>
+
+    <!-- Script for form error handling -->
+    {% if form.errors %}
+    <script>
+        // Show form when there are errors
+        document.addEventListener('DOMContentLoaded', function() {
+            setTimeout(function() {
+                toggleAddForm();
+            }, 100);
+        });
+    </script>
+    {% endif %}
+
+    <script>
+        // Function to toggle user dropdown menu
+        function toggleUserMenu() {
+            const dropdown = document.getElementById('userDropdown');
+            dropdown.style.display = dropdown.style.display === 'block' ? 'none' : 'block';
+        }
+        
+        // Function to toggle add companion form
+        function toggleAddForm() {
+            const form = document.getElementById('companionForm');
+            if (form.style.display === 'none' || !form.style.display) {
+                form.style.display = 'block';
+                document.getElementById('toggleFormButton').innerHTML = '<i class="fas fa-minus"></i> Hide Form';
+            } else {
+                form.style.display = 'none';
+                document.getElementById('toggleFormButton').innerHTML = '<i class="fas fa-plus"></i> Add New Companion';
+            }
+            
+            // Scroll to form if showing
+            if (form.style.display === 'block') {
+                form.scrollIntoView({ behavior: 'smooth' });
+            }
+        }
+        
+        // Function to calculate age based on birthday
+        function calculateAge(birthday) {
+            const today = new Date();
+            const birthDate = new Date(birthday);
+            let age = today.getFullYear() - birthDate.getFullYear();
+            const monthDiff = today.getMonth() - birthDate.getMonth();
+            
+            // If birthday hasn't occurred yet this year, subtract 1 from age
+            if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+                age--;
+            }
+            
+            return age;
+        }
+        
+        // Function to determine age label based on age
+        function getAgeLabel(age) {
+            if (age <= 1) return 'Infant';
+            if (age <= 4) return 'Toddler';
+            if (age <= 12) return 'Child';
+            if (age <= 19) return 'Teen';
+            if (age <= 39) return 'Adult';
+            if (age <= 59) return 'Middle Adult';
+            return 'Senior';
+        }
+        
+        // Function to update age field when birthday changes
+        function updateAge() {
+            const birthdayInput = document.getElementById('id_birthday');
+            if (!birthdayInput) return;
+            
+            // Get the new display fields
+            const calculatedAgeField = document.getElementById('calculated-age');
+            const ageCategoryField = document.getElementById('age-category');
+            
+            // Create or get age display element
+            let ageDisplay = document.getElementById('age-display');
+            if (!ageDisplay) {
+                ageDisplay = document.createElement('div');
+                ageDisplay.id = 'age-display';
+                ageDisplay.className = 'age-display';
+                birthdayInput.parentNode.appendChild(ageDisplay);
+            }
+            
+            if (birthdayInput.value) {
+                const age = calculateAge(birthdayInput.value);
+                const ageLabel = getAgeLabel(age);
+                
+                // Update the visible fields
+                if (calculatedAgeField) calculatedAgeField.value = age;
+                if (ageCategoryField) ageCategoryField.value = ageLabel;
+                
+                // Still keep the original display for backward compatibility
+                ageDisplay.innerHTML = `<strong>Age:</strong> ${age} (${ageLabel})`;
+                ageDisplay.style.display = 'block';
+                
+                // Create hidden input for age if it doesn't exist
+                let ageInput = document.getElementById('hidden-age');
+                if (!ageInput) {
+                    ageInput = document.createElement('input');
+                    ageInput.type = 'hidden';
+                    ageInput.name = 'age';
+                    ageInput.id = 'hidden-age';
+                    birthdayInput.parentNode.appendChild(ageInput);
+                }
+                ageInput.value = age;
+                
+                // Create hidden input for age_label if it doesn't exist
+                let ageLabelInput = document.getElementById('hidden-age-label');
+                if (!ageLabelInput) {
+                    ageLabelInput = document.createElement('input');
+                    ageLabelInput.type = 'hidden';
+                    ageLabelInput.name = 'age_label';
+                    ageLabelInput.id = 'hidden-age-label';
+                    birthdayInput.parentNode.appendChild(ageLabelInput);
+                }
+                ageLabelInput.value = ageLabel;
+            } else {
+                // Clear fields if birthday is empty
+                if (calculatedAgeField) calculatedAgeField.value = '';
+                if (ageCategoryField) ageCategoryField.value = '';
+                ageDisplay.style.display = 'none';
+            }
+        }
+        
+        // Initialize event listeners for birthday input
+        document.addEventListener('DOMContentLoaded', function() {
+            const birthdayInput = document.getElementById('id_birthday');
+            if (birthdayInput) {
+                birthdayInput.addEventListener('change', updateAge);
+                birthdayInput.addEventListener('input', updateAge);
+                
+                // Run once on page load to initialize the age if the birthday is set
+                updateAge();
+            }
+            
+            // Initialize has disability checkbox handler
+            const hasDisabilityCheckbox = document.getElementById('id_has_disability');
+            if (hasDisabilityCheckbox) {
+                hasDisabilityCheckbox.addEventListener('change', function() {
+                    const disabilityTypeGroup = document.getElementById('disabilityTypeGroup');
+                    const disabilityDocumentsGroup = document.getElementById('disabilityDocumentsGroup');
+                    
+                    if (this.checked) {
+                        disabilityTypeGroup.style.display = 'block';
+                        disabilityDocumentsGroup.style.display = 'block';
+                    } else {
+                        disabilityTypeGroup.style.display = 'none';
+                        disabilityDocumentsGroup.style.display = 'none';
+                    }
+                });
+                
+                // Trigger on load
+                hasDisabilityCheckbox.dispatchEvent(new Event('change'));
+            }
+        });
+        
+        // Function to filter companions by group
+        function filterCompanions(groupId) {
+            // Update filter UI
+            document.querySelectorAll('.filter-option').forEach(option => {
+                if (option.getAttribute('data-group') === groupId) {
+                    option.classList.add('active');
+                } else {
+                    option.classList.remove('active');
+                }
+            });
+            
+            // Save the selected filter to session storage
+            sessionStorage.setItem('companionGroupFilter', groupId);
+            
+            // Filter the companions
+            if (groupId === 'all') {
+                // Show all companions and group sections
+                document.querySelectorAll('.companion-card, .group-section').forEach(card => {
+                    card.style.display = 'flex';
+                });
+                document.querySelectorAll('.group-section').forEach(section => {
+                    section.style.display = 'block';
+                });
+            } else {
+                // Hide all companions and group sections first
+                document.querySelectorAll('.companion-card, .group-section').forEach(card => {
+                    card.style.display = 'none';
+                });
+                
+                // Show only companions with matching group ID
+                document.querySelectorAll(`.companion-card[data-group-id="${groupId}"]`).forEach(card => {
+                    card.style.display = 'flex';
+                });
+                
+                // Show the matching group section
+                document.querySelectorAll(`.group-section[data-group-id="${groupId}"]`).forEach(section => {
+                    section.style.display = 'block';
+                });
+            }
+        }
+        
+        // Function to handle logout
+        function logoutUser() {
+            if (confirm('Are you sure you want to logout?')) {
+                window.location.href = "{% url 'logout' %}";
+            }
+        }
+        
+        // Function to confirm companion deletion
+        function confirmDelete(companionId, event) {
+            if (confirm('Are you sure you want to delete this companion? This action cannot be undone.')) {
+                // Get CSRF token
+                const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]').value;
+                
+                // Show loading indicator or disable buttons
+                const deleteBtn = event.target.closest('.delete-button');
+                if (deleteBtn) {
+                    deleteBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+                    deleteBtn.disabled = true;
+                }
+                
+                // Send POST request to delete endpoint
+                fetch(`/guest_app/companion/delete/${companionId}/`, {
+                    method: 'POST',
+                    headers: {
+                        'X-Requested-With': 'XMLHttpRequest',
+                        'X-CSRFToken': csrfToken,
+                        'Content-Type': 'application/json'
+                    }
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        // Show success message
+                        alert(data.message);
+                        // Refresh page to reflect changes
+                        window.location.reload();
+                    } else {
+                        // Show error message
+                        alert('Error: ' + data.message);
+                        // Restore button state
+                        if (deleteBtn) {
+                            deleteBtn.innerHTML = '<i class="fas fa-trash-alt"></i>';
+                            deleteBtn.disabled = false;
+                        }
+                    }
+                })
+                .catch(error => {
+                    console.error('Error deleting companion:', error);
+                    alert('An error occurred while deleting the companion. Please try again.');
+                    // Restore button state
+                    if (deleteBtn) {
+                        deleteBtn.innerHTML = '<i class="fas fa-trash-alt"></i>';
+                        deleteBtn.disabled = false;
+                    }
+                });
+            }
+        }
+        
+        // Function to edit a companion
+        function editCompanion(companionId) {
+            window.location.href = `/guest_app/companion/edit/${companionId}/`;
+        }
+        
+        // User search and companion request functions
+        let currentSearchResult = null;
+        
+        function toggleUserSearch() {
+            const form = document.getElementById('userSearchForm');
+            form.style.display = form.style.display === 'none' ? 'block' : 'none';
+            
+            // Reset form state when toggling
+            if (form.style.display === 'none') {
+                resetSearchForm();
+            } else {
+                form.scrollIntoView({ behavior: 'smooth' });
+            }
+        }
+        
+        function resetSearchForm() {
+            document.getElementById('searchEmail').value = '';
+            document.getElementById('searchResults').style.display = 'none';
+            document.getElementById('requestForm').style.display = 'none';
+            document.getElementById('searchMessage').style.display = 'none';
+            currentSearchResult = null;
+        }
+        
+        function searchUser() {
+            const email = document.getElementById('searchEmail').value.trim();
+            const resultsDiv = document.getElementById('searchResults');
+            const messageDiv = document.getElementById('searchMessage');
+            
+            // Reset previous search
+            messageDiv.style.display = 'none';
+            messageDiv.className = 'search-message';
+            resultsDiv.style.display = 'none';
+            
+            if (!email) {
+                showSearchMessage('Please enter an email address to search.', 'error');
+                return;
+            }
+            
+            // Show loading state
+            const searchBtn = document.getElementById('searchButton');
+            const originalText = searchBtn.textContent;
+            searchBtn.disabled = true;
+            searchBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Searching...';
+            
+            // Perform search
+            fetch(`{% url 'search_users' %}?email=${encodeURIComponent(email)}`, {
+                method: 'GET',
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest'
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                searchBtn.disabled = false;
+                searchBtn.textContent = originalText;
+                
+                if (data.success) {
+                    // Show user result
+                    document.getElementById('resultUserName').textContent = data.user.name;
+                    document.getElementById('resultUserEmail').textContent = data.user.email;
+                    resultsDiv.style.display = 'block';
+                    
+                    // Save current search result
+                    currentSearchResult = data.user;
+                } else {
+                    // Show error message
+                    showSearchMessage(data.message, 'error');
+                }
+            })
+            .catch(error => {
+                searchBtn.disabled = false;
+                searchBtn.textContent = originalText;
+                showSearchMessage('An error occurred while searching. Please try again.', 'error');
+                console.error(error);
+            });
+        }
+        
+        function showSearchMessage(message, type) {
+            const messageDiv = document.getElementById('searchMessage');
+            messageDiv.textContent = message;
+            messageDiv.className = `search-message ${type}`;
+            messageDiv.style.display = 'block';
+        }
+        
+        function showRequestForm() {
+            document.getElementById('requestForm').style.display = 'block';
+            document.getElementById('requestMessage').focus();
+        }
+        
+        function hideRequestForm() {
+            document.getElementById('requestForm').style.display = 'none';
+        }
+        
+        function sendCompanionRequest() {
+            if (!currentSearchResult) {
+                showSearchMessage('No user selected. Please search again.', 'error');
+                return;
+            }
+            
+            const message = document.getElementById('requestMessage').value;
+            const sendBtn = document.getElementById('confirmRequestBtn');
+            
+            // Show loading state
+            const originalText = sendBtn.textContent;
+            sendBtn.disabled = true;
+            sendBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Sending...';
+            
+            // Create form data
+            const formData = new FormData();
+            formData.append('recipient_id', currentSearchResult.guest_id);
+            formData.append('message', message);
+            
+            // Get CSRF token
+            const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]').value;
+            
+            // Send request with proper JavaScript syntax
+            const requestUrl = "{% url 'send_companion_request' %}";
+            fetch(requestUrl, {
+                method: 'POST',
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'X-CSRFToken': csrfToken
+                },
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                sendBtn.disabled = false;
+                sendBtn.textContent = originalText;
+                
+                // Hide the request form
+                hideRequestForm();
+                
+                // Hide the search results
+                document.getElementById('searchResults').style.display = 'none';
+                
+                if (data.success) {
+                    // Show success message
+                    showSearchMessage(data.message, 'success');
+                    // Reset the email field
+                    document.getElementById('searchEmail').value = '';
+                } else {
+                    // Show error message
+                    showSearchMessage(data.message, 'error');
+                }
+            })
+            .catch(error => {
+                sendBtn.disabled = false;
+                sendBtn.textContent = originalText;
+                showSearchMessage('An error occurred while sending the request. Please try again.', 'error');
+                console.error(error);
+            });
+        }
+        
+        // Function to check for pending companion requests
+        function checkPendingRequests() {
+            const requestUrl = "{% url 'companion_request_count' %}";
+            fetch(requestUrl, {
+                method: 'GET',
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest'
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    const countElement = document.getElementById('requestCount');
+                    if (data.count > 0) {
+                        countElement.textContent = data.count;
+                        countElement.style.display = 'inline-flex';
+                    } else {
+                        countElement.style.display = 'none';
+                    }
+                }
+            })
+            .catch(error => {
+                console.error('Error checking pending requests:', error);
+            });
+        }
+        
+        // Initialize on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            // Check for pending requests on page load
+            checkPendingRequests();
+            
+            // Initialize the view based on URL params or default to companions view
+            initializeView();
+            
+            // Set up event listeners for group management
+            setupGroupManagement();
+            
+            // Apply saved filter if exists
+            applySavedFilter();
+            
+            // Periodically check for new requests (every 60 seconds)
+            setInterval(checkPendingRequests, 60000);
+            
+            // Initialize companion filters
+            const savedCompanionFilter = sessionStorage.getItem('companionGroupFilter') || 'all';
+            filterCompanions(savedCompanionFilter);
+            
+            // Initialize friend filters
+            const savedFriendFilter = sessionStorage.getItem('friendGroupFilter') || 'all';
+            filterFriends(savedFriendFilter);
+        });
+
+        // Function to set up group management event listeners
+        function setupGroupManagement() {
+            // Event delegation for edit and delete buttons
+            document.addEventListener('click', function(e) {
+                // Handle edit group button clicks
+                if (e.target.closest('.edit-button')) {
+                    const button = e.target.closest('.edit-button');
+                    const card = button.closest('.group-card');
+                    const groupId = card.getAttribute('data-group-id');
+                    const groupName = card.querySelector('h4').textContent;
+                    const description = card.querySelector('p').textContent !== 'No description' ? 
+                                       card.querySelector('p').textContent : '';
+                    
+                    showEditGroupForm(groupId, groupName, description);
+                }
+                
+                // Handle delete group button clicks
+                if (e.target.closest('.delete-button')) {
+                    const button = e.target.closest('.delete-button');
+                    const card = button.closest('.group-card');
+                    const groupId = card.getAttribute('data-group-id');
+                    const groupName = card.querySelector('h4').textContent;
+                    
+                    confirmDeleteGroup(groupId, groupName);
+                }
+            });
+            
+            // Handle modal close via ESC key
+            document.addEventListener('keydown', function(e) {
+                if (e.key === 'Escape') {
+                    closeEditGroupModal();
+                }
+            });
+        }
+
+        // Group management functions
+        function showEditGroupForm(id, name, description) {
+            document.getElementById('edit_group_id').value = id;
+            document.getElementById('edit_group_name').value = name;
+            document.getElementById('edit_group_description').value = description || '';
+            document.getElementById('edit-group-modal').style.display = 'flex';
+            
+            // Focus the name field
+            setTimeout(() => {
+                document.getElementById('edit_group_name').focus();
+            }, 100);
+        }
+        
+        function closeEditGroupModal() {
+            document.getElementById('edit-group-modal').style.display = 'none';
+        }
+        
+        function confirmDeleteGroup(id, name) {
+            if (confirm(`Are you sure you want to delete the group "${name}"? This action cannot be undone.`)) {
+                document.getElementById('delete_group_id').value = id;
+                document.getElementById('delete-group-form').submit();
+            }
+        }
+        
+        function initializeView() {
+            // Set up section headers in the unified box
+            setupSectionHeaders();
+            
+            // Show the view companions section by default
+            document.getElementById('view-companions-section').classList.add('active');
+            document.querySelector('.section-header[data-section="view-companions"]').classList.add('active');
+        }
+        
+        function applySavedFilter() {
+            // Apply saved filter from session storage or default to 'all'
+            const savedFilter = sessionStorage.getItem('companionGroupFilter') || 'all';
+            filterCompanions(savedFilter);
+        }
+        
+        // Close modal when clicking outside the content
+        window.onclick = function(event) {
+            const modal = document.getElementById('edit-group-modal');
+            if (event.target === modal) {
+                closeEditGroupModal();
+            }
+            
+            const searchModal = document.getElementById('search-modal');
+            if (event.target === searchModal) {
+                closeSearchModal();
+            }
+        };
+
+        // Function to switch between different views
+        function switchToView(view) {
+            const viewContainers = document.querySelectorAll('.content-view');
+            viewContainers.forEach(container => {
+                container.style.display = 'none';
+            });
+            
+            const actionButtons = document.querySelectorAll('.action-button');
+            actionButtons.forEach(button => {
+                button.classList.remove('active');
+            });
+            
+            document.querySelector(`[data-action="${view}"]`).classList.add('active');
+            
+            if (view === 'view') {
+                document.getElementById('view-companions-view').style.display = 'block';
+            } else if (view === 'add') {
+                document.getElementById('add-companion-view').style.display = 'block';
+            } else if (view === 'groups') {
+                document.getElementById('manage-groups-view').style.display = 'block';
+            } else if (view === 'search') {
+                document.getElementById('search-user-view').style.display = 'block';
+            }
+        }
+        
+        // Function to switch between management sections in the unified box
+        function switchSection(sectionId) {
+            // Update active section header
+            document.querySelectorAll('.section-header').forEach(header => {
+                header.classList.remove('active');
+            });
+            document.querySelector(`.section-header[data-section="${sectionId}"]`).classList.add('active');
+            
+            // Update active section content
+            document.querySelectorAll('.management-section').forEach(section => {
+                section.classList.remove('active');
+            });
+            document.getElementById(`${sectionId}-section`).classList.add('active');
+        }
+        
+        // Initialize section headers
+        function setupSectionHeaders() {
+            // Add click event listeners to section headers
+            document.querySelectorAll('.section-header').forEach(header => {
+                header.addEventListener('click', function() {
+                    const sectionId = this.getAttribute('data-section');
+                    switchSection(sectionId);
+                });
+            });
+        }
+        
+        // Modal functions
+        function openSearchModal() {
+            document.getElementById('search-modal').style.display = 'flex';
+            document.getElementById('modal-search-email').focus();
+            // Reset form fields
+            document.getElementById('modal-search-email').value = '';
+            document.getElementById('modal-search-results').style.display = 'none';
+            document.getElementById('modal-request-form').style.display = 'none';
+            document.getElementById('modal-search-message').style.display = 'none';
+        }
+        
+        function closeSearchModal() {
+            document.getElementById('search-modal').style.display = 'none';
+        }
+        
+        function modalSearchUser() {
+            const email = document.getElementById('modal-search-email').value.trim();
+            if (!email) {
+                modalShowSearchMessage('error', 'Please enter an email address to search.');
+                return;
+            }
+            
+            // Show loading state
+            modalShowSearchMessage('loading', 'Searching for user...');
+            
+            // Clear previous results
+            document.getElementById('modal-user-result').innerHTML = '';
+            document.getElementById('modal-search-results').style.display = 'none';
+            document.getElementById('modal-request-form').style.display = 'none';
+            
+            const url = "{% url 'search_users' %}?email=" + encodeURIComponent(email);
+            
+            fetch(url, {
+                method: 'GET',
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest'
+                }
+            })
+            .then(function(response) { return response.json(); })
+            .then(function(data) {
+                if (data.success) {
+                    document.getElementById('modal-search-message').style.display = 'none';
+                    document.getElementById('modal-search-results').style.display = 'block';
+                    
+                    const userResult = document.getElementById('modal-user-result');
+                    const imgSrc = data.user.picture || '/static/images/default-profile.png';
+                    
+                    userResult.innerHTML = 
+                        '<img src="' + imgSrc + '" alt="' + data.user.first_name + '">' +
+                        '<div class="user-info">' +
+                            '<p class="user-name">' + data.user.first_name + ' ' + data.user.last_name + '</p>' +
+                            '<p class="user-email">' + data.user.email + '</p>' +
+                        '</div>' +
+                        '<button onclick="modalShowRequestForm(\'' + data.user.guest_id + '\')" class="request-btn">' +
+                            '<i class="fas fa-user-plus"></i> Send Request' +
+                        '</button>';
+                } else {
+                    modalShowSearchMessage('error', data.message);
+                }
+            })
+            .catch(function(error) {
+                console.error('Error:', error);
+                modalShowSearchMessage('error', 'An error occurred while searching. Please try again.');
+            });
+        }
+        
+        function modalShowSearchMessage(type, message) {
+            const messageContainer = document.getElementById('modal-search-message');
+            let icon = '';
+            
+            if (type === 'error') {
+                icon = '<i class="fas fa-exclamation-circle"></i>';
+            } else if (type === 'success') {
+                icon = '<i class="fas fa-check-circle"></i>';
+            } else if (type === 'loading') {
+                icon = '<i class="fas fa-spinner fa-spin"></i>';
+            } else if (type === 'info') {
+                icon = '<i class="fas fa-info-circle"></i>';
+            }
+            
+            messageContainer.innerHTML = icon + '<p>' + message + '</p>';
+            messageContainer.style.display = 'block';
+            
+            // Hide results if showing an error
+            if (type === 'error') {
+                document.getElementById('modal-search-results').style.display = 'none';
+            }
+        }
+        
+        function modalShowRequestForm(userId) {
+            document.getElementById('modal-recipient-id').value = userId;
+            document.getElementById('modal-request-form').style.display = 'block';
+            document.getElementById('modal-request-message').focus();
+        }
+        
+        function modalCancelRequest() {
+            document.getElementById('modal-request-form').style.display = 'none';
+            document.getElementById('modal-request-message').value = '';
+        }
+        
+        function modalSendCompanionRequest() {
+            const recipientId = document.getElementById('modal-recipient-id').value;
+            const message = document.getElementById('modal-request-message').value;
+            const groupId = document.getElementById('modal-companion-group').value;
+            const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]').value;
+            
+            // Show loading state
+            modalShowSearchMessage('loading', 'Sending request...');
+            
+            const formData = new FormData();
+            formData.append('recipient_id', recipientId);
+            formData.append('message', message);
+            formData.append('group_id', groupId);
+            
+            fetch("{% url 'send_companion_request' %}", {
+                method: 'POST',
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'X-CSRFToken': csrfToken
+                },
+                body: formData
+            })
+            .then(function(response) { return response.json(); })
+            .then(function(data) {
+                if (data.success) {
+                    modalShowSearchMessage('success', data.message);
+                    document.getElementById('modal-request-form').style.display = 'none';
+                    document.getElementById('modal-search-results').style.display = 'none';
+                    document.getElementById('modal-search-email').value = '';
+                    document.getElementById('modal-request-message').value = '';
+                    document.getElementById('modal-companion-group').value = '';
+                    
+                    // Close modal automatically after success
+                    setTimeout(function() {
+                        closeSearchModal();
+                    }, 2000);
+                } else {
+                    modalShowSearchMessage('error', data.message);
+                }
+            })
+            .catch(function(error) {
+                console.error('Error:', error);
+                modalShowSearchMessage('error', 'An error occurred while sending the request. Please try again.');
+            });
+        }
+
+        // Function to switch between tabs
+        function switchTab(tabName) {
+            // Update active tab
+            document.querySelectorAll('.view-tab').forEach(tab => {
+                if (tab.getAttribute('data-view') === tabName) {
+                    tab.classList.add('active');
+                } else {
+                    tab.classList.remove('active');
+                }
+            });
+            
+            // Show/hide content sections
+            if (tabName === 'companions') {
+                document.getElementById('friends-view').style.display = 'none';
+                document.querySelectorAll('.companions-section, .form-container, .add-companion-button, .group-filter-bar').forEach(el => {
+                    el.style.display = 'block';
+                });
+            } else if (tabName === 'friends') {
+                document.getElementById('friends-view').style.display = 'block';
+                document.querySelectorAll('.companions-section, .form-container, .add-companion-button, .group-filter-bar').forEach(el => {
+                    el.style.display = 'none';
+                });
+            }
+        };
+
+        // Function to handle disconnecting from a friend
+        function confirmDisconnect(requestId) {
+            if (confirm('Are you sure you want to remove this connection? You will need to send a new request to connect again.')) {
+                // Get CSRF token
+                const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]').value;
+                
+                // Make API request to delete the connection
+                fetch('/guest_app/companion/requests/fix/', {
+                    method: 'POST',
+                    headers: {
+                        'X-Requested-With': 'XMLHttpRequest',
+                        'X-CSRFToken': csrfToken
+                    },
+                    body: new FormData(Object.assign(document.createElement('form'), {
+                        innerHTML: `
+                            <input name="action" value="delete">
+                            <input name="request_id" value="${requestId}">
+                            <input name="delete_type" value="specific">
+                        `
+                    }))
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        alert('Connection removed successfully.');
+                        window.location.reload();
+                    } else {
+                        alert('Error: ' + data.message);
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    alert('An error occurred while removing the connection.');
+                });
+            }
+        }
+
+        // Function to navigate to requests page
+        function goToRequests() {
+            window.location.href = "{% url 'list_companion_requests' %}";
+        }
+
+        // Function to filter friends by group
+        function filterFriends(groupId) {
+            // Update filter UI
+            document.querySelectorAll('#friends-view .filter-option').forEach(option => {
+                if (option.getAttribute('data-group') === groupId) {
+                    option.classList.add('active');
+                } else {
+                    option.classList.remove('active');
+                }
+            });
+            
+            // Save the selected filter to session storage
+            sessionStorage.setItem('friendGroupFilter', groupId);
+            
+            // Filter the friends
+            if (groupId === 'all') {
+                // Show all friends and group sections
+                document.querySelectorAll('#friends-view .friend-card, #friends-view .group-section').forEach(card => {
+                    card.style.display = 'flex';
+                });
+                document.querySelectorAll('#friends-view .group-section').forEach(section => {
+                    section.style.display = 'block';
+                });
+            } else {
+                // Hide all friends and group sections first
+                document.querySelectorAll('#friends-view .friend-card, #friends-view .group-section').forEach(card => {
+                    card.style.display = 'none';
+                });
+                
+                // Show only friends with matching group ID
+                document.querySelectorAll(`#friends-view .friend-card[data-group-id="${groupId}"]`).forEach(card => {
+                    card.style.display = 'flex';
+                });
+                
+                // Show the matching group section
+                document.querySelectorAll(`#friends-view .group-section[data-group-id="${groupId}"]`).forEach(section => {
+                    section.style.display = 'block';
+                });
+            }
+        }
+    </script>
+
+    <!-- Content Views for the View/Add/Group/Search tabs -->
+    <div id="view-companions-view" class="content-view">
+        <!-- This is your existing companions display section -->
+        <div class="companions-section">
+            <h2>Your Companions</h2>
+            
+            <!-- Companion Cards -->
+            <div class="companion-cards">
+                <!-- Your existing companion cards code -->
+            </div>
+        </div>
+    </div>
+
+    <div id="add-companion-view" class="content-view" style="display: none;">
+        <!-- This contains your add companion form -->
+        <div class="form-container" id="companionForm">
+            <h2>Add New Companion</h2>
+            <form method="post" enctype="multipart/form-data">
+                <!-- Your existing form code -->
+            </form>
+        </div>
+    </div>
+
+    <div id="manage-groups-view" class="content-view" style="display: none;">
+        <h2>Manage Companion Groups</h2>
+        <p class="section-desc">Create, edit, or delete groups to help organize your companions.</p>
+        
+        <!-- Create Group Form -->
+        <div class="panel-section">
+            <h3><i class="fas fa-plus-circle"></i> Create New Group</h3>
+            <form method="post" action="{% url 'companion' %}">
+                {% csrf_token %}
+                <input type="hidden" name="create_group" value="true">
+                <div class="form-group">
+                    <label for="group_name">Group Name*</label>
+                    <input type="text" id="group_name" name="group_name" class="form-control" required>
+                </div>
+                <div class="form-group">
+                    <label for="group_description">Description (Optional)</label>
+                    <textarea id="group_description" name="group_description" class="form-control" rows="3"></textarea>
+                </div>
+                <button type="submit" class="submit-button">Create Group</button>
+            </form>
+        </div>
+        
+        <!-- Existing Groups -->
+        <div class="panel-section">
+            <h3><i class="fas fa-layer-group"></i> Your Groups</h3>
+            
+            {% if groups %}
+                <div class="groups-list">
+                    {% for group in groups %}
+                        <div class="group-card" data-group-id="{{ group.id }}">
+                            <div class="group-info">
+                                <h4>{{ group.name }}</h4>
+                                {% if group.description %}
+                                    <p>{{ group.description }}</p>
+                                {% else %}
+                                    <p class="text-muted">No description</p>
+                                {% endif %}
+                                <span class="group-badge">
+                                    <i class="fas fa-user-friends"></i> 
+                                    {% with count=0 %}
+                                        {% for companion in companions %}
+                                            {% if companion.group.id == group.id %}
+                                                {% with count=count|add:1 %}{% endwith %}
+                                            {% endif %}
+                                        {% endfor %}
+                                        {% if count == 1 %}
+                                            1 companion
+                                        {% else %}
+                                            {{ count }} companions
+                                        {% endif %}
+                                    {% endwith %}
+                                </span>
+                            </div>
+                            <div class="group-actions">
+                                <button class="action-button edit-button" onclick="showEditGroupForm('{{ group.id }}', '{{ group.name|escapejs }}', '{{ group.description|escapejs }}')">
+                                    <i class="fas fa-edit"></i>
+                                </button>
+                                <button class="action-button delete-button" onclick="confirmDeleteGroup('{{ group.id }}', '{{ group.name|escapejs }}')">
+                                    <i class="fas fa-trash-alt"></i>
+                                </button>
+                            </div>
+                        </div>
+                    {% endfor %}
+                </div>
+            {% else %}
+                <div class="no-groups">
+                    <i class="fas fa-layer-group fa-3x" style="color: #4a6741; margin-bottom: 20px;"></i>
+                    <h3>No groups created yet</h3>
+                    <p>Create groups to better organize your companions</p>
+                </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Edit Group Modal -->
+    <div id="edit-group-modal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <span class="close-modal" onclick="closeEditGroupModal()">&times;</span>
+            <h2 class="section-title"><i class="fas fa-edit"></i> Edit Group</h2>
+            
+            <form method="post" action="{% url 'companion' %}">
+                {% csrf_token %}
+                <input type="hidden" name="edit_group" value="true">
+                <input type="hidden" id="edit_group_id" name="group_id">
+                <div class="form-group">
+                    <label for="edit_group_name">Group Name*</label>
+                    <input type="text" id="edit_group_name" name="group_name" class="form-control" required>
+                </div>
+                <div class="form-group">
+                    <label for="edit_group_description">Description (Optional)</label>
+                    <textarea id="edit_group_description" name="group_description" class="form-control" rows="3"></textarea>
+                </div>
+                <div style="display: flex; justify-content: space-between; margin-top: 20px;">
+                    <button type="button" class="back-button" onclick="closeEditGroupModal()">Cancel</button>
+                    <button type="submit" class="submit-button">Save Changes</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    
+    <!-- Delete Group Form (Hidden) -->
+    <form id="delete-group-form" method="post" action="{% url 'companion' %}" style="display: none;">
+        {% csrf_token %}
+        <input type="hidden" name="delete_group" value="true">
+        <input type="hidden" id="delete_group_id" name="group_id">
+    </form>
+
+    <!-- Add this missing search view section -->
+    <div id="search-user-view" class="content-view" style="display: none;">
+        <div class="panel">
+            <h2 class="section-title"><i class="fas fa-search"></i> Find Registered Users</h2>
+            <p class="section-desc">Search for other registered users by email and send them companion requests.</p>
+            
+            <div class="search-form">
+                <div class="form-group">
+                    <label for="search-email">Email Address:</label>
+                    <div class="search-input-group">
+                        <input type="email" id="search-email" class="form-control" placeholder="Enter user's email address">
+                        <button id="search-user-btn" class="submit-button" onclick="searchUser()">Search</button>
+                    </div>
+                </div>
+                <div id="search-results" class="search-results" style="display: none;">
+                    <h3>Search Results</h3>
+                    <div id="user-result" class="user-result">
+                        <!-- Results will be shown here -->
+                    </div>
+                </div>
+                <div id="search-message" class="search-message" style="display: none;">
+                    <!-- Messages will be shown here -->
+                </div>
+                <div id="request-form" class="request-form" style="display: none;">
+                    <h3>Send Companion Request</h3>
+                    <div class="form-group">
+                        <label for="request-message">Optional Message:</label>
+                        <textarea id="request-message" class="form-control" rows="3" placeholder="Add a message to your request (optional)"></textarea>
+                    </div>
+                    <input type="hidden" id="recipient-id">
+                    <div style="display: flex; justify-content: space-between;">
+                        <button onclick="cancelRequest()" class="back-button">Cancel</button>
+                        <button onclick="sendCompanionRequest()" class="submit-button">Send Request</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add this modal HTML at the end of the body, before the closing body tag -->
+    <div id="search-modal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <span class="close-modal" onclick="closeSearchModal()">&times;</span>
+            <h2 class="section-title"><i class="fas fa-search"></i> Find Registered Users</h2>
+            <p class="section-desc">Search for other registered users by email and send them companion requests.</p>
+            
+            <div class="search-form">
+                <div class="form-group">
+                    <label for="modal-search-email">Email Address:</label>
+                    <div class="search-input-group">
+                        <input type="email" id="modal-search-email" class="form-control" placeholder="Enter user's email address">
+                        <button id="modal-search-button" class="submit-button" onclick="modalSearchUser()">Search</button>
+                    </div>
+                </div>
+                <div id="modal-search-results" class="search-results" style="display: none;">
+                    <h3>Search Results</h3>
+                    <div id="modal-user-result" class="user-result">
+                        <!-- Results will be shown here -->
+                    </div>
+                </div>
+                <div id="modal-search-message" class="search-message" style="display: none;">
+                    <!-- Messages will be shown here -->
+                </div>
+                <div id="modal-request-form" class="request-form" style="display: none;">
+                    <h3>Send Companion Request</h3>
+                    <div class="form-group">
+                        <label for="modal-companion-group">Add to Group (Optional):</label>
+                        <select id="modal-companion-group" class="form-control">
+                            <option value="">Select a group (optional)</option>
+                            {% for group in groups %}
+                                <option value="{{ group.id }}">{{ group.name }}</option>
+                            {% endfor %}
+                        </select>
+                        <small class="help-text">Select which group this companion will join if they accept your request</small>
+                    </div>
+                    <div class="form-group">
+                        <label for="modal-request-message">Optional Message:</label>
+                        <textarea id="modal-request-message" class="form-control" rows="3" placeholder="Add a message to your request (optional)"></textarea>
+                    </div>
+                    <input type="hidden" id="modal-recipient-id">
+                    <div style="display: flex; justify-content: space-between;">
+                        <button onclick="modalCancelRequest()" class="back-button">Cancel</button>
+                        <button onclick="modalSendCompanionRequest()" class="submit-button">Send Request</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Friends view section (this will be hidden by default) -->
+    <div id="friends-view" class="tab-content" style="display: none;">
+        <h2>My Connections</h2>
+        <p class="section-desc">These are registered users you've connected with through companion requests.</p>
+        
+        <!-- Group Filter Bar for Friends -->
+        <div class="group-filter-bar">
+            <div class="filter-label">Filter by group:</div>
+            <div class="filter-options">
+                <a href="javascript:void(0)" onclick="filterFriends('all')" class="filter-option active" data-group="all">All</a>
+                {% for group in groups %}
+                    <a href="javascript:void(0)" 
+                       onclick="filterFriends('{{ group.id }}')" 
+                       class="filter-option" 
+                       data-group="{{ group.id }}">
+                        {{ group.name }}
+                    </a>
+                {% endfor %}
+            </div>
+        </div>
+        
+        <!-- Friends list organized by groups -->
+        <div class="friends-list">
+            {% if organized_friends %}
+                <!-- Display friends with groups first -->
+                {% for group_id, group_data in organized_friends.by_group.items %}
+                    {% if group_data.friends %}
+                        <div class="group-section friends-group" data-group-id="{{ group_data.group.id }}">
+                            <h3 class="group-header">
+                                <i class="fas fa-layer-group"></i> {{ group_data.group.name }}
+                                <span class="group-member-count">{{ group_data.friends|length }} connection{{ group_data.friends|length|pluralize }}</span>
+                            </h3>
+                            
+                            {% for friend in group_data.friends %}
+                                <div class="friend-card" data-group-id="{{ group_data.group.id }}">
+                                    {% if friend.user.picture %}
+                                        <img src="{{ friend.user.picture.url }}" alt="{{ friend.user.first_name }}" class="friend-image">
+                                    {% else %}
+                                        <img src="/static/images/default-profile.png" alt="{{ friend.user.first_name }}" class="friend-image">
+                                    {% endif %}
+                                    <div class="friend-info">
+                                        <h3>{{ friend.user.first_name }} {{ friend.user.last_name }}</h3>
+                                        <p><strong>Email:</strong> {{ friend.user.email }}</p>
+                                        {% if friend.user.phone_number %}
+                                            <p><strong>Contact:</strong> {{ friend.user.phone_number }}</p>
+                                        {% endif %}
+                                        <p class="connection-info">
+                                            <i class="fas fa-calendar-alt"></i> Connected since {{ friend.created_at|date:"M d, Y" }}
+                                            {% if friend.direction == 'sent' %}
+                                                <span class="direction-badge sent">You sent request</span>
+                                            {% else %}
+                                                <span class="direction-badge received">Request received</span>
+                                            {% endif %}
+                                        </p>
+                                        <span class="companion-group-tag">
+                                            <i class="fas fa-layer-group"></i> {{ group_data.group.name }}
+                                        </span>
+                                    </div>
+                                    
+                                    <div class="friend-actions">
+                                        <button class="action-button message-button" onclick="alert('Messaging feature coming soon!')"><i class="fas fa-envelope"></i></button>
+                                        <button class="action-button disconnect-button" onclick="confirmDisconnect('{{ friend.request_id }}')"><i class="fas fa-user-minus"></i></button>
+                                    </div>
+                                </div>
+                            {% endfor %}
+                        </div>
+                    {% endif %}
+                {% endfor %}
+                
+                <!-- Display friends without a group -->
+                {% if organized_friends.no_group %}
+                    <div class="group-section friends-group" data-group-id="none">
+                        <h3 class="group-header">
+                            <i class="fas fa-users"></i> Ungrouped Connections
+                            <span class="group-member-count">{{ organized_friends.no_group|length }} connection{{ organized_friends.no_group|length|pluralize }}</span>
+                        </h3>
+                        
+                        {% for friend in organized_friends.no_group %}
+                            <div class="friend-card" data-group-id="none">
+                                {% if friend.user.picture %}
+                                    <img src="{{ friend.user.picture.url }}" alt="{{ friend.user.first_name }}" class="friend-image">
+                                {% else %}
+                                    <img src="/static/images/default-profile.png" alt="{{ friend.user.first_name }}" class="friend-image">
+                                {% endif %}
+                                <div class="friend-info">
+                                    <h3>{{ friend.user.first_name }} {{ friend.user.last_name }}</h3>
+                                    <p><strong>Email:</strong> {{ friend.user.email }}</p>
+                                    {% if friend.user.phone_number %}
+                                        <p><strong>Contact:</strong> {{ friend.user.phone_number }}</p>
+                                    {% endif %}
+                                    <p class="connection-info">
+                                        <i class="fas fa-calendar-alt"></i> Connected since {{ friend.created_at|date:"M d, Y" }}
+                                        {% if friend.direction == 'sent' %}
+                                            <span class="direction-badge sent">You sent request</span>
+                                        {% else %}
+                                            <span class="direction-badge received">Request received</span>
+                                        {% endif %}
+                                    </p>
+                                </div>
+                                
+                                <div class="friend-actions">
+                                    <button class="action-button message-button" onclick="alert('Messaging feature coming soon!')"><i class="fas fa-envelope"></i></button>
+                                    <button class="action-button disconnect-button" onclick="confirmDisconnect('{{ friend.request_id }}')"><i class="fas fa-user-minus"></i></button>
+                                </div>
+                            </div>
+                        {% endfor %}
+                    </div>
+                {% endif %}
+                
+            {% elif friends %}
+                <!-- Fallback to original flat friends display -->
+                {% for friend in friends %}
+                    <div class="friend-card">
+                        {% if friend.user.picture %}
+                            <img src="{{ friend.user.picture.url }}" alt="{{ friend.user.first_name }}" class="friend-image">
+                        {% else %}
+                            <img src="/static/images/default-profile.png" alt="{{ friend.user.first_name }}" class="friend-image">
+                        {% endif %}
+                        <div class="friend-info">
+                            <h3>{{ friend.user.first_name }} {{ friend.user.last_name }}</h3>
+                            <p><strong>Email:</strong> {{ friend.user.email }}</p>
+                            {% if friend.user.phone_number %}
+                                <p><strong>Contact:</strong> {{ friend.user.phone_number }}</p>
+                            {% endif %}
+                            <p class="connection-info">
+                                <i class="fas fa-calendar-alt"></i> Connected since {{ friend.created_at|date:"M d, Y" }}
+                                {% if friend.direction == 'sent' %}
+                                    <span class="direction-badge sent">You sent request</span>
+                                {% else %}
+                                    <span class="direction-badge received">Request received</span>
+                                {% endif %}
+                            </p>
+                            {% if friend.group %}
+                                <span class="companion-group-tag">
+                                    <i class="fas fa-layer-group"></i> {{ friend.group.name }}
+                                </span>
+                            {% endif %}
+                        </div>
+                        
+                        <div class="friend-actions">
+                            <button class="action-button message-button" onclick="alert('Messaging feature coming soon!')"><i class="fas fa-envelope"></i></button>
+                            <button class="action-button disconnect-button" onclick="confirmDisconnect('{{ friend.request_id }}')"><i class="fas fa-user-minus"></i></button>
+                        </div>
+                    </div>
+                {% endfor %}
+            {% else %}
+                <div class="no-friends">
+                    <i class="fas fa-user-friends fa-3x" style="color: #4a6741; margin-bottom: 20px;"></i>
+                    <h3>No connections yet</h3>
+                    <p>You haven't connected with any other users yet. Use the "Find User" feature to search for other registered users and send them companion requests.</p>
+                    <button class="submit-button" onclick="openSearchModal()">
+                        <i class="fas fa-search"></i> Find Users
+                    </button>
+                </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Combined View - This merges My Companions and My Connections sections -->
+    <div id="combined-view" class="tab-content" style="display: block;">
+        <h2>All My People</h2>
+        <p class="section-desc">View and manage all your connections and companions in one place.</p>
+        
+        <!-- Group Filter Bar for Combined View -->
+        <div class="group-filter-bar">
+            <div class="filter-label">Filter by group:</div>
+            <div class="filter-options">
+                <a href="javascript:void(0)" onclick="filterPeople('all')" class="filter-option active" data-group="all">All</a>
+                {% for group in groups %}
+                    <a href="javascript:void(0)" 
+                       onclick="filterPeople('{{ group.id }}')" 
+                       class="filter-option" 
+                       data-group="{{ group.id }}">
+                        {{ group.name }}
+                    </a>
+                {% endfor %}
+            </div>
+        </div>
+        
+        <!-- Combined list organized by groups -->
+        <div class="people-list">
+            {% if organized_companions.by_group or organized_friends.by_group %}
+                <!-- Display people by groups -->
+                {% for group_id, group_data in organized_companions.by_group.items %}
+                    <div class="group-section people-group" data-group-id="{{ group_data.group.id }}">
+                        <h3 class="group-header">
+                            <i class="fas fa-layer-group"></i> {{ group_data.group.name }}
+                            <span class="group-member-count">
+                                {% with companion_count=group_data.companions|length %}
+                                {% with friend_count=0 %}
+                                    {% if organized_friends.by_group|get_item:group_id %}
+                                        {% with friend_count=organized_friends.by_group|get_item:group_id|get_item:'friends'|length %}{% endwith %}
+                                    {% endif %}
+                                    {% with total_count=companion_count|add:friend_count %}
+                                        {{ total_count }} person{{ total_count|pluralize }}
+                                    {% endwith %}
+                                {% endwith %}
+                                {% endwith %}
+                            </span>
+                        </h3>
+                        
+                        {% for companion in group_data.companions %}
+                            <div class="person-card companion-card" data-group-id="{{ group_data.group.id }}" data-type="companion">
+                                {% if companion.picture %}
+                                    <img src="{{ companion.picture.url }}" alt="{{ companion.first_name }}" class="person-image">
+                                {% else %}
+                                    <img src="/static/images/default-profile.png" alt="{{ companion.first_name }}" class="person-image">
+                                {% endif %}
+                                <div class="person-info">
+                                    <h3>{{ companion.first_name }} {{ companion.last_name }}</h3>
+                                    <p><strong>Email:</strong> {{ companion.email }}</p>
+                                    {% if companion.phone_number %}
+                                        <p><strong>Phone:</strong> {{ companion.phone_number }}</p>
+                                    {% endif %}
+                                    {% if companion.age %}
+                                        <p><strong>Age:</strong> {{ companion.age }} ({{ companion.age_label }})</p>
+                                    {% endif %}
+                                    <span class="person-type-badge companion">Your Companion</span>
+                                    <span class="companion-group-tag">
+                                        <i class="fas fa-layer-group"></i> {{ group_data.group.name }}
+                                    </span>
+                                </div>
+                                
+                                <div class="person-actions">
+                                    <a href="{% url 'edit_companion' companion.guest_id %}" class="action-button edit-button">
+                                        <i class="fas fa-edit"></i>
+                                    </a>
+                                    <button class="action-button delete-button" onclick="confirmDelete('{{ companion.guest_id }}')">
+                                        <i class="fas fa-trash-alt"></i>
+                                    </button>
+                                </div>
+                            </div>
+                        {% endfor %}
+                        
+                        <!-- Include friends in the same group too -->
+                        {% if organized_friends.by_group|get_item:group_id %}
+                            {% for friend in organized_friends.by_group|get_item:group_id|get_item:'friends' %}
+                                <div class="person-card friend-card" data-group-id="{{ group_data.group.id }}" data-type="friend">
+                                    {% if friend.user.picture %}
+                                        <img src="{{ friend.user.picture.url }}" alt="{{ friend.user.first_name }}" class="person-image">
+                                    {% else %}
+                                        <img src="/static/images/default-profile.png" alt="{{ friend.user.first_name }}" class="person-image">
+                                    {% endif %}
+                                    <div class="person-info">
+                                        <h3>{{ friend.user.first_name }} {{ friend.user.last_name }}</h3>
+                                        <p><strong>Email:</strong> {{ friend.user.email }}</p>
+                                        {% if friend.user.phone_number %}
+                                            <p><strong>Contact:</strong> {{ friend.user.phone_number }}</p>
+                                        {% endif %}
+                                        <p class="connection-info">
+                                            <i class="fas fa-calendar-alt"></i> Connected since {{ friend.created_at|date:"M d, Y" }}
+                                        </p>
+                                        <span class="person-type-badge friend">Connected User</span>
+                                        <span class="companion-group-tag">
+                                            <i class="fas fa-layer-group"></i> {{ group_data.group.name }}
+                                        </span>
+                                    </div>
+                                    
+                                    <div class="person-actions">
+                                        <button class="action-button message-button" onclick="alert('Messaging feature coming soon!')"><i class="fas fa-envelope"></i></button>
+                                        <button class="action-button disconnect-button" onclick="confirmDisconnect('{{ friend.request_id }}')"><i class="fas fa-user-minus"></i></button>
+                                    </div>
+                                </div>
+                            {% endfor %}
+                        {% endif %}
+                    </div>
+                {% endfor %}
+                
+                <!-- Check if there are friend groups that weren't covered by companion groups -->
+                {% for group_id, group_data in organized_friends.by_group.items %}
+                    {% if not organized_companions.by_group|get_item:group_id %}
+                        <div class="group-section people-group" data-group-id="{{ group_data.group.id }}">
+                            <h3 class="group-header">
+                                <i class="fas fa-layer-group"></i> {{ group_data.group.name }}
+                                <span class="group-member-count">{{ group_data.friends|length }} person{{ group_data.friends|length|pluralize }}</span>
+                            </h3>
+                            
+                            {% for friend in group_data.friends %}
+                                <div class="person-card friend-card" data-group-id="{{ group_data.group.id }}" data-type="friend">
+                                    {% if friend.user.picture %}
+                                        <img src="{{ friend.user.picture.url }}" alt="{{ friend.user.first_name }}" class="person-image">
+                                    {% else %}
+                                        <img src="/static/images/default-profile.png" alt="{{ friend.user.first_name }}" class="person-image">
+                                    {% endif %}
+                                    <div class="person-info">
+                                        <h3>{{ friend.user.first_name }} {{ friend.user.last_name }}</h3>
+                                        <p><strong>Email:</strong> {{ friend.user.email }}</p>
+                                        {% if friend.user.phone_number %}
+                                            <p><strong>Contact:</strong> {{ friend.user.phone_number }}</p>
+                                        {% endif %}
+                                        <p class="connection-info">
+                                            <i class="fas fa-calendar-alt"></i> Connected since {{ friend.created_at|date:"M d, Y" }}
+                                        </p>
+                                        <span class="person-type-badge friend">Connected User</span>
+                                        <span class="companion-group-tag">
+                                            <i class="fas fa-layer-group"></i> {{ group_data.group.name }}
+                                        </span>
+                                    </div>
+                                    
+                                    <div class="person-actions">
+                                        <button class="action-button message-button" onclick="alert('Messaging feature coming soon!')"><i class="fas fa-envelope"></i></button>
+                                        <button class="action-button disconnect-button" onclick="confirmDisconnect('{{ friend.request_id }}')"><i class="fas fa-user-minus"></i></button>
+                                    </div>
+                                </div>
+                            {% endfor %}
+                        </div>
+                    {% endif %}
+                {% endfor %}
+                
+                <!-- Display ungrouped companions -->
+                {% if organized_companions.no_group %}
+                    <div class="group-section people-group" data-group-id="none">
+                        <h3 class="group-header">
+                            <i class="fas fa-user"></i> Ungrouped Companions
+                            <span class="group-member-count">{{ organized_companions.no_group|length }} person{{ organized_companions.no_group|length|pluralize }}</span>
+                        </h3>
+                        
+                        {% for companion in organized_companions.no_group %}
+                            <div class="person-card companion-card" data-group-id="none" data-type="companion">
+                                {% if companion.picture %}
+                                    <img src="{{ companion.picture.url }}" alt="{{ companion.first_name }}" class="person-image">
+                                {% else %}
+                                    <img src="/static/images/default-profile.png" alt="{{ companion.first_name }}" class="person-image">
+                                {% endif %}
+                                <div class="person-info">
+                                    <h3>{{ companion.first_name }} {{ companion.last_name }}</h3>
+                                    <p><strong>Email:</strong> {{ companion.email }}</p>
+                                    {% if companion.phone_number %}
+                                        <p><strong>Phone:</strong> {{ companion.phone_number }}</p>
+                                    {% endif %}
+                                    {% if companion.age %}
+                                        <p><strong>Age:</strong> {{ companion.age }} ({{ companion.age_label }})</p>
+                                    {% endif %}
+                                    <span class="person-type-badge companion">Your Companion</span>
+                                </div>
+                                
+                                <div class="person-actions">
+                                    <a href="{% url 'edit_companion' companion.guest_id %}" class="action-button edit-button">
+                                        <i class="fas fa-edit"></i>
+                                    </a>
+                                    <button class="action-button delete-button" onclick="confirmDelete('{{ companion.guest_id }}')">
+                                        <i class="fas fa-trash-alt"></i>
+                                    </button>
+                                </div>
+                            </div>
+                        {% endfor %}
+                    </div>
+                {% endif %}
+                
+                <!-- Display ungrouped friends -->
+                {% if organized_friends.no_group %}
+                    <div class="group-section people-group" data-group-id="none-friends">
+                        <h3 class="group-header">
+                            <i class="fas fa-user-friends"></i> Ungrouped Connections
+                            <span class="group-member-count">{{ organized_friends.no_group|length }} person{{ organized_friends.no_group|length|pluralize }}</span>
+                        </h3>
+                        
+                        {% for friend in organized_friends.no_group %}
+                            <div class="person-card friend-card" data-group-id="none" data-type="friend">
+                                {% if friend.user.picture %}
+                                    <img src="{{ friend.user.picture.url }}" alt="{{ friend.user.first_name }}" class="person-image">
+                                {% else %}
+                                    <img src="/static/images/default-profile.png" alt="{{ friend.user.first_name }}" class="person-image">
+                                {% endif %}
+                                <div class="person-info">
+                                    <h3>{{ friend.user.first_name }} {{ friend.user.last_name }}</h3>
+                                    <p><strong>Email:</strong> {{ friend.user.email }}</p>
+                                    {% if friend.user.phone_number %}
+                                        <p><strong>Contact:</strong> {{ friend.user.phone_number }}</p>
+                                    {% endif %}
+                                    <p class="connection-info">
+                                        <i class="fas fa-calendar-alt"></i> Connected since {{ friend.created_at|date:"M d, Y" }}
+                                    </p>
+                                    <span class="person-type-badge friend">Connected User</span>
+                                </div>
+                                
+                                <div class="person-actions">
+                                    <button class="action-button message-button" onclick="alert('Messaging feature coming soon!')"><i class="fas fa-envelope"></i></button>
+                                    <button class="action-button disconnect-button" onclick="confirmDisconnect('{{ friend.request_id }}')"><i class="fas fa-user-minus"></i></button>
+                                </div>
+                            </div>
+                        {% endfor %}
+                    </div>
+                {% endif %}
+            {% else %}
+                <!-- Display when no companions or connections exist -->
+                <div class="no-people">
+                    <i class="fas fa-users fa-3x" style="color: #4a6741; margin-bottom: 20px;"></i>
+                    <h3>No companions or connections yet</h3>
+                    <p>Add companions or connect with other users to get started</p>
+                </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Add CSS for the unified view -->
+    <style>
+        /* Person card styling - unified for both companions and friends */
+        .person-card {
+            display: flex;
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            background-color: #fff;
+            padding: 15px;
+            margin-bottom: 15px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        
+        .person-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        }
+        
+        .person-image {
+            width: 70px;
+            height: 70px;
+            border-radius: 50%;
+            object-fit: cover;
+            margin-right: 15px;
+        }
+        
+        .person-info {
+            flex: 1;
+        }
+        
+        .person-info h3 {
+            margin: 0 0 5px 0;
+            color: #4a6741;
+        }
+        
+        .person-info p {
+            margin: 0 0 5px 0;
+            color: #555;
+        }
+        
+        .person-actions {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+        
+        .person-type-badge {
+            display: inline-block;
+            padding: 3px 8px;
+            border-radius: 12px;
+            font-size: 0.75rem;
+            margin-right: 5px;
+        }
+        
+        .person-type-badge.companion {
+            background-color: #4a6741;
+            color: white;
+        }
+        
+        .person-type-badge.friend {
+            background-color: #3498db;
+            color: white;
+        }
+    </style>
+
+    <!-- Add JavaScript for combined filtering -->
+    <script>
+    // Replace the old separate filter functions with one unified function
+    function filterPeople(groupId) {
+        // Update active class on filter options
+        $('.filter-option').removeClass('active');
+        $('.filter-option[data-group="' + groupId + '"]').addClass('active');
+        
+        if (groupId === 'all') {
+            // Show all group sections
+            $('.people-group').show();
+        } else {
+            // Hide all and show only matching group
+            $('.people-group').hide();
+            $('.people-group[data-group-id="' + groupId + '"]').show();
+        }
+    }
+
+    // Update the switchTab function to handle the combined view
+    function switchTab(viewName) {
+        // Update active tab
+        $('.view-tab').removeClass('active');
+        $('.view-tab[data-view="' + viewName + '"]').addClass('active');
+        
+        // Hide all content views
+        $('.tab-content').hide();
+        
+        // Show the selected view
+        $('#' + viewName + '-view').show();
+        
+        // Reset filters to show all when switching views
+        if (viewName === 'combined') {
+            filterPeople('all');
+        }
+    }
+    </script>
+
+    <!-- Add this code at the top of the file, just after {% load static %} -->
+    {% load static %}
+
+    {% comment %} Define custom template filter for dictionary lookup {% endcomment %}
+    {% with custom_get_item=True %}
+    {% comment %}
+    This is a template variable workaround to implement dictionary key lookups with variables
+    Usage: dict|get_item:key_var
+    {% endcomment %}
+    {% endwith %}
+
+    <script>
+    // Custom dictionary lookup function for JavaScript
+    function getItemFromDict(dict, key) {
+        return dict && dict[key] ? dict[key] : null;
+    }
+
+    // Make it globally available
+    window.getItemFromDict = getItemFromDict;
+    </script>
+    
+    <!-- Animation and UX enhancement script -->
+    <script>
+        // Animation and UX enhancements
+        document.addEventListener('DOMContentLoaded', function() {
+            // Initialize animations by adding a class to the body when page is loaded
+            document.body.classList.add('page-loaded');
+            
+            // Handle button click animations
+            document.querySelectorAll('.action-button').forEach(button => {
+                button.addEventListener('click', function() {
+                    this.classList.add('clicked');
+                    setTimeout(() => {
+                        this.classList.remove('clicked');
+                    }, 300);
+                });
+            });
+            
+            // Add loading animation to submit buttons
+            document.querySelectorAll('form').forEach(form => {
+                form.addEventListener('submit', function() {
+                    const submitBtn = this.querySelector('.submit-button');
+                    if (submitBtn) {
+                        submitBtn.classList.add('loading');
+                        submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Processing...';
+                    }
+                });
+            });
+        });
+    </script>
+
+    <script>
+    // Function to switch between people tabs (companions & connected users)
+    function switchPeopleTab(tabName) {
+        // Update active tab buttons
+        document.querySelectorAll('.view-tab').forEach(tab => {
+            if (tab.getAttribute('data-view') === tabName) {
+                tab.classList.add('active');
+            } else {
+                tab.classList.remove('active');
+            }
+        });
+        
+        // Hide all content tabs
+        document.querySelectorAll('.people-content').forEach(content => {
+            content.style.display = 'none';
+        });
+        
+        // Show selected content tab
+        if (tabName === 'companions') {
+            document.getElementById('companions-content').style.display = 'block';
+        } else if (tabName === 'connected') {
+            document.getElementById('connected-content').style.display = 'block';
+        }
+    }
+    
+    // Function to filter connected users by type
+    function filterConnectedUsers(filterType) {
+        // Update active filter
+        document.querySelectorAll('#connected-content .filter-option').forEach(option => {
+            if (option.getAttribute('data-group') === filterType) {
+                option.classList.add('active');
+            } else {
+                option.classList.remove('active');
+            }
+        });
+        
+        // Show/hide cards based on filter
+        const cards = document.querySelectorAll('.friend-card');
+        if (filterType === 'all') {
+            cards.forEach(card => {
+                card.style.display = 'flex';
+            });
+        } else {
+            cards.forEach(card => {
+                if (card.getAttribute('data-connection-type') === filterType) {
+                    card.style.display = 'flex';
+                } else {
+                    card.style.display = 'none';
+                }
+            });
+        }
+    }
+    
+    // Updated section switching function to work with the new structure
+    function switchSection(sectionId) {
+        // Update active section header
+        document.querySelectorAll('.section-header').forEach(header => {
+            header.classList.remove('active');
+        });
+        document.querySelector(`.section-header[data-section="${sectionId}"]`).classList.add('active');
+        
+        // Update active section content
+        document.querySelectorAll('.management-section').forEach(section => {
+            section.classList.remove('active');
+        });
+        document.getElementById(`${sectionId}-section`).classList.add('active');
+        
+        // Reset to companions tab when switching to view-people
+        if (sectionId === 'view-people') {
+            switchPeopleTab('companions');
+        }
+    }
+    </script>
+
+    <script>
+    // Function to request QR code generation and sending via email
+    function sendCompanionQRCode() {
+        // Show loading indicator
+        const button = document.querySelector('button[onclick="sendCompanionQRCode()"]');
+        const originalText = button.innerHTML;
+        button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Sending...';
+        button.disabled = true;
+        
+        // Get CSRF token
+        const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]').value;
+        
+        // Make AJAX request to get fresh companion data
+        fetch('{% url "get_companions" %}', {
+            method: 'GET',
+            headers: {
+                'X-Requested-With': 'XMLHttpRequest'
+            }
+        })
+        .then(response => response.json())
+        .then(() => {
+            // Now that we have refreshed the data, request the QR code
+            return fetch('{% url "companion_qr_code" %}', {
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': csrfToken,
+                    'Content-Type': 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest'
+                },
+                body: JSON.stringify({
+                    include_companions: true,
+                    debug_mode: true,
+                    refresh_data: true
+                })
+            });
+        })
+        .then(response => {
+            if (!response.ok) {
+                throw new Error(`HTTP error! Status: ${response.status}`);
+            }
+            return response.json();
+        })
+        .then(data => {
+            // Reset button state
+            button.innerHTML = originalText;
+            button.disabled = false;
+            
+            // Show success or error message
+            if (data.success) {
+                const successMessage = data.message + ' Remember to request a new QR code whenever you add new companions to keep your information current.';
+                alert(successMessage);
+            } else {
+                console.error('QR Code Error:', data.error);
+                alert('Error: ' + data.error);
+                
+                // Try debugging endpoint if we get an error
+                fetch('{% url "debug_guest_model" %}')
+                    .then(response => response.json())
+                    .then(debug => {
+                        console.log('Debug info:', debug);
+                    })
+                    .catch(debugError => {
+                        console.error('Debug endpoint error:', debugError);
+                    });
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            button.innerHTML = originalText;
+            button.disabled = false;
+            alert('An error occurred while sending the request. Please try again. ' + error.message);
+            
+            // Call debug endpoint on error
+            fetch('{% url "debug_guest_model" %}')
+                .then(response => response.json())
+                .then(debug => {
+                    console.log('Debug info on error:', debug);
+                })
+                .catch(debugError => {
+                    console.error('Debug endpoint error:', debugError);
+                });
+        });
+    }
+    </script>
+</body>
+</html> 
+
+

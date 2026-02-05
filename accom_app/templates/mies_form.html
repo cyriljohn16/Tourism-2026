@@ -1,0 +1,1025 @@
+<!DOCTYPE html>
+{% load static %}
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>MIES Form - Meetings, Incentives, Events and Services</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        :root {
+            /* Brand Colors */
+            --primary-color: #875a34;    /* Main brand color */
+            --primary-light: #e99c59;   /* Lighter version for accents */
+            --primary-dark: #6d4827;    /* Darker version for hover states */
+            --secondary-color: #8c6e5d; /* Secondary brand color */
+            --accent-color: #e99c59;    /* Using primary-light instead of orange */
+            
+            /* Status Colors */
+            --success-color: #34a853;   /* Green for success states */
+            --warning-color: #fbbc05;   /* Yellow for warnings */
+            --error-color: #ea4335;     /* Red for errors */
+            --info-color: #4285f4;      /* Blue for information */
+            
+            /* Neutral Colors */
+            --bg-color: #f4f7fc;        /* Light background */
+            --text-dark: #333;          /* Dark text */
+            --text-medium: #666;        /* Medium text */
+            --text-light: #9e9e9e;      /* Light text */
+            --white: #fff;              /* White */
+        }
+
+        /* Basic Styles */
+        body {
+            font-family: 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background-color: var(--bg-color);
+            margin: 0;
+            padding: 0;
+            color: var(--text-dark);
+            line-height: 1.5;
+        }
+        .content {
+            padding: 32px;
+            box-sizing: border-box;
+            width: 100%;
+        }
+        .container {
+            max-width: 900px;
+            margin: 20px auto;
+            padding: 30px;
+            background-color: var(--white);
+            border: 1px solid #ddd;
+            border-radius: 10px;
+            box-shadow: 0px 4px 10px rgba(0, 0, 0, 0.1);
+        }
+        h1, h2, h3 {
+            text-align: center;
+            color: var(--text-dark);
+            margin-bottom: 20px;
+        }
+        
+        /* Form Styles */
+        .form-section {
+            background-color: var(--bg-color);
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+        
+        .form-group {
+            margin-bottom: 15px;
+        }
+        
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+            color: var(--text-dark);
+        }
+        
+        .form-control {
+            width: 100%;
+            padding: 8px 12px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-size: 16px;
+        }
+        
+        .form-row {
+            display: flex;
+            gap: 15px;
+        }
+        
+        .form-row .form-group {
+            flex: 1;
+        }
+        
+        /* Company and Representative Styles */
+        .company-card {
+            background-color: var(--white);
+            border-radius: 10px;
+            margin-bottom: 20px;
+            overflow: hidden;
+            border-left: 4px solid var(--primary-color);
+            box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+            transition: all 0.2s ease;
+        }
+        
+        .company-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        }
+        
+        .company-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px 20px;
+            background-color: var(--white);
+            border-bottom: 1px solid #f0f0f0;
+        }
+        
+        .company-name {
+            font-weight: bold;
+            font-size: 18px;
+            color: var(--primary-color);
+        }
+        
+        .company-total {
+            font-weight: bold;
+            color: var(--primary-dark);
+        }
+        
+        .company-actions {
+            display: flex;
+            gap: 10px;
+        }
+        
+        .representatives-container {
+            background-color: var(--white);
+            padding: 10px 20px;
+        }
+        
+        .rep-label {
+            font-weight: bold;
+            margin-bottom: 10px;
+            color: var(--text-medium);
+        }
+        
+        .representative-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px 10px;
+            margin-bottom: 5px;
+            border-bottom: 1px dashed #f0f0f0;
+        }
+        
+        .representative-row:last-child {
+            border-bottom: none;
+        }
+        
+        .rep-name {
+            flex: 1;
+            padding-left: 15px;
+        }
+        
+        .rep-actions {
+            display: flex;
+            gap: 10px;
+            margin-left: 10px;
+        }
+        
+        .rep-count {
+            width: 80px;
+            text-align: center;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .rep-count input {
+            width: 60px;
+            text-align: center;
+            padding: 5px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-size: 14px;
+        }
+        
+        .btn {
+            background-color: var(--primary-color);
+            color: white;
+            border: none;
+            border-radius: 5px;
+            padding: 8px 15px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            font-size: 14px;
+            transition: background-color 0.3s;
+        }
+        
+        .btn:hover {
+            background-color: var(--primary-dark);
+        }
+        
+        .btn-add-rep {
+            margin: 10px 0 5px auto;
+            display: block;
+        }
+        
+        .btn-add-company {
+            margin: 20px auto;
+            display: block;
+            padding: 10px 20px;
+            font-size: 16px;
+        }
+        
+        .btn-submit {
+            margin: 20px 0 0 auto;
+            display: block;
+            padding: 10px 20px;
+            font-size: 16px;
+            background-color: var(--primary-color);
+        }
+        
+        .icon-btn {
+            background: none;
+            border: none;
+            cursor: pointer;
+            font-size: 18px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s ease;
+            color: var(--primary-color);
+        }
+        
+        .icon-btn:hover {
+            color: var(--primary-dark);
+            transform: scale(1.1);
+        }
+        
+        /* Meeting Attendance Sheet Styles */
+        .attendance-sheet {
+            margin-top: 40px;
+        }
+        
+        .attendance-companies {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+        
+        .attendance-company-card {
+            margin-bottom: 0;
+        }
+        
+        .attendance-row {
+            padding: 8px 0;
+        }
+        
+        .no-data-message {
+            text-align: center;
+            color: var(--text-medium);
+            padding: 20px;
+            background-color: var(--bg-color);
+            border-radius: 10px;
+        }
+        
+        .total-section {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-end;
+        }
+        
+        .grand-total-card {
+            background-color: var(--primary-light);
+            color: var(--text-dark);
+            padding: 15px 25px;
+            border-radius: 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            width: 250px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+        }
+        
+        .grand-total-label {
+            font-weight: bold;
+            font-size: 18px;
+        }
+        
+        .grand-total-value {
+            font-weight: bold;
+            font-size: 22px;
+            color: var(--primary-dark);
+        }
+        
+        /* Table styles */
+        .even-row {
+            background-color: #f9f9f9;
+        }
+        
+        .odd-row {
+            background-color: #ffffff;
+        }
+    </style>
+    <!-- Include jQuery -->
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+</head>
+<body>
+    {% csrf_token %}
+    <div class="content">
+        <div class="container">
+            <h1>MIES - Meetings, Incentives, Events and Services</h1>
+            <h2>Companies and Representatives</h2>
+            
+            <!-- Companies and Representatives Section -->
+            <div id="companies-section">
+                {% if companies %}
+                    {% for company in companies %}
+                    <div class="company-card">
+                        <div class="company-header">
+                            <div class="company-name">{{ company.name }}</div>
+                            <div class="company-actions">
+                                <button type="button" class="icon-btn" onclick="editCompany('{{ company.id }}')">
+                                    <i class="fas fa-edit"></i>
+                                </button>
+                                <button type="button" class="icon-btn" onclick="deleteCompany('{{ company.id }}')">
+                                    <i class="fas fa-trash-alt"></i>
+                                </button>
+                            </div>
+                        </div>
+                        
+                        <div class="representatives-container">
+                            <div class="rep-label">Representatives:</div>
+                            {% for rep in representatives %}
+                                {% if rep.company_id == company.id and rep.name %}
+                                <div class="representative-row" data-rep-id="{{ rep.id }}">
+                                    <div class="rep-name">{{ rep.name }}</div>
+                                    <div class="rep-actions">
+                                        <button type="button" class="icon-btn" onclick="editRepresentative('{{ rep.id }}')">
+                                            <i class="fas fa-edit"></i>
+                                        </button>
+                                        <button type="button" class="icon-btn" onclick="deleteRepresentative('{{ rep.id }}')">
+                                            <i class="fas fa-trash-alt"></i>
+                                        </button>
+                                    </div>
+                                </div>
+                                {% endif %}
+                            {% endfor %}
+                            
+                            <button type="button" class="btn btn-add-rep" data-company-id="{{ company.id }}">
+                                <i class="fas fa-plus"></i> Add Representative
+                            </button>
+                        </div>
+                    </div>
+                    {% endfor %}
+                {% else %}
+                    <p>No companies found. Add your first company below.</p>
+                {% endif %}
+                
+                <button type="button" class="btn btn-add-company" id="addCompanyBtn">
+                    <i class="fas fa-plus"></i> Add Company
+                </button>
+            </div>
+            
+            <!-- Meeting Attendance Sheet -->
+            <div class="attendance-sheet">
+                <h2>Meeting Attendance Sheet</h2>
+                
+                <form id="attendanceForm" action="{% url 'accom_app:create_mies_event' %}" method="POST">
+                    {% csrf_token %}
+                    
+                    <!-- Meeting Details -->
+                    <div class="form-section">
+                        <div class="form-group">
+                            <label for="event_name">Meeting Name:</label>
+                            <input type="text" id="event_name" name="event_name" class="form-control" required>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="meeting_place">Meeting Place:</label>
+                            <input type="text" id="meeting_place" name="meeting_place" class="form-control">
+                        </div>
+                        
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="time_start">Start Date and Time:</label>
+                                <input type="datetime-local" id="time_start" name="time_start" class="form-control" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="time_end">End Date and Time:</label>
+                                <input type="datetime-local" id="time_end" name="time_end" class="form-control" required>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Attendance Grid -->
+                    <div class="attendance-companies">
+                        {% if companies %}
+                            {% for company in companies %}
+                            <div class="company-card attendance-company-card" id="attendance-company-{{ company.id }}">
+                                <div class="company-header">
+                                    <div class="company-name">{{ company.name }}</div>
+                                    <div class="company-total">
+                                        <span>Total: </span>
+                                        <input type="number" 
+                                               id="company-total-{{ company.id }}" 
+                                               name="company_total_{{ company.id }}"
+                                               class="company-total-input" 
+                                               value="0" 
+                                               readonly 
+                                               style="width: 60px; border: none; background: transparent; font-weight: bold; color: var(--primary-dark); text-align: center;">
+                                    </div>
+                                </div>
+                                
+                                <div class="representatives-container">
+                                    {% for rep in representatives %}
+                                        {% if rep.company_id == company.id and rep.name %}
+                                        <div class="representative-row" data-rep-id="{{ rep.id }}">
+                                            <div class="rep-name">{{ rep.name }}</div>
+                                            <div class="rep-count">
+                                                <input type="number" 
+                                                       name="attendance_{{ company.id }}_{{ rep.id }}" 
+                                                       min="0" 
+                                                       value="0" 
+                                                       class="attendance-input" 
+                                                       data-company-id="{{ company.id }}"
+                                                       onchange="updateTotals()">
+                                            </div>
+                                        </div>
+                                        {% endif %}
+                                    {% endfor %}
+                                </div>
+                            </div>
+                            {% endfor %}
+                        {% else %}
+                            <p class="no-data-message">No companies and representatives found. Add companies and representatives first.</p>
+                        {% endif %}
+                    </div>
+                    
+                    <!-- Grand Total -->
+                    <div class="total-section">
+                        <div class="grand-total-card">
+                            <div class="grand-total-label">Grand Total:</div>
+                            <div class="grand-total-value">
+                                <input type="number" 
+                                       id="grand-total" 
+                                       value="0" 
+                                       readonly 
+                                       style="width: 80px; border: none; background: transparent; font-weight: bold; font-size: 22px; color: var(--primary-dark); text-align: right;">
+                            </div>
+                        </div>
+                        
+                        <!-- Hidden fields for form submission -->
+                        <input type="hidden" name="subtotal" id="subtotal-input" value="0">
+                        <input type="hidden" name="total" id="total-input" value="0">
+                        <input type="hidden" name="grandtotal" id="grandtotal-input" value="0">
+                        
+                        <button type="submit" class="btn btn-submit">Submit Attendance</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+    
+    <div class="content">
+        <div class="container">
+            <h2>All Meeting Records</h2>
+            
+            <div class="form-section">
+                <table style="width: 100%; border-collapse: collapse;">
+                    <thead>
+                        <tr style="background-color: var(--primary-light); font-weight: bold;">
+                            <th style="padding: 8px; border: 1px solid #ddd; text-align: left;">ID</th>
+                            <th style="padding: 8px; border: 1px solid #ddd; text-align: left;">Company</th>
+                            <th style="padding: 8px; border: 1px solid #ddd; text-align: left;">Representative</th>
+                            <th style="padding: 8px; border: 1px solid #ddd; text-align: left;">Event Name</th>
+                            <th style="padding: 8px; border: 1px solid #ddd; text-align: left;">Meeting Place</th>
+                            <th style="padding: 8px; border: 1px solid #ddd; text-align: left;">Time Start</th>
+                            <th style="padding: 8px; border: 1px solid #ddd; text-align: left;">Time End</th>
+                            <th style="padding: 8px; border: 1px solid #ddd; text-align: right;">Subtotal</th>
+                            <th style="padding: 8px; border: 1px solid #ddd; text-align: right;">Total</th>
+                            <th style="padding: 8px; border: 1px solid #ddd; text-align: right;">Grand Total</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for event in events %}
+                            <tr class="{% cycle 'even-row' 'odd-row' %}">
+                                <td style="padding: 8px; border: 1px solid #ddd;">{{ event.event_id }}</td>
+                                <td style="padding: 8px; border: 1px solid #ddd;">{{ event.company }}</td>
+                                <td style="padding: 8px; border: 1px solid #ddd;">{{ event.representative }}</td>
+                                <td style="padding: 8px; border: 1px solid #ddd;">{{ event.event_name }}</td>
+                                <td style="padding: 8px; border: 1px solid #ddd;">{{ event.meeting_place }}</td>
+                                <td style="padding: 8px; border: 1px solid #ddd;">{{ event.time_start|date:"F d, Y h:i A" }}</td>
+                                <td style="padding: 8px; border: 1px solid #ddd;">{{ event.time_end|date:"F d, Y h:i A" }}</td>
+                                <td style="padding: 8px; border: 1px solid #ddd; text-align: right;">{{ event.subtotal }}</td>
+                                <td style="padding: 8px; border: 1px solid #ddd; text-align: right;">{{ event.total }}</td>
+                                <td style="padding: 8px; border: 1px solid #ddd; text-align: right;">{{ event.grandtotal }}</td>
+                            </tr>
+                        {% empty %}
+                            <tr>
+                                <td colspan="10" style="padding: 20px; text-align: center; font-style: italic;">No meeting records found. Add attendance data to create records.</td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        // CSRF setup for AJAX requests
+        function getCookie(name) {
+            var cookieValue = null;
+            if (document.cookie && document.cookie !== "") {
+                var cookies = document.cookie.split(";");
+                for (var i = 0; i < cookies.length; i++) {
+                    var cookie = cookies[i].trim();
+                    if (cookie.substring(0, name.length + 1) === (name + "=")) {
+                        cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                        break;
+                    }
+                }
+            }
+            return cookieValue;
+        }
+        
+        $.ajaxSetup({
+            beforeSend: function(xhr, settings) {
+                if (!(/^http:.*/.test(settings.url) || /^https:.*/.test(settings.url))) {
+                    xhr.setRequestHeader("X-CSRFToken", getCookie("csrftoken"));
+                }
+            }
+        });
+        
+        // Update attendance totals
+        function updateTotals() {
+            const companies = document.querySelectorAll('.attendance-company-card');
+            let grandTotal = 0;
+            
+            companies.forEach(company => {
+                const companyId = company.id.replace('attendance-company-', '');
+                const inputs = company.querySelectorAll('.rep-count input');
+                let companyTotal = 0;
+                
+                inputs.forEach(input => {
+                    companyTotal += parseInt(input.value) || 0;
+                });
+                
+                // Update company total
+                const companyTotalElement = document.getElementById(`company-total-${companyId}`);
+                if (companyTotalElement) {
+                    companyTotalElement.value = companyTotal;
+                }
+                
+                grandTotal += companyTotal;
+            });
+            
+            // Update grand total
+            document.getElementById('grand-total').value = grandTotal;
+            document.getElementById('subtotal-input').value = grandTotal;
+            document.getElementById('total-input').value = grandTotal;
+            document.getElementById('grandtotal-input').value = grandTotal;
+            
+            // Store individual representative counts as JSON in a hidden input
+            const attendanceData = {};
+            const inputs = document.querySelectorAll('.attendance-input');
+            inputs.forEach(input => {
+                // Ensure the value is an integer
+                const value = parseInt(input.value) || 0;
+                if (value > 0) {
+                    attendanceData[input.name] = value;
+                }
+            });
+            
+            // Store company totals in a separate JSON hidden input
+            const companyTotals = {};
+            const companyTotalInputs = document.querySelectorAll('.company-total-input');
+            companyTotalInputs.forEach(input => {
+                // Ensure the value is an integer
+                const value = parseInt(input.value) || 0;
+                if (value > 0) {
+                    companyTotals[input.name] = value;
+                }
+            });
+            
+            // Create or update the hidden input for attendance data
+            let attendanceInput = document.getElementById('attendance-data-input');
+            if (!attendanceInput) {
+                attendanceInput = document.createElement('input');
+                attendanceInput.type = 'hidden';
+                attendanceInput.id = 'attendance-data-input';
+                attendanceInput.name = 'attendance_data';
+                document.getElementById('attendanceForm').appendChild(attendanceInput);
+            }
+            attendanceInput.value = JSON.stringify(attendanceData);
+            
+            // Create or update the hidden input for company totals
+            let companyTotalsInput = document.getElementById('company-totals-input');
+            if (!companyTotalsInput) {
+                companyTotalsInput = document.createElement('input');
+                companyTotalsInput.type = 'hidden';
+                companyTotalsInput.id = 'company-totals-input';
+                companyTotalsInput.name = 'company_totals';
+                document.getElementById('attendanceForm').appendChild(companyTotalsInput);
+            }
+            companyTotalsInput.value = JSON.stringify(companyTotals);
+        }
+        
+        // Company CRUD functions
+        function addCompany() {
+            const companyName = prompt("Enter company name:");
+            if (!companyName) return;
+            
+            // Validate input
+            if (companyName.trim().length < 2) {
+                alert("Company name must be at least 2 characters long");
+                return;
+            }
+            
+            $.ajax({
+                url: "{% url 'accom_app:add_company' %}",
+                type: "POST",
+                data: { 
+                    name: companyName.trim(),
+                    csrfmiddlewaretoken: getCookie("csrftoken") 
+                },
+                success: function(data) {
+                    if (data.status === "success") {
+                        console.log("Company added successfully:", data);
+                        // Reload the page to show the new company
+                        location.reload();
+                    } else {
+                        console.error("Error adding company:", data.message);
+                        alert("Error adding company: " + data.message);
+                    }
+                },
+                error: function(xhr, status, error) {
+                    console.error("AJAX error:", xhr.responseText);
+                    console.error("Status:", status);
+                    console.error("Error:", error);
+                    alert("Error adding company: " + error);
+                }
+            });
+        }
+        
+        function editCompany(companyId) {
+            // Find the company card
+            const companyCards = document.querySelectorAll('.company-card');
+            let companyCard = null;
+            let companyNameElement = null;
+            
+            // Find the correct company card
+            for (let card of companyCards) {
+                if (card.querySelector(`.company-actions button[onclick*="editCompany('${companyId}')"]`)) {
+                    companyCard = card;
+                    companyNameElement = card.querySelector('.company-name');
+                    break;
+                }
+            }
+            
+            if (!companyCard || !companyNameElement) {
+                alert("Error: Could not find the company element.");
+                console.error("Could not find company element with ID:", companyId);
+                return;
+            }
+            
+            const currentName = companyNameElement.textContent.trim();
+            const newName = prompt("Edit company name:", currentName);
+            if (!newName || newName === currentName) return;
+            
+            $.ajax({
+                url: "{% url 'accom_app:edit_company' %}",
+                type: "POST",
+                data: { 
+                    company_id: companyId, 
+                    name: newName,
+                    csrfmiddlewaretoken: getCookie("csrftoken")
+                },
+                success: function(data) {
+                    if (data.status === "success") {
+                        // Update all company name elements in the UI
+                        const companyCards = document.querySelectorAll('.company-card');
+                        companyCards.forEach(card => {
+                            if (card.querySelector(`.company-actions button[onclick*="editCompany('${companyId}')"]`)) {
+                                const nameElement = card.querySelector('.company-name');
+                                if (nameElement) {
+                                    nameElement.textContent = newName;
+                                }
+                            }
+                        });
+                    } else {
+                        alert("Error editing company: " + data.message);
+                    }
+                },
+                error: function(xhr, status, error) {
+                    console.error("AJAX error:", xhr.responseText);
+                    alert("Error editing company: " + error);
+                }
+            });
+        }
+        
+        function deleteCompany(companyId) {
+            if (!confirm("Are you sure you want to delete this company? This will also delete all associated representatives and events.")) return;
+            
+            console.log("Attempting to delete company with ID:", companyId);
+            
+            $.ajax({
+                url: "{% url 'accom_app:delete_company' %}",
+                type: "POST",
+                data: { 
+                    company_id: companyId,
+                    csrfmiddlewaretoken: getCookie("csrftoken")
+                },
+                success: function(data) {
+                    console.log("Delete company response:", data);
+                    if (data.status === "success") {
+                        alert(data.message);
+                        // Remove the company card from UI or reload
+                        location.reload();
+                    } else {
+                        alert("Error deleting company: " + data.message);
+                    }
+                },
+                error: function(xhr, status, error) {
+                    console.error("AJAX error:", xhr.responseText);
+                    console.error("Status:", status);
+                    console.error("Error:", error);
+                    
+                    let errorMessage = "Error deleting company: " + error;
+                    try {
+                        const response = JSON.parse(xhr.responseText);
+                        if (response.details) {
+                            console.error("Error details:", response.details);
+                            errorMessage += "\nDetails: " + response.message;
+                        }
+                    } catch (e) {
+                        console.error("Could not parse error response");
+                    }
+                    
+                    alert(errorMessage);
+                }
+            });
+        }
+        
+        // Representative CRUD functions
+        function addRepresentative(companyId) {
+            const repName = prompt("Enter representative name:");
+            if (!repName) return;
+            
+            // Validate input
+            if (repName.trim().length < 2) {
+                alert("Representative name must be at least 2 characters long");
+                return;
+            }
+            
+            console.log("Adding representative for company ID:", companyId);
+            
+            $.ajax({
+                url: "{% url 'accom_app:add_representative' %}",
+                type: "POST",
+                data: { 
+                    company_id: companyId, 
+                    name: repName.trim(),
+                    csrfmiddlewaretoken: getCookie("csrftoken")
+                },
+                success: function(data) {
+                    console.log("Add representative response:", data);
+                    if (data.status === "success") {
+                        alert(`Successfully added representative "${data.rep_name}" to company "${data.company_name}"`);
+                        // Reload the page to show the new representative
+                        location.reload();
+                    } else {
+                        alert("Error adding representative: " + data.message);
+                    }
+                },
+                error: function(xhr, status, error) {
+                    console.error("AJAX error:", xhr.responseText);
+                    console.error("Status:", status);
+                    console.error("Error:", error);
+                    
+                    let errorMessage = "Error adding representative: " + error;
+                    try {
+                        const response = JSON.parse(xhr.responseText);
+                        if (response.details) {
+                            console.error("Error details:", response.details);
+                            errorMessage += "\nDetails: " + response.message;
+                        }
+                    } catch (e) {
+                        console.error("Could not parse error response");
+                    }
+                    
+                    alert(errorMessage);
+                }
+            });
+        }
+        
+        function editRepresentative(repId) {
+            // Find the representative row
+            const repRows = document.querySelectorAll('.representative-row');
+            let repRow = null;
+            let repNameElement = null;
+            
+            console.log("Editing representative with ID:", repId);
+            
+            // Find the correct row
+            for (let row of repRows) {
+                if (row.getAttribute('data-rep-id') === repId.toString()) {
+                    repRow = row;
+                    repNameElement = row.querySelector('.rep-name');
+                    break;
+                }
+            }
+            
+            if (!repRow || !repNameElement) {
+                alert("Error: Could not find the representative element.");
+                console.error("Could not find representative element with ID:", repId);
+                return;
+            }
+            
+            const currentName = repNameElement.textContent.trim();
+            const newName = prompt("Edit representative name:", currentName);
+            if (!newName || newName === currentName) return;
+            
+            $.ajax({
+                url: "{% url 'accom_app:edit_representative' %}",
+                type: "POST",
+                data: { 
+                    rep_id: repId, 
+                    name: newName,
+                    csrfmiddlewaretoken: getCookie("csrftoken")
+                },
+                success: function(data) {
+                    console.log("Edit representative response:", data);
+                    if (data.status === "success") {
+                        alert(`Successfully updated representative name to "${data.rep_name}" (${data.updated_count} records updated)`);
+                        
+                        // Update the representative name in all instances in the UI
+                        const repElements = document.querySelectorAll(`.representative-row[data-rep-id="${repId}"] .rep-name`);
+                        repElements.forEach(el => {
+                            el.textContent = newName;
+                        });
+                    } else {
+                        alert("Error editing representative: " + data.message);
+                    }
+                },
+                error: function(xhr, status, error) {
+                    console.error("AJAX error:", xhr.responseText);
+                    console.error("Status:", status);
+                    console.error("Error:", error);
+                    
+                    let errorMessage = "Error editing representative: " + error;
+                    try {
+                        const response = JSON.parse(xhr.responseText);
+                        if (response.details) {
+                            console.error("Error details:", response.details);
+                            errorMessage += "\nDetails: " + response.message;
+                        }
+                    } catch (e) {
+                        console.error("Could not parse error response");
+                    }
+                    
+                    alert(errorMessage);
+                }
+            });
+        }
+        
+        function deleteRepresentative(repId) {
+            if (!confirm("Are you sure you want to delete this representative?")) return;
+            
+            console.log("Attempting to delete representative with ID:", repId);
+            
+            $.ajax({
+                url: "{% url 'accom_app:delete_representative' %}",
+                type: "POST",
+                data: { 
+                    rep_id: repId,
+                    csrfmiddlewaretoken: getCookie("csrftoken")
+                },
+                success: function(data) {
+                    console.log("Delete representative response:", data);
+                    if (data.status === "success") {
+                        alert(data.message);
+                        // Remove the representative rows or reload
+                        location.reload();
+                    } else {
+                        alert("Error deleting representative: " + data.message);
+                    }
+                },
+                error: function(xhr, status, error) {
+                    console.error("AJAX error:", xhr.responseText);
+                    console.error("Status:", status);
+                    console.error("Error:", error);
+                    
+                    let errorMessage = "Error deleting representative: " + error;
+                    try {
+                        const response = JSON.parse(xhr.responseText);
+                        if (response.details) {
+                            console.error("Error details:", response.details);
+                            errorMessage += "\nDetails: " + response.message;
+                        }
+                    } catch (e) {
+                        console.error("Could not parse error response");
+                    }
+                    
+                    alert(errorMessage);
+                }
+            });
+        }
+        
+        // Event CRUD functions
+        function editEvent(eventId) {
+            window.location.href = `/accom_app/mies/edit-event/${eventId}/`;
+        }
+        
+        function deleteEvent(eventId) {
+            if (!confirm("Are you sure you want to delete this event?")) return;
+            
+            $.ajax({
+                url: "{% url 'accom_app:delete_event' %}",
+                type: "POST",
+                data: { 
+                    event_id: eventId,
+                    csrfmiddlewaretoken: getCookie("csrftoken")
+                },
+                success: function(data) {
+                    if (data.status === "success") {
+                        $(`#event-${eventId}`).fadeOut(400, function() {
+                            $(this).remove();
+                        });
+                    } else {
+                        alert("Error deleting event: " + data.message);
+                    }
+                },
+                error: function(xhr, status, error) {
+                    alert("Error deleting event: " + error);
+                }
+            });
+        }
+        
+        function viewEventDetails(eventId) {
+            window.location.href = `/accom_app/mies/event-details/${eventId}/`;
+        }
+        
+        // Calculate totals in the form
+        function calculateTotal() {
+            const subtotal = parseFloat(document.getElementById('subtotal').value) || 0;
+            const tax = parseFloat(document.getElementById('tax').value) || 0;
+            const total = subtotal + tax;
+            document.getElementById('total').value = total.toFixed(2);
+            calculateGrandTotal();
+        }
+        
+        function calculateGrandTotal() {
+            const total = parseFloat(document.getElementById('total').value) || 0;
+            const discount = parseFloat(document.getElementById('discount').value) || 0;
+            const grandTotal = total - discount;
+            document.getElementById('grandtotal').value = grandTotal.toFixed(2);
+        }
+        
+        // Document ready function
+        $(document).ready(function() {
+            // Initialize calculations
+            updateTotals();
+            
+            // Add input event listeners to all attendance inputs
+            document.querySelectorAll('.attendance-input').forEach(input => {
+                input.addEventListener('input', updateTotals);
+            });
+            
+            // Form submission handler
+            $("#attendanceForm").submit(function(e) {
+                const startTime = document.getElementById('time_start').value;
+                const endTime = document.getElementById('time_end').value;
+                
+                if (!startTime || !endTime) {
+                    e.preventDefault();
+                    alert("Please enter both start and end date/time");
+                    return false;
+                }
+                
+                // Parse the datetime-local values
+                const startDate = new Date(startTime);
+                const endDate = new Date(endTime);
+                
+                if (endDate <= startDate) {
+                    e.preventDefault();
+                    alert("End date/time must be after start date/time");
+                    return false;
+                }
+                
+                // Make sure there's at least one attendee
+                const attendanceData = JSON.parse(document.getElementById('attendance-data-input')?.value || '{}');
+                if (Object.keys(attendanceData).length === 0) {
+                    e.preventDefault();
+                    alert("Please enter attendance for at least one representative");
+                    return false;
+                }
+                
+                // Ensure totals are updated before submission
+                updateTotals();
+                return true;
+            });
+            
+            // Make sure all company and rep buttons are properly initialized
+            $('#addCompanyBtn').on('click', function() {
+                addCompany();
+            });
+            
+            $('.btn-add-rep').on('click', function() {
+                const companyId = $(this).data('company-id');
+                addRepresentative(companyId);
+            });
+            
+            // Initialize attendance data input on page load
+            updateTotals();
+        });
+    </script>
+</body>
+</html>

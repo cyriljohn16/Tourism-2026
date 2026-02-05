@@ -1,0 +1,385 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Create Schedule</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@4.5.2/dist/css/bootstrap.min.css">
+  <style>
+    body {
+      font-family: 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      margin: 0;
+      padding: 0;
+      display: flex;
+      min-height: 100vh;
+      background-color: #f4f7fc;
+    }
+    
+    /* Navigation Styles */
+    .sidebar {
+      width: 250px;
+      min-height: 100vh;
+      position: fixed;
+      left: 0;
+      top: 0;
+      z-index: 100;
+      box-shadow: 2px 0 5px rgba(0,0,0,0.1);
+      background-color: #fff;
+    }
+    
+    /* Navigation styling from admin_dashboard.html */
+    .nav-sidebar {
+      width: 100%;
+      height: 100vh;
+      background-color: #fff;
+      display: flex;
+      flex-direction: column;
+      box-shadow: 0 0 10px rgba(0,0,0,0.1);
+      overflow-y: auto;
+      padding: 20px 0;
+    }
+    
+    .nav-logo {
+      padding: 15px 20px;
+      margin-bottom: 20px;
+      text-align: center;
+    }
+    
+    .nav-logo svg {
+      max-width: 150px;
+      height: auto;
+    }
+    
+    .nav-section {
+      font-size: 12px;
+      color: #888;
+      padding: 8px 20px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      margin-top: 10px;
+    }
+    
+    .nav-menu {
+      list-style: none;
+      padding: 0;
+      margin: 0 0 15px 0;
+    }
+    
+    .nav-item {
+      margin: 0;
+      position: relative;
+    }
+    
+    .nav-link {
+      display: flex;
+      align-items: center;
+      padding: 10px 20px;
+      color: #333;
+      text-decoration: none;
+      transition: all 0.3s;
+      font-size: 14px;
+    }
+    
+    .nav-link:hover, .nav-link.active {
+      background-color: #f0f7ff;
+      color: #4285f4;
+    }
+    
+    .nav-icon {
+      margin-right: 10px;
+      display: flex;
+      align-items: center;
+    }
+    
+    .nav-subitem {
+      padding-left: 15px;
+    }
+    
+    .nav-sublink {
+      display: flex;
+      align-items: center;
+      padding: 8px 20px 8px 35px;
+      color: #666;
+      text-decoration: none;
+      transition: all 0.3s;
+      font-size: 13px;
+    }
+    
+    .nav-sublink:hover, .nav-sublink.active {
+      background-color: #f0f7ff;
+      color: #4285f4;
+    }
+    
+    .nav-submenu {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+      max-height: 0;
+      overflow: hidden;
+      transition: max-height 0.4s ease-out;
+    }
+    
+    .nav-submenu.show {
+      max-height: 500px;
+    }
+    
+    .dropdown-toggle {
+      cursor: pointer;
+      position: relative;
+    }
+    
+    .dropdown-toggle:after {
+      content: "▼";
+      font-size: 10px;
+      margin-left: 5px;
+      vertical-align: middle;
+    }
+    
+    .nav-footer {
+      margin-top: auto;
+      padding: 15px 20px;
+      border-top: 1px solid #eee;
+    }
+    
+    .logout-link {
+      display: flex;
+      align-items: center;
+      color: #666;
+      text-decoration: none;
+      font-size: 14px;
+      transition: color 0.3s;
+    }
+    
+    .logout-link:hover {
+      color: #e74c3c;
+    }
+    
+    .access-denied-container {
+      padding: 20px;
+      text-align: center;
+      color: #e74c3c;
+    }
+    
+    .access-denied-message {
+      font-size: 16px;
+      margin: 0;
+    }
+    
+    .access-denied-link {
+      color: #3498db;
+      text-decoration: underline;
+    }
+    
+    /* Hover functionality */
+    .nav-item:hover > .nav-submenu {
+      max-height: 500px;
+    }
+    
+    /* Main Content Styles */
+    .main-content {
+      margin-left: 250px;
+      width: calc(100% - 250px);
+      padding: 30px;
+      box-sizing: border-box;
+    }
+    
+    .container {
+      width: 100%;
+      max-width: 1000px;
+      margin: 0 auto;
+      background-color: #fff;
+      border-radius: 10px;
+      padding: 25px;
+      box-shadow: 0 0 15px rgba(0,0,0,0.1);
+    }
+  </style>
+</head>
+<body>
+
+  <div class="dashboard-container">
+    <div class="navigation">
+        {% if request.session.user_type == 'employee' %}
+            {% if request.session.is_admin %}
+                {% include "components/navigation.html" %}
+            {% else %}
+                {% include "components/employee_navigation.html" %}
+            {% endif %}
+        {% else %}
+            {% include "components/navigation.html" %}
+        {% endif %}
+    </div>
+  </div>
+  
+  <div class="main-content">
+    <div class="container mt-4">
+      <h2>Create Tour Schedule for Tour: {{ tour.tour_name }}</h2>
+
+      {% if messages %}
+        <div class="messages">
+          {% for message in messages %}
+            <div class="alert {% if message.tags %}alert-{{ message.tags }}{% endif %}">{{ message }}</div>
+          {% endfor %}
+        </div>
+      {% endif %}
+
+      <form method="POST" enctype="multipart/form-data">
+        {% csrf_token %}
+
+        <!-- Hidden input for tour_id -->
+        <input type="hidden" name="tour_id" value="{{ tour.tour_id }}">
+
+        <div class="form-group">
+          <label for="start_time">Start Time</label>
+          <input type="datetime-local" class="form-control" id="start_time" name="start_time" value="{{ form.start_time.value|default:'' }}" required>
+          <small class="text-danger">{{ form.start_time.errors }}</small>
+        </div>
+
+        <div class="form-group">
+          <label for="end_time">End Time</label>
+          <input type="datetime-local" class="form-control" id="end_time" name="end_time" value="{{ form.end_time.value|default:'' }}" required>
+          <small class="text-danger">{{ form.end_time.errors }}</small>
+        </div>
+
+        <div class="form-group">
+          <label for="duration_days">Duration (Days)</label>
+          <input type="text" class="form-control" id="duration_days" name="duration_days" readonly>
+          <small class="text-muted">This will be calculated automatically based on start and end times.</small>
+        </div>
+
+        <div class="form-group">
+          <label for="tour_name">Tour Name</label>
+          <input type="text" class="form-control" id="tour_name" name="tour_name" value="{{ tour.tour_name }}" readonly>
+        </div>
+
+        <div class="form-group">
+          <label for="slots_available">Available Slots</label>
+          {{ form.slots_available }}
+          <small class="text-danger">{{ form.slots_available.errors }}</small>
+        </div>
+
+        <!-- Render the formset management form -->
+        {{ formset.management_form }}
+
+        <div class="form-group" id="payable-section">
+          {% for form in formset %}
+            <div class="input-group mb-3 payable-group">
+              <select class="form-control payable-select" name="{{ form.payables.name }}">
+                <option value="">Select a payable</option>
+                {% for rate in admission_rates %}
+                  <option value="{{ rate.rate_id }}" data-price="{{ rate.price }}" {% if form.payables.value == rate.rate_id %}selected{% endif %}>
+                    {% if rate.tour_id %}{{ rate.tour_id.tour_name }}{% else %}General{% endif %} - {{ rate.payables }}
+                  </option>
+                {% endfor %}
+              </select>
+
+              <input type="text" class="form-control price-input" name="{{ form.amount.name }}" value="{{ form.amount.value|default:'' }}" readonly>
+
+              <div class="input-group-append">
+                <button type="button" class="btn btn-danger remove-btn">Remove</button>
+              </div>
+            </div>
+          {% endfor %}
+        </div>
+
+        <button type="button" class="btn btn-primary" id="add-more-payables">Add Admission</button>
+
+        <div class="form-group mt-3">
+          <label for="price">Total Price</label>
+          <input type="text" class="form-control" id="price" name="price" readonly>
+        </div>
+
+        <button type="submit" class="btn btn-success mt-4">Save Schedule</button>
+        <a href="{% url 'tour_app:home' %}" class="btn btn-secondary mt-4">Back To Home</a>
+      </form>
+    </div>
+  </div>
+
+  <script src="https://code.jquery.com/jquery-3.5.1.min.js"></script>
+  <script>
+    $(document).ready(function() {
+      // Initialize navbar dropdowns
+      $('.dropdown-toggle').on('click', function() {
+        $(this).next('.nav-submenu').toggleClass('show');
+      });
+      
+      function calculateTotalPrice() {
+        let total = 0;
+        $('.price-input').each(function() {
+          total += parseFloat($(this).val()) || 0;
+        });
+        $('#price').val(total.toFixed(2));
+      }
+
+      $(document).on('change', '.payable-select', function() {
+        let price = $(this).find(":selected").data("price") || 0;
+        $(this).closest('.payable-group').find('.price-input').val(price);
+        calculateTotalPrice();
+      });
+
+      $('#add-more-payables').click(function() {
+        let formCount = $('#id_form-TOTAL_FORMS').val();
+        let newForm = $('.payable-group:first').clone();
+
+        newForm.find('select').val('');
+        newForm.find('.price-input').val('');  
+
+        newForm.find('select, input').each(function() {
+          let nameAttr = $(this).attr('name');
+          if (nameAttr) {
+            let newName = nameAttr.replace(/\d+/, formCount);
+            $(this).attr('name', newName);
+          }
+          let idAttr = $(this).attr('id');
+          if (idAttr) {
+            let newId = idAttr.replace(/\d+/, formCount);
+            $(this).attr('id', newId);
+          }
+        });
+
+        $('#payable-section').append(newForm);
+        $('#id_form-TOTAL_FORMS').val(parseInt(formCount) + 1);
+        calculateTotalPrice();
+      });
+
+      $(document).on('click', '.remove-btn', function() {
+        if ($('.payable-group').length > 1) {
+          $(this).closest('.payable-group').remove();
+        } else {
+          alert("At least one payable is required.");
+        }
+        calculateTotalPrice();
+      });
+
+      // Function to calculate duration in days
+      function calculateDuration() {
+        let startTime = new Date($('#start_time').val());
+        let endTime = new Date($('#end_time').val());
+        
+        if (startTime && endTime && startTime < endTime) {
+          // Calculate the difference in milliseconds
+          let diffTime = Math.abs(endTime - startTime);
+          // Convert to days and round up to the nearest day
+          let diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+          $('#duration_days').val(diffDays);
+        } else {
+          $('#duration_days').val('');
+        }
+      }
+      
+      // Call the function when start or end time changes
+      $('#start_time, #end_time').on('change', calculateDuration);
+
+      // Validate if end_time > start_time
+      $('form').on('submit', function(event) {
+        let startTime = new Date($('#start_time').val());
+        let endTime = new Date($('#end_time').val());
+        if (endTime <= startTime) {
+          alert('End Time must be greater than Start Time.');
+          event.preventDefault(); // Prevent form submission
+        }
+      });
+    });
+  </script>
+</body>
+</html>

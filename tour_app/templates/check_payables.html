@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+{% load static %}
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tour Check Payables</title>
+    <link rel="stylesheet" href="{% static 'css/navigation.css' %}">
+    <style>
+        :root {
+            /* Brand Colors */
+            --primary-color: #875a34;    /* Main brand color */
+            --primary-light: #e99c59;   /* Lighter version for accents */
+            --primary-dark: #6d4827;    /* Darker version for hover states */
+            --secondary-color: #8c6e5d; /* Secondary brand color */
+            
+            /* Status Colors */
+            --success-color: #34a853;   /* Green for success states */
+            --warning-color: #fbbc05;   /* Yellow for warnings */
+            --error-color: #ea4335;     /* Red for errors */
+            --info-color: #4285f4;      /* Blue for information */
+            
+            /* Neutral Colors */
+            --bg-color: #f4f7fc;        /* Light background */
+            --text-dark: #333;          /* Dark text */
+            --text-medium: #666;        /* Medium text */
+            --text-light: #9e9e9e;      /* Light text */
+            --white: #fff;              /* White */
+        }
+
+        body {
+            background-color: var(--bg-color);
+            font-family: 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            color: var(--text-dark);
+            margin: 0;
+            padding: 0;
+        }
+        
+        .dashboard-container {
+            display: flex;
+            min-height: 100vh;
+        }
+        
+        .content {
+            flex: 1;
+            padding: 32px;
+            box-sizing: border-box;
+        }
+        
+        .container {
+            max-width: 1000px;
+            margin: 20px auto;
+            padding: 30px;
+            background-color: var(--white);
+            border-radius: 10px;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+        }
+        
+        h1 {
+            color: var(--text-dark);
+            text-align: center;
+            margin-bottom: 30px;
+            font-weight: 600;
+        }
+
+        .info-text {
+            color: var(--text-medium);
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        
+        /* Table styles */
+        .payables-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        
+        .payables-table th {
+            background-color: var(--primary-light);
+            color: var(--white);
+            padding: 12px 15px;
+            text-align: left;
+            font-weight: 500;
+        }
+        
+        .payables-table td {
+            padding: 12px 15px;
+            border-bottom: 1px solid #eee;
+        }
+        
+        .payables-table tr:hover {
+            background-color: rgba(137, 90, 52, 0.05);
+        }
+        
+        .status-badge {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: 500;
+        }
+        
+        .status-paid {
+            background-color: rgba(52, 168, 83, 0.1);
+            color: var(--success-color);
+        }
+        
+        .status-pending {
+            background-color: rgba(251, 188, 5, 0.1);
+            color: var(--warning-color);
+        }
+        
+        .status-overdue {
+            background-color: rgba(234, 67, 53, 0.1);
+            color: var(--error-color);
+        }
+        
+        .action-btn {
+            background-color: var(--primary-color);
+            color: white;
+            border: none;
+            padding: 6px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background-color 0.3s;
+        }
+        
+        .action-btn:hover {
+            background-color: var(--primary-dark);
+        }
+        
+        .empty-state {
+            text-align: center;
+            padding: 50px 0;
+        }
+        
+        .empty-state i {
+            font-size: 48px;
+            color: var(--text-light);
+            margin-bottom: 20px;
+        }
+        
+        .search-container {
+            display: flex;
+            margin-bottom: 20px;
+        }
+        
+        .search-input {
+            flex: 1;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px 0 0 5px;
+            font-size: 14px;
+        }
+        
+        .search-btn {
+            background-color: var(--primary-color);
+            color: white;
+            border: none;
+            padding: 0 15px;
+            border-radius: 0 5px 5px 0;
+            cursor: pointer;
+        }
+    </style>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+<div class="dashboard-container">
+    <div class="navigation">
+        {% include 'components/navigation.html' %}
+    </div>
+    <div class="content">
+        <div class="container">
+            <h1>Tour Check Payables</h1>
+            <p class="info-text">Review and manage payment status for all tours.</p>
+            
+            <div class="search-container">
+                <input type="text" class="search-input" placeholder="Search by tour name, client, or date...">
+                <button class="search-btn"><i class="fas fa-search"></i></button>
+            </div>
+            
+            {% if payables %}
+            <table class="payables-table">
+                <thead>
+                    <tr>
+                        <th>Tour ID</th>
+                        <th>Tour Name</th>
+                        <th>Client</th>
+                        <th>Amount</th>
+                        <th>Due Date</th>
+                        <th>Status</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for payable in payables %}
+                    <tr>
+                        <td>{{ payable.id }}</td>
+                        <td>{{ payable.tour_name }}</td>
+                        <td>{{ payable.client_name }}</td>
+                        <td>₱{{ payable.amount }}</td>
+                        <td>{{ payable.due_date }}</td>
+                        <td>
+                            {% if payable.status == 'paid' %}
+                            <span class="status-badge status-paid">Paid</span>
+                            {% elif payable.status == 'pending' %}
+                            <span class="status-badge status-pending">Pending</span>
+                            {% else %}
+                            <span class="status-badge status-overdue">Overdue</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <button class="action-btn">View Details</button>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% else %}
+            <div class="empty-state">
+                <i class="fas fa-money-bill-wave"></i>
+                <h3>No payables found</h3>
+                <p>There are currently no tour payments to display.</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Search functionality can be implemented here
+        const searchInput = document.querySelector('.search-input');
+        const searchBtn = document.querySelector('.search-btn');
+        
+        if (searchBtn && searchInput) {
+            searchBtn.addEventListener('click', function() {
+                const query = searchInput.value.trim();
+                if (query) {
+                    // Implement search functionality
+                    console.log('Searching for:', query);
+                    // You could redirect to a search results page or filter the current table
+                }
+            });
+            
+            // Also trigger search on Enter key
+            searchInput.addEventListener('keypress', function(e) {
+                if (e.key === 'Enter') {
+                    searchBtn.click();
+                }
+            });
+        }
+    });
+</script>
+</body>
+</html> 

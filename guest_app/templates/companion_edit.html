@@ -1,0 +1,618 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Edit Companion - IBAYAW Tours</title>
+    <link rel="stylesheet" href="/static/css/styles.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
+    <style>
+        .container {
+            max-width: 1200px;
+            margin: 100px auto 50px;
+            padding: 20px;
+            background-color: #fff;
+            border-radius: 8px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+        }
+        
+        h1, h2 {
+            color: #4a6741;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        
+        .instructions {
+            background-color: #f9f9f9;
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+        }
+        
+        .back-button {
+            display: inline-block;
+            margin-top: 20px;
+            padding: 10px 15px;
+            background-color: #4a6741;
+            color: white;
+            text-decoration: none;
+            border-radius: 5px;
+            transition: background-color 0.3s;
+        }
+        
+        .back-button:hover {
+            background-color: #3c5435;
+        }
+        
+        /* Form styles */
+        .form-container {
+            margin-top: 30px;
+            background-color: #f9f9f9;
+            padding: 20px;
+            border-radius: 5px;
+        }
+        
+        .form-group {
+            margin-bottom: 15px;
+        }
+        
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+            color: #333;
+        }
+        
+        .form-control {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 16px;
+        }
+        
+        .form-row {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 15px;
+        }
+        
+        .form-col {
+            flex: 1;
+        }
+        
+        .checkbox-group {
+            margin: 10px 0;
+        }
+        
+        .submit-button {
+            background-color: #4a6741;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: background-color 0.3s;
+        }
+        
+        .submit-button:hover {
+            background-color: #3c5435;
+        }
+        
+        .error-message {
+            color: #e74c3c;
+            font-size: 0.9rem;
+            margin-top: 5px;
+        }
+        
+        /* Read-only fields styling */
+        input[readonly].form-control {
+            background-color: #f0f4ee;
+            border-color: #ddd;
+            color: #4a6741;
+            font-weight: 600;
+            border-left: 3px solid #4a6741;
+            cursor: default;
+        }
+        
+        /* Age Display Styling */
+        .age-display {
+            margin-top: 5px;
+            padding: 5px 10px;
+            background-color: #f0f4ee;
+            border-radius: 4px;
+            display: none; /* Initially hidden until populated */
+            color: #4a6741;
+            font-size: 0.9rem;
+            border-left: 3px solid #4a6741;
+        }
+        
+        /* Messages styles */
+        .messages {
+            margin-bottom: 20px;
+            padding: 0;
+            list-style: none;
+        }
+        
+        .message {
+            padding: 10px 15px;
+            margin-bottom: 10px;
+            border-radius: 5px;
+        }
+        
+        .success {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        
+        .error {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+    </style>
+</head>
+<body>
+    <!-- Navigation Bar -->
+    <nav class="navbar">
+        <!-- Logo -->
+        <div class="logo">
+            <a href="{% url 'main-page' %}">
+                <img src="/static/images/logo-name.png" alt="IBAYAW Tours">
+            </a>
+        </div>
+        
+        <!-- Navigation links -->
+        <div class="nav-links">
+            <a href="{% url 'main-page' %}" class="nav-link">Home</a>
+            <a href="#about" class="nav-link">About</a>
+            <a href="{% url 'map' %}" class="nav-link">Map</a>
+            <a href="#contact" class="nav-link">Contact</a>
+        </div>
+        
+        <!-- User profile -->
+        {% if user.is_authenticated %}
+            <div class="user-profile-nav">
+                <div class="user-info" onclick="toggleUserMenu()">
+                    {% if user.picture %}
+                        <img src="{{ user.picture.url }}" alt="Profile" class="nav-profile-pic">
+                    {% else %}
+                        <img src="/static/images/default-profile.png" alt="Profile" class="nav-profile-pic">
+                    {% endif %}
+                    <span class="user-name">{{ user.first_name }}</span>
+                    <i class="fas fa-angle-down"></i>
+                </div>
+                <div class="user-dropdown" id="userDropdown">
+                    <a href="#" onclick="alert('Profile feature coming soon!'); return false;"><i class="fas fa-user"></i> My Profile</a>
+                    <div class="dropdown-divider"></div>
+                    <div class="settings-item">
+                        <a href="#" id="update-profile-link"><i class="fas fa-user-edit"></i> Update Profile</a>
+                    </div>
+                    <div class="dropdown-divider"></div>
+                    <a href="{% url 'companion' %}"><i class="fas fa-users"></i> Add Companion</a>
+                    <div class="dropdown-divider"></div>
+                    <a href="#" onclick="logoutUser()"><i class="fas fa-sign-out-alt"></i> Logout</a>
+                </div>
+            </div>
+        {% else %}
+            <button class="login-btn" onclick="loginUser()">
+                <span class="login-text">Login</span> <i class="fas fa-user-circle"></i>
+            </button>
+        {% endif %}
+    </nav>
+
+    <!-- Main Content -->
+    <div class="container">
+        <h1>Edit Companion</h1>
+        
+        <div class="instructions">
+            <p>Update your companion's information below.</p>
+        </div>
+        
+        <!-- Display Django messages -->
+        {% if messages %}
+        <ul class="messages">
+            {% for message in messages %}
+            <li class="message {% if message.tags %}{{ message.tags }}{% endif %}">{{ message }}</li>
+            {% endfor %}
+        </ul>
+        {% endif %}
+        
+        <!-- Edit Companion Form -->
+        <div class="form-container">
+            <form method="post" enctype="multipart/form-data">
+                {% csrf_token %}
+                
+                <div class="form-row">
+                    <div class="form-col">
+                        <div class="form-group">
+                            <label for="{{ form.first_name.id_for_label }}">First Name*</label>
+                            {{ form.first_name }}
+                            {% if form.first_name.errors %}
+                            <span class="error-message">{{ form.first_name.errors.0 }}</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                    <div class="form-col" style="flex: 0.3;">
+                        <div class="form-group">
+                            <label for="{{ form.middle_initial.id_for_label }}">Middle Initial</label>
+                            {{ form.middle_initial }}
+                            {% if form.middle_initial.errors %}
+                            <span class="error-message">{{ form.middle_initial.errors.0 }}</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                    <div class="form-col">
+                        <div class="form-group">
+                            <label for="{{ form.last_name.id_for_label }}">Last Name*</label>
+                            {{ form.last_name }}
+                            {% if form.last_name.errors %}
+                            <span class="error-message">{{ form.last_name.errors.0 }}</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="form-row">
+                    <div class="form-col">
+                        <div class="form-group">
+                            <label for="{{ form.birthday.id_for_label }}">Birthday*</label>
+                            <input type="date" name="{{ form.birthday.name }}" id="{{ form.birthday.id_for_label }}" class="form-control" {% if form.birthday.value %}value="{{ form.birthday.value|date:'Y-m-d' }}"{% endif %} required>
+                            {% if form.birthday.errors %}
+                            <span class="error-message">{{ form.birthday.errors.0 }}</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                    <div class="form-col">
+                        <div class="form-group">
+                            <label for="calculated-age">Age</label>
+                            <input type="text" id="calculated-age" class="form-control" readonly>
+                        </div>
+                    </div>
+                    <div class="form-col">
+                        <div class="form-group">
+                            <label for="age-category">Age Category</label>
+                            <input type="text" id="age-category" class="form-control" readonly>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="form-row">
+                    <div class="form-col">
+                        <div class="form-group">
+                            <label for="{{ form.sex.id_for_label }}">Sex*</label>
+                            {{ form.sex }}
+                            {% if form.sex.errors %}
+                            <span class="error-message">{{ form.sex.errors.0 }}</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                    <div class="form-col">
+                        <div class="form-group">
+                            <label for="{{ form.email.id_for_label }}">Email Address*</label>
+                            {{ form.email }}
+                            {% if form.email.errors %}
+                            <span class="error-message">{{ form.email.errors.0 }}</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="form-row">
+                    <div class="form-col">
+                        <div class="form-group">
+                            <label for="{{ form.phone_number.id_for_label }}">Phone Number*</label>
+                            {{ form.phone_number }}
+                            {% if form.phone_number.errors %}
+                            <span class="error-message">{{ form.phone_number.errors.0 }}</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="form-row">
+                    <div class="form-col">
+                        <div class="form-group">
+                            <label for="{{ form.country_of_origin.id_for_label }}">Country of Origin*</label>
+                            {{ form.country_of_origin }}
+                            {% if form.country_of_origin.errors %}
+                            <span class="error-message">{{ form.country_of_origin.errors.0 }}</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                    <div class="form-col">
+                        <div class="form-group">
+                            <label for="{{ form.city.id_for_label }}">City*</label>
+                            {{ form.city }}
+                            {% if form.city.errors %}
+                            <span class="error-message">{{ form.city.errors.0 }}</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="form-group">
+                    <label for="{{ form.company_name.id_for_label }}">Company Name (Optional)</label>
+                    {{ form.company_name }}
+                    {% if form.company_name.errors %}
+                    <span class="error-message">{{ form.company_name.errors.0 }}</span>
+                    {% endif %}
+                </div>
+                
+                <div class="form-group">
+                    <label for="companion_group">Group (Optional)</label>
+                    <select name="companion_group" id="companion_group" class="form-control">
+                        <option value="none">No Group</option>
+                        {% for group in groups %}
+                            <option value="{{ group.id }}" {% if companion.group.id == group.id %}selected{% endif %}>{{ group.name }}</option>
+                        {% endfor %}
+                    </select>
+                    <small class="form-text text-muted">Assign this companion to a group for better organization</small>
+                </div>
+                
+                <div class="form-group">
+                    <label for="{{ form.picture.id_for_label }}">Profile Picture (Optional)</label>
+                    {% if companion.picture %}
+                        <p>Current picture: <img src="{{ companion.picture.url }}" alt="{{ companion.first_name }}" width="100"></p>
+                    {% endif %}
+                    {{ form.picture }}
+                    {% if form.picture.errors %}
+                    <span class="error-message">{{ form.picture.errors.0 }}</span>
+                    {% endif %}
+                </div>
+                
+                <div class="checkbox-group">
+                    <label>
+                        {{ form.has_disability }} Has Disability
+                    </label>
+                    {% if form.has_disability.errors %}
+                    <span class="error-message">{{ form.has_disability.errors.0 }}</span>
+                    {% endif %}
+                </div>
+                
+                <div class="form-group" id="disabilityTypeGroup" style="display: none;">
+                    <label for="{{ form.disability_type.id_for_label }}">Disability Type</label>
+                    {{ form.disability_type }}
+                    {% if form.disability_type.errors %}
+                    <span class="error-message">{{ form.disability_type.errors.0 }}</span>
+                    {% endif %}
+                </div>
+                
+                <div class="form-group" id="disabilityDocumentsGroup" style="display: none;">
+                    <label for="{{ form.disability_documents.id_for_label }}">Disability Documents (Optional)</label>
+                    {{ form.disability_documents }}
+                    {% if form.disability_documents.errors %}
+                    <span class="error-message">{{ form.disability_documents.errors.0 }}</span>
+                    {% endif %}
+                </div>
+                
+                <div class="form-group">
+                    <label for="{{ form.credentials.id_for_label }}">Identification Documents (Optional)</label>
+                    {{ form.credentials }}
+                    {% if form.credentials.errors %}
+                    <span class="error-message">{{ form.credentials.errors.0 }}</span>
+                    {% endif %}
+                    <small>Upload documents like ID cards, passport, etc.</small>
+                </div>
+                
+                <div style="text-align: center; margin-top: 20px;">
+                    <button type="submit" class="submit-button">Update Companion</button>
+                </div>
+            </form>
+        </div>
+        
+        <div style="text-align: center; margin-top: 20px;">
+            <a href="{% url 'companion' %}" class="back-button">
+                <i class="fas fa-arrow-left"></i> Back to Companions
+            </a>
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="footer-content">
+            <div class="footer-logo">
+                <img src="/static/images/logo.png" alt="IBAYAW Tours Logo">
+                <div class="footer-title">IBAYAW TOURS</div>
+            </div>
+            <div class="footer-links">
+                <h3>Quick Links</h3>
+                <a href="{% url 'main-page' %}">Home</a>
+                <a href="#about">About</a>
+                <a href="{% url 'map' %}">Map</a>
+                <a href="#contact">Contact</a>
+            </div>
+            <div class="footer-contact">
+                <h3>Contact Us</h3>
+                <p><i class="fas fa-map-marker-alt"></i> Bayawan City, Negros Oriental</p>
+                <p><i class="fas fa-phone"></i> +63 9123456789</p>
+                <p><i class="fas fa-envelope"></i> info@ibayawtours.com</p>
+            </div>
+        </div>
+        <div class="footer-bottom">
+            <p>&copy; 2023 IBAYAW Tours. All rights reserved.</p>
+        </div>
+    </footer>
+
+    <script>
+        // Store Django template variables as JavaScript variables
+        {% if companion %}
+        const companionAge = "{{ companion.age|default:'' }}";
+        const companionAgeLabel = "{{ companion.age_label|default:'' }}";
+        {% else %}
+        const companionAge = "";
+        const companionAgeLabel = "";
+        {% endif %}
+        
+        // Function to toggle user dropdown menu
+        function toggleUserMenu() {
+            const dropdown = document.getElementById('userDropdown');
+            dropdown.style.display = dropdown.style.display === 'block' ? 'none' : 'block';
+        }
+        
+        // Function to handle logout
+        function logoutUser() {
+            if (confirm('Are you sure you want to logout?')) {
+                window.location.href = "{% url 'logout' %}";
+            }
+        }
+        
+        // Function to calculate age based on birthday
+        function calculateAge(birthday) {
+            const today = new Date();
+            const birthDate = new Date(birthday);
+            let age = today.getFullYear() - birthDate.getFullYear();
+            const monthDiff = today.getMonth() - birthDate.getMonth();
+            
+            // If birthday hasn't occurred yet this year, subtract 1 from age
+            if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+                age--;
+            }
+            
+            return age;
+        }
+
+        // Function to determine age label based on age
+        function getAgeLabel(age) {
+            if (age <= 1) return 'Infant';
+            if (age <= 4) return 'Toddler';
+            if (age <= 12) return 'Child';
+            if (age <= 19) return 'Teen';
+            if (age <= 39) return 'Adult';
+            if (age <= 59) return 'Middle Adult';
+            return 'Senior';
+        }
+
+        // Function to update age field when birthday changes
+        function updateAge() {
+            const birthdayInput = document.getElementById('id_birthday');
+            if (!birthdayInput) return;
+            
+            // Get the new display fields
+            const calculatedAgeField = document.getElementById('calculated-age');
+            const ageCategoryField = document.getElementById('age-category');
+            
+            // Create or get age display element
+            let ageDisplay = document.getElementById('age-display');
+            if (!ageDisplay) {
+                ageDisplay = document.createElement('div');
+                ageDisplay.id = 'age-display';
+                ageDisplay.className = 'age-display';
+                birthdayInput.parentNode.appendChild(ageDisplay);
+            }
+            
+            if (birthdayInput.value) {
+                const age = calculateAge(birthdayInput.value);
+                const ageLabel = getAgeLabel(age);
+                
+                // Update the visible fields
+                if (calculatedAgeField) calculatedAgeField.value = age;
+                if (ageCategoryField) ageCategoryField.value = ageLabel;
+                
+                // Still keep the original display for backward compatibility
+                ageDisplay.innerHTML = `<strong>Age:</strong> ${age} (${ageLabel})`;
+                ageDisplay.style.display = 'block';
+                
+                // Create hidden input for age if it doesn't exist
+                let ageInput = document.getElementById('hidden-age');
+                if (!ageInput) {
+                    ageInput = document.createElement('input');
+                    ageInput.type = 'hidden';
+                    ageInput.name = 'age';
+                    ageInput.id = 'hidden-age';
+                    birthdayInput.parentNode.appendChild(ageInput);
+                }
+                ageInput.value = age;
+                
+                // Create hidden input for age_label if it doesn't exist
+                let ageLabelInput = document.getElementById('hidden-age-label');
+                if (!ageLabelInput) {
+                    ageLabelInput = document.createElement('input');
+                    ageLabelInput.type = 'hidden';
+                    ageLabelInput.name = 'age_label';
+                    ageLabelInput.id = 'hidden-age-label';
+                    birthdayInput.parentNode.appendChild(ageLabelInput);
+                }
+                ageLabelInput.value = ageLabel;
+            } else {
+                // Clear fields if birthday is empty
+                if (calculatedAgeField) calculatedAgeField.value = '';
+                if (ageCategoryField) ageCategoryField.value = '';
+                ageDisplay.style.display = 'none';
+            }
+        }
+        
+        // Show/hide disability fields based on checkbox
+        document.addEventListener('DOMContentLoaded', function() {
+            const hasDisabilityCheckbox = document.querySelector('input[name="has_disability"]');
+            const disabilityTypeGroup = document.getElementById('disabilityTypeGroup');
+            const disabilityDocumentsGroup = document.getElementById('disabilityDocumentsGroup');
+            
+            // Set initial state based on checkbox
+            if (hasDisabilityCheckbox.checked) {
+                disabilityTypeGroup.style.display = 'block';
+                disabilityDocumentsGroup.style.display = 'block';
+            }
+            
+            hasDisabilityCheckbox.addEventListener('change', function() {
+                if (this.checked) {
+                    disabilityTypeGroup.style.display = 'block';
+                    disabilityDocumentsGroup.style.display = 'block';
+                } else {
+                    disabilityTypeGroup.style.display = 'none';
+                    disabilityDocumentsGroup.style.display = 'none';
+                }
+            });
+            
+            // Initialize birthday change handler for age calculation
+            const birthdayInput = document.getElementById('id_birthday');
+            if (birthdayInput) {
+                birthdayInput.addEventListener('change', updateAge);
+                birthdayInput.addEventListener('input', updateAge);
+                
+                // Run once on page load to initialize the age if the birthday is set
+                updateAge();
+                
+                // Pre-populate fields with current values in edit mode
+                if (birthdayInput.value) {
+                    const calculatedAgeField = document.getElementById('calculated-age');
+                    const ageCategoryField = document.getElementById('age-category');
+                    
+                    // Set initial values from the companion object if available
+                    if (companionAge && calculatedAgeField) {
+                        calculatedAgeField.value = companionAge;
+                    }
+                    
+                    if (companionAgeLabel && ageCategoryField) {
+                        ageCategoryField.value = companionAgeLabel;
+                    }
+                }
+            }
+            
+            // Form submission validation
+            const form = document.querySelector('form');
+            form.addEventListener('submit', function(e) {
+                const firstName = document.getElementById('{{ form.first_name.id_for_label }}').value.trim();
+                const lastName = document.getElementById('{{ form.last_name.id_for_label }}').value.trim();
+                const email = document.getElementById('{{ form.email.id_for_label }}').value.trim();
+                const phone = document.getElementById('{{ form.phone_number.id_for_label }}').value.trim();
+                
+                if (!firstName || !lastName || !email || !phone) {
+                    e.preventDefault();
+                    alert('Please fill in all required fields marked with *');
+                    return false;
+                }
+                
+                // If validation passes, show loading indicator
+                const submitBtn = e.target.querySelector('button[type="submit"]');
+                submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Updating...';
+                submitBtn.disabled = true;
+                
+                return true;
+            });
+        });
+    </script>
+</body>
+</html> 

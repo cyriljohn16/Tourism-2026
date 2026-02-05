@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+{% load static %}
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% if tour_id %}Edit Tour{% else %}Add New Tour{% endif %}</title>
+    <link rel="stylesheet" href="{% static 'css/navigation.css' %}">
+    <style>
+        :root {
+            /* Brand Colors */
+            --primary-color: #875a34;    /* Main brand color */
+            --primary-light: #e99c59;   /* Lighter version for accents */
+            --primary-dark: #6d4827;    /* Darker version for hover states */
+            --secondary-color: #8c6e5d; /* Secondary brand color */
+            
+            /* Status Colors */
+            --success-color: #34a853;   /* Green for success states */
+            --warning-color: #fbbc05;   /* Yellow for warnings */
+            --error-color: #ea4335;     /* Red for errors */
+            --info-color: #4285f4;      /* Blue for information */
+            
+            /* Neutral Colors */
+            --bg-color: #f4f7fc;        /* Light background */
+            --text-dark: #333;          /* Dark text */
+            --text-medium: #666;        /* Medium text */
+            --text-light: #9e9e9e;      /* Light text */
+            --white: #fff;              /* White */
+        }
+
+        body {
+            background-color: var(--bg-color);
+            font-family: 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            color: var(--text-dark);
+            margin: 0;
+            padding: 0;
+        }
+        
+        .dashboard-container {
+            display: flex;
+            min-height: 100vh;
+        }
+        
+        .content {
+            flex: 1;
+            padding: 32px;
+            box-sizing: border-box;
+        }
+        
+        .container {
+            max-width: 800px;
+            margin: 20px auto;
+            padding: 30px;
+            background-color: var(--white);
+            border-radius: 10px;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+        }
+        
+        h1 {
+            color: var(--text-dark);
+            text-align: center;
+            margin-bottom: 30px;
+            font-weight: 600;
+        }
+        
+        .form-group {
+            margin-bottom: 20px;
+        }
+        
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 500;
+            color: var(--text-medium);
+        }
+        
+        input[type="text"],
+        textarea {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-size: 14px;
+            transition: border-color 0.3s;
+            box-sizing: border-box;
+        }
+        
+        input[type="text"]:focus,
+        textarea:focus {
+            border-color: var(--primary-color);
+            outline: none;
+            box-shadow: 0 0 0 2px rgba(137, 90, 52, 0.2);
+        }
+        
+        textarea {
+            min-height: 120px;
+            resize: vertical;
+        }
+        
+        .button-group {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            margin-top: 30px;
+        }
+        
+        button[type="submit"],
+        button[type="button"] {
+            padding: 12px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: 500;
+            transition: all 0.3s;
+        }
+        
+        button[type="submit"] {
+            background-color: var(--primary-color);
+            color: white;
+            border: none;
+        }
+        
+        button[type="submit"]:hover {
+            background-color: var(--primary-dark);
+        }
+        
+        button[type="button"] {
+            background-color: var(--white);
+            color: var(--primary-color);
+            border: 1px solid var(--primary-color);
+        }
+        
+        button[type="button"]:hover {
+            background-color: var(--primary-color);
+            color: var(--white);
+        }
+        
+        .image-preview {
+            margin-top: 10px;
+            max-width: 100%;
+            border-radius: 5px;
+            overflow: hidden;
+        }
+        
+        .image-preview img {
+            max-width: 100%;
+            height: auto;
+            display: block;
+        }
+        
+        .current-image {
+            display: flex;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+        
+        .current-image img {
+            max-width: 150px;
+            max-height: 100px;
+            border-radius: 5px;
+            margin-right: 15px;
+        }
+    </style>
+</head>
+<body>
+<div class="dashboard-container">
+    <div class="navigation">
+        {% if request.session.user_type == 'employee' %}
+            {% if request.session.is_admin %}
+                {% include 'components/navigation.html' %}
+            {% else %}
+                {% include 'components/employee_navigation.html' %}
+            {% endif %}
+        {% else %}
+            {% include 'components/navigation.html' %}
+        {% endif %}
+    </div>
+    <div class="content">
+        <div class="container">
+            <h1>{% if tour_id %}Edit Tour{% else %}Add New Tour{% endif %}</h1>
+
+            <form method="POST" enctype="multipart/form-data">
+                {% csrf_token %}
+
+                <!-- Tour name -->
+                <div class="form-group">
+                    <label for="tour_name">Tour Name:</label>
+                    {{ form.tour_name }}
+                </div>
+
+                <!-- Description -->
+                <div class="form-group">
+                    <label for="description">Description:</label>
+                    {{ form.description }}
+                </div>
+
+                <!-- Image -->
+                <div class="form-group">
+                    <label for="image">Tour Image:</label>
+                    {% if tour_id and form.instance.image %}
+                    <div class="current-image">
+                        <img src="{{ form.instance.image.url }}" alt="Current tour image">
+                        <span>Current image</span>
+                    </div>
+                    {% endif %}
+                    {{ form.image }}
+                    <div class="image-preview" id="image-preview" style="display: none;">
+                        <img id="preview-img" src="#" alt="Image preview">
+                    </div>
+                </div>
+
+                <!-- Button Group -->
+                <div class="button-group">
+                    <button type="submit">
+                        {% if tour_id %}
+                            Save Changes
+                        {% else %}
+                            Save Tour
+                        {% endif %}
+                    </button>
+                    <button type="button" onclick="window.location.href='{% url 'tour_app:home' %}'">
+                        Cancel
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+    // Image preview functionality
+    document.addEventListener('DOMContentLoaded', function() {
+        const imageInput = document.querySelector('input[type="file"]');
+        const imagePreview = document.getElementById('image-preview');
+        const previewImg = document.getElementById('preview-img');
+        
+        if (imageInput) {
+            imageInput.addEventListener('change', function() {
+                if (this.files && this.files[0]) {
+                    const reader = new FileReader();
+                    
+                    reader.onload = function(e) {
+                        previewImg.src = e.target.result;
+                        imagePreview.style.display = 'block';
+                    };
+                    
+                    reader.readAsDataURL(this.files[0]);
+                } else {
+                    imagePreview.style.display = 'none';
+                }
+            });
+        }
+    });
+</script>
+</body>
+</html>

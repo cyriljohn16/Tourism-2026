@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+{% load static %}
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Accomodation Registration</title>
+  <link rel="stylesheet" href="{% static 'css/navigation.css' %}">
+  <style>
+    body {
+      font-family: 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      background-color: #f4f7fc;
+      margin: 0;
+      padding: 0;
+      color: #333;
+      line-height: 1.5;
+    }
+    .dashboard-container {
+      display: flex;
+      min-height: 100vh;
+    }
+    .content {
+      flex: 1;
+      padding: 32px;
+      box-sizing: border-box;
+    }
+    .container {
+      max-width: 500px;
+      margin: 0 auto;
+      background: #fff;
+      padding: 20px;
+      border-radius: 8px;
+      box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+    }
+    h2 {
+      text-align: center;
+      margin-bottom: 20px;
+    }
+    label {
+      display: block;
+      margin-top: 10px;
+      font-weight: bold;
+    }
+    input, select {
+      width: 100%;
+      padding: 10px;
+      margin-top: 5px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      box-sizing: border-box;
+    }
+    button {
+      width: 100%;
+      padding: 12px;
+      background-color: #007BFF;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      font-size: 16px;
+      margin-top: 20px;
+      cursor: pointer;
+    }
+    button:hover {
+      background-color: #0056b3;
+    }
+    .error-message {
+      color: red;
+      text-align: center;
+      margin-top: 15px;
+    }
+    .success-message {
+      color: green;
+      text-align: center;
+      margin-top: 15px;
+    }
+    .file-input-container {
+      margin-top: 10px;
+    }
+    .file-preview {
+      width: 150px;
+      height: 150px;
+      border: 1px dashed #ccc;
+      border-radius: 4px;
+      margin-top: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background-size: cover;
+      background-position: center;
+      background-repeat: no-repeat;
+    }
+    .certification-container {
+      margin-top: 10px;
+    }
+    .cert-preview-container {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 10px;
+    }
+    .cert-preview {
+      width: 100px;
+      height: 100px;
+      border: 1px dashed #ccc;
+      border-radius: 4px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background-size: cover;
+      background-position: center;
+      background-repeat: no-repeat;
+      position: relative;
+    }
+    .cert-preview .remove-btn {
+      position: absolute;
+      top: -10px;
+      right: -10px;
+      background: red;
+      color: white;
+      border-radius: 50%;
+      width: 20px;
+      height: 20px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      font-size: 12px;
+    }
+    .add-more-btn {
+      background-color: #28a745;
+      color: white;
+      padding: 5px 10px;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      margin-top: 10px;
+      width: auto;
+      display: inline-block;
+    }
+    .info-text {
+      font-size: 12px;
+      color: #666;
+      margin-top: 5px;
+    }
+  </style>
+</head>
+<body>
+  {% if request.session.is_admin %}
+  <div class="dashboard-container">
+    <div class="navigation">
+      {% include "components/navigation.html" %}
+    </div>
+    <div class="content">
+  {% else %}
+  <div style="padding: 20px;">
+  {% endif %}
+    <div class="container">
+      <h2>Accomodation Registration</h2>
+
+      {% if messages %}
+        {% for message in messages %}
+          <p class="{% if message.tags %}{{ message.tags }}-message{% else %}error-message{% endif %}">{{ message }}</p>
+        {% endfor %}
+      {% endif %}
+
+      <form method="post" action="{% url 'admin_app:accommodation_register' %}" enctype="multipart/form-data">
+        {% csrf_token %}
+
+        <label for="company_name">Company Name:</label>
+        <input type="text" id="company_name" name="company_name" required>
+
+        <label for="email_address">Email Address:</label>
+        <input type="email" id="email_address" name="email_address" required>
+
+        <label for="location">Location:</label>
+        <input type="text" id="location" name="location" required>
+
+        <label for="company_type">Company Type:</label>
+        <select id="company_type" name="company_type" required>
+          <option value="" disabled selected>Select Company Type</option>
+          <option value="Hotel">Hotel</option>
+          <option value="Establishment">Establishment</option>
+          <!-- Add more options as needed -->
+        </select>
+
+        <label for="password">Password:</label>
+        <input type="password" id="password" name="password" required>
+
+        <label for="phone_number">Phone Number:</label>
+        <input type="text" id="phone_number" name="phone_number" required>
+        
+        <!-- New Profile Picture Field -->
+        <label for="profile_picture">Profile Picture:</label>
+        <div class="file-input-container">
+          <input type="file" id="profile_picture" name="profile_picture" accept="image/*">
+          <div class="file-preview" id="profile-preview"></div>
+          <p class="info-text">Upload a logo or profile image for your accommodation.</p>
+        </div>
+        
+        <!-- New Certification Fields -->
+        <label for="certifications">Certifications:</label>
+        <div class="certification-container">
+          <input type="file" id="certification-input" accept="image/*" style="display: none;" multiple>
+          <button type="button" id="add-cert-btn" class="add-more-btn">Add Certification</button>
+          <p class="info-text">Upload business permits, certificates, or other documentation.</p>
+          <div class="cert-preview-container" id="cert-preview-container"></div>
+          <!-- Hidden input to store the certification file data -->
+          <div id="certification-inputs"></div>
+        </div>
+
+        <button type="submit">Register Accomodation</button>
+
+        {% if request.session.is_admin %}
+          <a href="{% url 'admin_app:admin_dashboard' %}" class="button">Back</a>
+        {% else %}
+          <a href="{% url 'admin_app:login' %}" class="button" style="display: block; text-align: center; margin-top: 15px; color: #007BFF; text-decoration: none;">Back to Login</a>
+        {% endif %}
+      </form>
+    </div>
+  </div>
+  
+  <!-- Add navigation handling script -->
+  <script>
+    document.addEventListener('DOMContentLoaded', function() {
+      // Function to handle responsive navigation
+      function handleResponsiveNavigation() {
+        // Check if screen is mobile
+        if (window.innerWidth <= 768) {
+          document.body.classList.add('mobile-view');
+          document.body.classList.remove('desktop-view');
+        } else {
+          document.body.classList.add('desktop-view');
+          document.body.classList.remove('mobile-view');
+        }
+      }
+      
+      // Initial check
+      handleResponsiveNavigation();
+      
+      // Add resize event listener
+      window.addEventListener('resize', handleResponsiveNavigation);
+      
+      // Add scroll class when scrolling
+      const navigation = document.querySelector('.navigation');
+      if (navigation) {
+        window.addEventListener('scroll', function() {
+          if (window.scrollY > 50) {
+            navigation.classList.add('scrolled');
+          } else {
+            navigation.classList.remove('scrolled');
+          }
+        });
+      }
+      
+      // Profile Picture Preview
+      const profileInput = document.getElementById('profile_picture');
+      const profilePreview = document.getElementById('profile-preview');
+      
+      profileInput.addEventListener('change', function() {
+        if (this.files && this.files[0]) {
+          const reader = new FileReader();
+          reader.onload = function(e) {
+            profilePreview.style.backgroundImage = `url(${e.target.result})`;
+            profilePreview.textContent = '';
+          };
+          reader.readAsDataURL(this.files[0]);
+        }
+      });
+      
+      // Certification Images Preview
+      let certIndex = 0;
+      const certInput = document.getElementById('certification-input');
+      const addCertBtn = document.getElementById('add-cert-btn');
+      const certContainer = document.getElementById('cert-preview-container');
+      const certInputsContainer = document.getElementById('certification-inputs');
+      
+      addCertBtn.addEventListener('click', function() {
+        certInput.click();
+      });
+      
+      certInput.addEventListener('change', function() {
+        if (this.files && this.files.length > 0) {
+          Array.from(this.files).forEach(file => {
+            const reader = new FileReader();
+            reader.onload = function(e) {
+              const previewDiv = document.createElement('div');
+              previewDiv.className = 'cert-preview';
+              previewDiv.style.backgroundImage = `url(${e.target.result})`;
+              
+              const removeBtn = document.createElement('div');
+              removeBtn.className = 'remove-btn';
+              removeBtn.textContent = 'x';
+              
+              const currentIndex = certIndex;
+              
+              removeBtn.addEventListener('click', function() {
+                previewDiv.remove();
+                const inputToRemove = document.getElementById(`certification-${currentIndex}`);
+                if (inputToRemove) inputToRemove.remove();
+              });
+              
+              previewDiv.appendChild(removeBtn);
+              certContainer.appendChild(previewDiv);
+              
+              // Create a hidden input for this file
+              const hiddenInput = document.createElement('input');
+              hiddenInput.type = 'file';
+              hiddenInput.name = `certification_${certIndex}`;
+              hiddenInput.id = `certification-${certIndex}`;
+              hiddenInput.style.display = 'none';
+              
+              // Create a DataTransfer object and add the file
+              const dataTransfer = new DataTransfer();
+              dataTransfer.items.add(file);
+              hiddenInput.files = dataTransfer.files;
+              
+              certInputsContainer.appendChild(hiddenInput);
+              certIndex++;
+            };
+            reader.readAsDataURL(file);
+          });
+          
+          // Clear the input so the same files can be selected again
+          this.value = '';
+        }
+      });
+    });
+  </script>
+</body>
+</html>

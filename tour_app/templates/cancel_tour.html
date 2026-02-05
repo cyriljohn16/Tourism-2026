@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Cancel Tour</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background-color: #f5f5f5;
+      padding: 20px;
+      margin: 0;
+    }
+    .container {
+      max-width: 1000px;
+      margin: 0 auto;
+      background: #fff;
+      padding: 20px;
+      border-radius: 8px;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+    }
+    h1 {
+      color: #333;
+      margin-bottom: 20px;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 20px;
+      margin-bottom: 30px;
+    }
+    table th, table td {
+      padding: 10px;
+      border: 1px solid #ccc;
+      text-align: left;
+    }
+    table th {
+      background-color: #007bff;
+      color: #fff;
+    }
+    .active-section {
+      background-color: #e3f2fd; /* Light Blue for Active */
+      padding: 15px;
+      border-radius: 8px;
+      margin-bottom: 20px;
+    }
+    .completed-section {
+      background-color: #e8f5e9; /* Light Green for Completed */
+      padding: 15px;
+      border-radius: 8px;
+      margin-bottom: 20px;
+    }
+    .cancelled-section {
+      background-color: #ffebee; /* Light Red for Cancelled */
+      padding: 15px;
+      border-radius: 8px;
+      margin-bottom: 20px;
+    }
+    .cancel-btn {
+      background-color: #dc3545;
+      color: #fff;
+      border: none;
+      padding: 8px 12px;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    .back-link {
+      display: inline-block;
+      margin-top: 20px;
+      padding: 10px 20px;
+      background-color: #007bff;
+      color: #fff;
+      text-decoration: none;
+      border-radius: 4px;
+    }
+    textarea {
+      width: 100%;
+      padding: 8px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      resize: vertical;
+      min-height: 60px;
+    }
+    .messages {
+      padding: 10px;
+      margin-bottom: 20px;
+      border-radius: 4px;
+    }
+    .success {
+      background-color: #d4edda;
+      border: 1px solid #c3e6cb;
+      color: #155724;
+    }
+    .error {
+      background-color: #f8d7da;
+      border: 1px solid #f5c6cb;
+      color: #721c24;
+    }
+    h2 {
+      margin-top: 20px;
+      border-bottom: 2px solid #007bff;
+      padding-bottom: 5px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Tour Cancellation Management</h1>
+    
+    {% if messages %}
+    <div class="messages">
+      {% for message in messages %}
+        <div class="{% if message.tags %}{{ message.tags }}{% endif %}">
+          {{ message }}
+        </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+    
+    <!-- Active Tours Section -->
+    {% if active_tours %}
+    <div class="active-section">
+      <h2>Active Tours</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Tour ID</th>
+            <th>Tour Name</th>
+            <th>Schedule ID</th>
+            <th>Start Time</th>
+            <th>End Time</th>
+            <th>Slots Available</th>
+            <th>Slots Booked</th>
+            <th>Price</th>
+            <th>Status</th>
+            <th>Action</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for tour in active_tours %}
+          <tr>
+            <td>{{ tour.tour_id.tour_id }}</td>
+            <td>{{ tour.tour_id.tour_name }}</td>
+            <td>{{ tour.sched_id }}</td>
+            <td>{{ tour.start_time }}</td>
+            <td>{{ tour.end_time }}</td>
+            <td>{{ tour.slots_available }}</td>
+            <td>{{ tour.slots_booked }}</td>
+            <td>${{ tour.price }}</td>
+            <td>{{ tour.status }}</td>
+            <td>
+              <form method="POST" action="{% url 'tour_app:cancel_tour' %}" onsubmit="return confirm('Are you sure you want to cancel this tour? This action cannot be undone.');">
+                {% csrf_token %}
+                <input type="hidden" name="sched_id" value="{{ tour.sched_id }}">
+                <textarea name="cancellation_reason" placeholder="Reason for cancellation" required></textarea>
+                <button type="submit" class="cancel-btn">Cancel Tour</button>
+              </form>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <p>No active tours available.</p>
+    {% endif %}
+    
+    <!-- Completed Tours Section -->
+    {% if completed_tours %}
+    <div class="completed-section">
+      <h2>Completed Tours</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Tour ID</th>
+            <th>Tour Name</th>
+            <th>Schedule ID</th>
+            <th>Start Time</th>
+            <th>End Time</th>
+            <th>Slots Booked</th>
+            <th>Price</th>
+            <th>Revenue</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for tour in completed_tours %}
+          <tr>
+            <td>{{ tour.tour_id.tour_id }}</td>
+            <td>{{ tour.tour_id.tour_name }}</td>
+            <td>{{ tour.sched_id }}</td>
+            <td>{{ tour.start_time }}</td>
+            <td>{{ tour.end_time }}</td>
+            <td>{{ tour.slots_booked }}</td>
+            <td>${{ tour.price }}</td>
+            <td>${{ tour.calculate_revenue }}</td>
+            <td>{{ tour.status }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <p>No completed tours available.</p>
+    {% endif %}
+    
+    <!-- Cancelled Tours Section -->
+    {% if cancelled_tours %}
+    <div class="cancelled-section">
+      <h2>Cancelled Tours</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Tour ID</th>
+            <th>Tour Name</th>
+            <th>Schedule ID</th>
+            <th>Start Time</th>
+            <th>End Time</th>
+            <th>Slots Booked</th>
+            <th>Cancellation Date</th>
+            <th>Cancellation Reason</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for tour in cancelled_tours %}
+          <tr>
+            <td>{{ tour.tour_id.tour_id }}</td>
+            <td>{{ tour.tour_id.tour_name }}</td>
+            <td>{{ tour.sched_id }}</td>
+            <td>{{ tour.start_time }}</td>
+            <td>{{ tour.end_time }}</td>
+            <td>{{ tour.slots_booked }}</td>
+            <td>{{ tour.cancellation_date|default:"N/A" }}</td>
+            <td>{{ tour.cancellation_reason|default:"No reason provided" }}</td>
+            <td>{{ tour.status }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <p>No cancelled tours available.</p>
+    {% endif %}
+    
+    <div class="links">
+      <a href="{% url 'tour_app:pending_view' %}" class="back-link">Back to Bookings</a>
+      <a href="{% url 'tour_app:home' %}" class="back-link" style="margin-left: 10px;">Back to Home</a>
+    </div>
+  </div>
+</body>
+</html> 

@@ -1,0 +1,363 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Ibayaw Tour Admin Login</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <style>
+      :root {
+          /* Brand Colors */
+          --primary-color: #875a34;    /* Main brand color */
+          --primary-light: #e99c59;   /* Lighter version for accents */
+          --primary-dark: #6d4827;    /* Darker version for hover states */
+          --secondary-color: #8c6e5d; /* Secondary brand color */
+          
+          /* Status Colors */
+          --success-color: #34a853;   /* Green for success states */
+          --warning-color: #fbbc05;   /* Yellow for warnings */
+          --error-color: #ea4335;     /* Red for errors */
+          --info-color: #4285f4;      /* Blue for information */
+          
+          /* Neutral Colors */
+          --bg-color: #f4f7fc;        /* Light background */
+          --text-dark: #333;          /* Dark text */
+          --text-medium: #666;        /* Medium text */
+          --text-light: #9e9e9e;      /* Light text */
+          --white: #fff;              /* White */
+          
+          /* Other theme variables */
+          --border-radius: 8px;
+          --shadow: 0 8px 20px rgba(0, 0, 0, 0.15);
+      }
+      
+      * {
+          box-sizing: border-box;
+          margin: 0;
+          padding: 0;
+      }
+      
+      body {
+          font-family: 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+          background: url('{% static "images/Landscape_Carampatana_Entry2.jpg" %}') center/cover no-repeat;
+          display: flex;
+          flex-direction: column;
+          justify-content: center;
+          align-items: center;
+          min-height: 100vh;
+          margin: 0;
+          padding: 20px;
+          position: relative;
+      }
+      
+      body::before {
+          content: '';
+          position: absolute;
+          top: 0;
+          left: 0;
+          right: 0;
+          bottom: 0;
+          background: rgba(0, 0, 0, 0.4);
+          z-index: 1;
+      }
+      
+      .page-content {
+          position: relative;
+          z-index: 10;
+          width: 100%;
+          max-width: 1200px;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+      }
+      
+      .logo-container {
+          margin-bottom: 15px;
+          text-align: center;
+      }
+      
+      .main-logo {
+          width: 110px;
+          height: 110px;
+          margin-bottom: 5px;
+      }
+      
+      .logo-text {
+          color: white;
+          font-size: 36px;
+          font-weight: 300;
+          text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
+          margin-bottom: 15px;
+          text-align: center;
+      }
+      
+      .logo-text span {
+          display: inline-block;
+          border-bottom: 4px solid #FFA500;
+          padding-bottom: 3px;
+      }
+      
+      .side-logos {
+          position: absolute;
+          right: 20px;
+          top: 15px;
+          display: flex;
+          flex-direction: column;
+          gap: 10px;
+          z-index: 10;
+      }
+      
+      .side-logo {
+          width: 65px;
+          height: 65px;
+          background: rgba(255, 255, 255, 0.9);
+          border-radius: 50%;
+          padding: 2px;
+          object-fit: contain;
+      }
+      
+      .login-container {
+          background-color: rgba(255, 255, 255, 0.9);
+          border-radius: var(--border-radius);
+          overflow: hidden;
+          width: 100%;
+          max-width: 460px;
+          box-shadow: var(--shadow);
+      }
+      
+      .form-header {
+          text-align: center;
+          background-color: rgba(255, 255, 255, 0.95);
+          padding: 15px;
+          border-bottom: 1px solid #e0e0e0;
+      }
+      
+      .form-header h2 {
+          color: var(--text-dark);
+          font-size: 22px;
+          margin-bottom: 2px;
+      }
+      
+      .form-header p {
+          color: var(--text-medium);
+          font-size: 13px;
+      }
+      
+      .form-body {
+          padding: 20px;
+      }
+      
+      .form-group {
+          margin-bottom: 15px;
+          position: relative;
+      }
+      
+      .form-group label {
+          font-weight: 500;
+          display: block;
+          margin-bottom: 6px;
+          color: var(--text-dark);
+      }
+      
+      .input-with-icon {
+          position: relative;
+      }
+      
+      .input-with-icon i {
+          position: absolute;
+          left: 15px;
+          top: 50%;
+          transform: translateY(-50%);
+          color: var(--text-light);
+      }
+      
+      .form-control {
+          width: 100%;
+          padding: 12px 15px 12px 45px;
+          border: 1px solid #ced4da;
+          border-radius: var(--border-radius);
+          font-size: 15px;
+          transition: border-color 0.3s, box-shadow 0.3s;
+          background-color: white;
+      }
+      
+      .form-control:focus {
+          border-color: var(--primary-color);
+          box-shadow: 0 0 0 0.2rem rgba(135, 90, 52, 0.25);
+          outline: none;
+      }
+      
+      .btn-primary {
+          background-color: var(--primary-color);
+          color: white;
+          border: none;
+          border-radius: 30px;
+          padding: 12px;
+          font-size: 16px;
+          font-weight: 500;
+          cursor: pointer;
+          transition: background-color 0.3s;
+          width: 100%;
+          margin-top: 8px;
+      }
+      
+      .btn-primary:hover {
+          background-color: var(--primary-dark);
+      }
+      
+      .forgot-password {
+          text-align: center;
+          margin-top: 12px;
+          color: var(--text-medium);
+          font-size: 13px;
+      }
+      
+      .forgot-password a {
+          color: var(--primary-color);
+          text-decoration: none;
+      }
+      
+      .register-links {
+          margin-top: 15px;
+          text-align: center;
+      }
+      
+      .register-links p {
+          margin: 5px 0;
+          color: #343a40;
+          font-size: 13px;
+      }
+      
+      .register-links a {
+          color: var(--primary-color);
+          text-decoration: none;
+          font-weight: 500;
+          transition: color 0.3s;
+      }
+      
+      .register-links a:hover {
+          text-decoration: underline;
+          color: var(--primary-hover);
+      }
+      
+      .error-message {
+          background-color: #f8d7da;
+          color: #842029;
+          padding: 10px;
+          border-radius: var(--border-radius);
+          margin-bottom: 15px;
+          text-align: center;
+          border: 1px solid #f5c2c7;
+      }
+      
+      @media (max-width: 768px) {
+          .logo-text {
+              font-size: 28px;
+          }
+          
+          .main-logo {
+              width: 90px;
+              height: 90px;
+          }
+          
+          .side-logos {
+              top: 10px;
+              right: 10px;
+          }
+          
+          .side-logo {
+              width: 45px;
+              height: 45px;
+          }
+      }
+  </style>
+</head>
+<body>
+  <div class="side-logos">
+      <img src="{% static 'images/image (1).png' %}" alt="City of Bayawan Official Seal" class="side-logo">
+      <img src="{% static 'images/tote bag layout.png' %}" alt="Boyowon City" class="side-logo">
+      <img src="{% static 'images/image.png' %}" alt="Sangguniang Kabataan Federation" class="side-logo">
+  </div>
+
+  <div class="page-content">
+      <div class="logo-container">
+          <svg class="main-logo" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+              <!-- Sun -->
+              <circle cx="100" cy="90" r="30" fill="#FFD700"/>
+              <circle cx="100" cy="90" r="40" fill="none" stroke="#FF8C00" stroke-width="4"/>
+              
+              <!-- Rays -->
+              <line x1="100" y1="40" x2="100" y2="30" stroke="#FF8C00" stroke-width="4"/>
+              <line x1="135" y1="55" x2="145" y2="45" stroke="#FF8C00" stroke-width="4"/>
+              <line x1="150" y1="90" x2="160" y2="90" stroke="#FF8C00" stroke-width="4"/>
+              <line x1="135" y1="125" x2="145" y2="135" stroke="#FF8C00" stroke-width="4"/>
+              <line x1="65" y1="55" x2="55" y2="45" stroke="#FF8C00" stroke-width="4"/>
+              <line x1="50" y1="90" x2="40" y2="90" stroke="#FF8C00" stroke-width="4"/>
+              <line x1="65" y1="125" x2="55" y2="135" stroke="#FF8C00" stroke-width="4"/>
+              
+              <!-- Ocean -->
+              <path d="M30,130 Q65,110 100,130 Q135,150 170,130 L170,170 L30,170 Z" fill="#4A90E2"/>
+              
+              <!-- Palm Trees -->
+              <path d="M40,90 Q30,70 35,60 Q40,50 45,55 Q50,60 45,75 L45,90" fill="#FF4500"/>
+              <path d="M160,90 Q170,70 165,60 Q160,50 155,55 Q150,60 155,75 L155,90" fill="#FF4500"/>
+              
+              <!-- Plane -->
+              <path d="M120,100 L150,90 L120,80 L110,80 L108,82 L110,85 L116,87 L110,89 L108,92 L110,94 L120,94 Z" fill="#6A0DAD"/>
+          </svg>
+          <h1 class="logo-text">Welcome to <span>Ibayaw Tour</span></h1>
+      </div>
+      
+      <div class="login-container">
+          <div class="form-header">
+              <h2>Sign In</h2>
+              <p>Enter your credentials to access the panel</p>
+          </div>
+          
+          <div class="form-body">
+              {% if messages %}
+                  {% for message in messages %}
+                      <div class="error-message">
+                          <i class="fas fa-exclamation-circle"></i> {{ message }}
+                      </div>
+                  {% endfor %}
+              {% endif %}
+              
+              <form method="post" action="{% url 'admin_app:login' %}">
+                  {% csrf_token %}
+                  
+                  <div class="form-group">
+                      <label for="username">Username or Email</label>
+                      <div class="input-with-icon">
+                          <i class="fas fa-user"></i>
+                          <input type="text" class="form-control" name="username" id="username" placeholder="Enter your username or email" required>
+                      </div>
+                  </div>
+                  
+                  <div class="form-group">
+                      <label for="password">Password</label>
+                      <div class="input-with-icon">
+                          <i class="fas fa-lock"></i>
+                          <input type="password" class="form-control" name="password" id="password" placeholder="Enter your password" required>
+                      </div>
+                  </div>
+                  
+                  <button type="submit" class="btn-primary">
+                      Login
+                  </button>
+                  
+                  <div class="forgot-password">
+                      <a href="#">Forgot Password?</a>
+                  </div>
+              </form>
+              
+              <div class="register-links">
+                  <p>Don't have an account? <a href="{% url 'admin_app:employee-register' %}">Register as Employee</a></p>
+                  <p>Register as an Establishment? <a href="{% url 'admin_app:accommodation_register' %}">Register Accommodation</a></p>
+              </div>
+          </div>
+      </div>
+  </div>
+</body>
+</html>

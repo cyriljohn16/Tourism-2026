@@ -1,0 +1,1917 @@
+<!DOCTYPE html>
+{% load static %}
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Accommodation Dashboard</title>
+  <link rel="stylesheet" href="{% static 'css/navigation.css' %}">
+  <style>
+      :root {
+          /* Brand Colors */
+          --primary-color: #875a34;    /* Main brand color */
+          --primary-light: #e99c59;   /* Lighter version for accents */
+          --primary-dark: #6d4827;    /* Darker version for hover states */
+          --secondary-color: #8c6e5d; /* Secondary brand color */
+          
+          /* Status Colors */
+          --success-color: #34a853;   /* Green for success states */
+          --warning-color: #fbbc05;   /* Yellow for warnings */
+          --error-color: #ea4335;     /* Red for errors */
+          --info-color: #4285f4;      /* Blue for information */
+          
+          /* Neutral Colors */
+          --bg-color: #f4f7fc;        /* Light background */
+          --text-dark: #333;          /* Dark text */
+          --text-medium: #666;        /* Medium text */
+          --text-light: #9e9e9e;      /* Light text */
+          --white: #fff;              /* White */
+      }
+      
+      body { 
+          font-family: 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; 
+          background-color: var(--bg-color); 
+          margin: 0; 
+          padding: 0; 
+          color: var(--text-dark);
+      }
+      
+      /* Navbar styles */
+      .navbar {
+          background-color: var(--primary-color);
+          padding: 15px 20px;
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+          position: sticky;
+          top: 0;
+          z-index: 100;
+      }
+      
+      .navbar-brand {
+          color: var(--white);
+          font-size: 24px;
+          font-weight: bold;
+          text-decoration: none;
+      }
+      
+      .navbar-links {
+          display: flex;
+          align-items: center;
+      }
+      
+      .navbar-link {
+          color: var(--white);
+          text-decoration: none;
+          margin-left: 20px;
+          font-size: 16px;
+          transition: color 0.3s;
+      }
+      
+      .navbar-link:hover {
+          color: var(--primary-light);
+      }
+      
+      .profile-container {
+          display: flex;
+          align-items: center;
+          margin-left: 30px;
+          border-left: 1px solid rgba(255, 255, 255, 0.3);
+          padding-left: 30px;
+      }
+      
+      .profile-pic {
+          width: 40px;
+          height: 40px;
+          border-radius: 50%;
+          object-fit: cover;
+          border: 2px solid var(--white);
+          margin-right: 10px;
+      }
+      
+      .profile-name {
+          color: var(--white);
+          font-weight: 500;
+          margin-right: 20px;
+      }
+      
+      .container { 
+          max-width: 1200px; 
+          margin: 30px auto; 
+          background: var(--white); 
+          padding: 30px; 
+          border-radius: 8px; 
+          box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+          display: flex;
+          flex-direction: column;
+      }
+      
+      .dashboard-header {
+          margin-bottom: 20px;
+      }
+      
+      .dashboard-content {
+          display: flex;
+          gap: 30px;
+      }
+      
+      /* Room List Panel */
+      .room-list-panel {
+          flex: 0 0 350px;
+          background-color: #f0f0f0;
+          border-radius: 10px;
+          padding: 20px;
+          box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+      }
+      
+      .panel-header {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          margin-bottom: 20px;
+          padding-bottom: 10px;
+          border-bottom: 1px solid #ddd;
+      }
+      
+      .panel-title {
+          font-size: 18px;
+          font-weight: bold;
+          margin: 0;
+          text-transform: uppercase;
+          letter-spacing: 1px;
+      }
+      
+      .availability-header {
+          font-size: 18px;
+          font-weight: bold;
+          margin: 0;
+          text-transform: uppercase;
+          letter-spacing: 1px;
+      }
+      
+      .room-list {
+          display: flex;
+          flex-direction: column;
+          gap: 10px;
+      }
+      
+      .room-item {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          background-color: var(--primary-light);
+          padding: 15px 20px;
+          border-radius: 10px;
+          cursor: pointer;
+          transition: all 0.3s ease;
+      }
+      
+      .room-item:hover {
+          background-color: var(--primary-color);
+          color: white;
+      }
+      
+      .room-item.selected {
+          background-color: var(--primary-color);
+          color: white;
+      }
+      
+      .room-name {
+          font-weight: bold;
+          font-size: 16px;
+      }
+      
+      .availability-count {
+          background-color: white;
+          color: var(--text-dark);
+          font-weight: bold;
+          padding: 8px 15px;
+          border-radius: 20px;
+          min-width: 40px;
+          text-align: center;
+      }
+      
+      /* Guest Panel */
+      .guest-panel {
+          flex: 1;
+          background-color: #f0f0f0;
+          border-radius: 10px;
+          padding: 20px;
+          box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+      }
+      
+      /* Empty state styling */
+      .empty-state {
+          padding: 30px;
+          text-align: center;
+          background-color: #f8f8f8;
+          border-radius: 8px;
+          margin: 10px 0;
+          color: var(--text-medium);
+      }
+      
+      .empty-state p {
+          margin: 10px 0;
+          font-size: 15px;
+      }
+      
+      /* Room selector styling */
+      .room-selector {
+          background-color: var(--primary-light);
+          border-radius: 10px;
+          padding: 15px 20px;
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          margin-bottom: 20px;
+      }
+      
+      .current-room {
+          font-size: 24px;
+          font-weight: bold;
+      }
+      
+      .dropdown-arrow {
+          font-size: 24px;
+      }
+      
+      .filter-controls {
+          display: flex;
+          justify-content: flex-end;
+          margin-bottom: 20px;
+      }
+      
+      .group-filter {
+          display: flex;
+          align-items: center;
+          background-color: #ddd;
+          border-radius: 20px;
+          padding: 5px 15px;
+          cursor: pointer;
+      }
+      
+      .filter-name {
+          margin-right: 5px;
+          font-weight: bold;
+      }
+      
+      .guest-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+          gap: 15px;
+      }
+      
+      .guest-card {
+          background-color: white;
+          border-radius: 10px;
+          overflow: hidden;
+          box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+          transition: all 0.2s ease;
+          position: relative;
+      }
+      
+      .guest-card.selected {
+          box-shadow: 0 0 0 3px var(--success-color);
+      }
+      
+      .guest-photo {
+          width: 100%;
+          height: 150px;
+          object-fit: cover;
+      }
+      
+      .guest-info {
+          padding: 10px;
+          text-align: center;
+      }
+      
+      .guest-name {
+          font-weight: bold;
+          margin-bottom: 5px;
+      }
+      
+      .guest-role {
+          color: var(--text-medium);
+          font-size: 0.9em;
+          text-transform: uppercase;
+      }
+      
+      .action-buttons {
+          display: flex;
+          justify-content: center;
+          margin-top: 20px;
+      }
+      
+      .check-in-btn {
+          background-color: var(--success-color);
+          color: white;
+          border: none;
+          border-radius: 8px;
+          padding: 10px 25px;
+          font-weight: bold;
+          cursor: pointer;
+          transition: all 0.2s ease;
+      }
+      
+      .check-in-btn:hover {
+          background-color: #2a8644;
+      }
+      
+      .qr-scan-area {
+          background-color: white;
+          padding: 20px;
+          border-radius: 10px;
+          margin-top: 30px;
+          text-align: center;
+          border: 2px dashed #ccc;
+      }
+      
+      .group-options {
+          display: flex;
+          flex-direction: column;
+          gap: 10px;
+          margin-top: 15px;
+      }
+      
+      .group-option-btn {
+          padding: 10px 15px;
+          border: none;
+          border-radius: 5px;
+          background-color: var(--primary-light);
+          cursor: pointer;
+          font-weight: bold;
+      }
+      
+      .group-option-btn:hover {
+          background-color: var(--primary-color);
+          color: white;
+      }
+      
+      .room-options {
+          display: flex;
+          flex-direction: column;
+          gap: 10px;
+          margin-top: 15px;
+      }
+      
+      .room-option-btn {
+          padding: 10px 15px;
+          border: none;
+          border-radius: 5px;
+          background-color: var(--primary-light);
+          cursor: pointer;
+          font-weight: bold;
+      }
+      
+      .room-option-btn:hover {
+          background-color: var(--primary-color);
+          color: white;
+      }
+      
+      h1 { color: var(--text-dark); }
+      .button {
+          background-color: var(--primary-color);
+          color: white;
+          padding: 10px 20px;
+          text-align: center;
+          text-decoration: none;
+          display: inline-block;
+          font-size: 16px;
+          border-radius: 5px;
+          border: none;
+          cursor: pointer;
+          margin-top: 20px;
+          margin-right: 10px;
+      }
+      .button:hover {
+          background-color: var(--primary-dark);
+      }
+      .logout-button {
+          background-color: var(--error-color);
+      }
+      
+      /* Modal styles */
+      .modal {
+          display: none;
+          position: fixed;
+          z-index: 1000;
+          left: 0;
+          top: 0;
+          width: 100%;
+          height: 100%;
+          overflow: auto;
+          background-color: rgba(0,0,0,0.4);
+      }
+      
+      .modal-content {
+          background-color: #fefefe;
+          margin: 5% auto;
+          padding: 20px;
+          border: 1px solid #888;
+          width: 80%;
+          max-width: 900px;
+          border-radius: 8px;
+          max-height: 80vh;
+          overflow-y: auto;
+      }
+      
+      .close {
+          color: #aaa;
+          float: right;
+          font-size: 28px;
+          font-weight: bold;
+          cursor: pointer;
+      }
+      
+      .close:hover,
+      .close:focus {
+          color: black;
+          text-decoration: none;
+      }
+      
+      /* Room registration styles */
+      .no-rooms {
+          color: #666;
+          font-style: italic;
+      }
+      .register-btn {
+          padding: 5px 10px;
+          background-color: #28a745;
+          color: white;
+          border: none;
+          border-radius: 4px;
+          cursor: pointer;
+          margin-right: 5px;
+      }
+      .register-btn:hover {
+          background-color: #218838;
+      }
+      .delete-btn {
+          padding: 5px 10px;
+          background-color: #dc3545;
+          color: white;
+          border: none;
+          border-radius: 4px;
+          cursor: pointer;
+      }
+      .delete-btn:hover {
+          background-color: #c82333;
+      }
+      /* Guest registration modal styles */
+      .guest-modal {
+          display: none; 
+          position: fixed; 
+          z-index: 1001; 
+          left: 0;
+          top: 0;
+          width: 100%;
+          height: 100%;
+          overflow: auto;
+          background-color: rgba(0,0,0,0.4);
+      }
+      .guest-modal-content {
+          background-color: #fefefe;
+          margin: 10% auto;
+          padding: 20px;
+          border: 1px solid #888;
+          width: 350px;
+          border-radius: 8px;
+          position: relative;
+          text-align: left;
+      }
+      .add-room-btn {
+          margin-top: 20px;
+          padding: 10px 20px;
+          background-color: #007BFF;
+          color: white;
+          border: none;
+          border-radius: 4px;
+          cursor: pointer;
+          display: block;
+      }
+      .add-room-btn:hover {
+          background-color: #0056b3;
+      }
+      input[type="date"],
+      input[type="number"],
+      input[type="text"],
+      select {
+          width: 95%;
+          padding: 8px;
+          margin: 8px 0;
+          border: 1px solid #ccc;
+          border-radius: 4px;
+      }
+      label {
+          font-weight: bold;
+      }
+      .error-message {
+          color: #dc3545;
+          font-size: 14px;
+          margin-top: 5px;
+          display: none;
+      }
+      .date-error {
+          border-color: #dc3545 !important;
+      }
+      ul {
+          list-style-type: none;
+          padding: 0;
+      }
+      li {
+          padding: 8px;
+          border-bottom: 1px solid #ddd;
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+      }
+      .room-item.occupied {
+          border: 2px solid var(--warning-color);
+      }
+      
+      .check-out-btn {
+          background-color: var(--warning-color);
+          color: white;
+          border: none;
+          border-radius: 4px;
+          padding: 3px 8px;
+          margin-left: 10px;
+          font-size: 12px;
+          cursor: pointer;
+      }
+      
+      .check-out-btn:hover {
+          background-color: var(--error-color);
+      }
+      
+      .occupied-info {
+          background-color: #f5f5f5;
+          padding: 15px;
+          border-radius: 8px;
+          margin-bottom: 15px;
+      }
+  </style>
+</head>
+<body>
+  <!-- Navigation Bar -->
+  <nav class="navbar">
+    <a href="#" class="navbar-brand">{{ request.session.company_name }} Dashboard</a>
+    <div class="navbar-links">
+      <a href="{% url 'accom_app:other_estab_create' %}" class="navbar-link">Monthly Summary</a>
+      <a href="#" class="navbar-link" id="roomNavBtn">Rooms</a>
+      <div class="profile-container">
+        {% if request.session.profile_pic %}
+          <img src="{{ request.session.profile_pic }}" alt="Profile Picture" class="profile-pic">
+        {% else %}
+          <img src="{% static 'images/default-profile.png' %}" alt="Default Profile" class="profile-pic">
+        {% endif %}
+        <span class="profile-name">{{ request.session.company_name }}</span>
+        <a href="{% url 'admin_app:admin_logout' %}" class="navbar-link">Logout</a>
+      </div>
+    </div>
+  </nav>
+  
+  <div class="container">
+    <div class="dashboard-header">
+        <h1>Welcome {{ request.session.company_name }} to Accommodation Dashboard</h1>
+        <p>Manage your accommodations and guest assignments below.</p>
+        <button id="createSampleRoomsBtn" class="button" style="background-color: var(--info-color);">Create Sample Rooms</button>
+        
+        <!-- Hidden form with CSRF token for AJAX requests -->
+        <form id="csrfForm" style="display:none;">
+            {% csrf_token %}
+        </form>
+    </div>
+    
+    <div class="dashboard-content">
+        <!-- Room List Panel (Left Side) -->
+        <div class="room-list-panel">
+            <div class="panel-header">
+                <h2 class="panel-title">Available Rooms</h2>
+                <h2 class="availability-header">Availability</h2>
+            </div>
+            
+            <div class="room-list" id="roomListContainer">
+                <!-- Room items will be loaded here via JavaScript -->
+            </div>
+            
+            <div class="qr-scan-area" id="qrScanArea">
+                <h3>Scan QR Code</h3>
+                <button id="openQrScannerBtn" class="button">Scan QR Code</button>
+            </div>
+        </div>
+        
+        <!-- Guest Panel (Right Side) -->
+        <div class="guest-panel">
+            <div class="room-selector" id="currentRoomDisplay">
+                <span class="current-room">ROOM 101</span>
+                <span class="dropdown-arrow">▼</span>
+            </div>
+            
+            <div class="filter-controls">
+                <div class="group-filter" id="groupFilter">
+                    <span class="filter-name">FAMILY</span>
+                    <span class="dropdown-arrow">▼</span>
+                </div>
+            </div>
+            
+            <div class="guest-grid" id="guestGrid">
+                <!-- Guest cards will be loaded here via JavaScript -->
+            </div>
+            
+            <div class="action-buttons">
+                <button id="checkInBtn" class="check-in-btn">CHECK IN</button>
+                <button id="debugBtn" class="button" style="margin-left: 10px; background-color: #4285f4;">Debug</button>
+                <button id="directCheckInBtn" class="button" style="margin-left: 10px; background-color: #34a853;">Manual Check-In</button>
+            </div>
+        </div>
+    </div>
+  </div>
+  
+  <!-- The Room Management Modal -->
+  <div id="roomModal" class="modal">
+    <!-- Modal content -->
+    <div class="modal-content">
+      <span class="close">&times;</span>
+      <h1>Registered Rooms</h1>
+      <div id="roomListContainer">
+          {% if hotel_rooms %}
+              <ul id="roomsList">
+                  {% for room in hotel_rooms %}
+                      <li>
+                          <span>Room ID: {{ room.room_id }} ({{ room.room_name }}) - Capacity: {{ room.person_limit }} person(s)</span>
+                          <div>
+                              <button class="register-btn" data-room-id="{{ room.room_id }}">Register</button>
+                              <button class="scan-qr-btn" data-room-id="{{ room.room_id }}">Scan QR</button>
+                              <button class="delete-btn" data-room-id="{{ room.room_id }}">Delete</button>
+                          </div>
+                      </li>
+                  {% endfor %}
+              </ul>
+          {% else %}
+              <p class="no-rooms" id="noRoomsMsg">No rooms have been registered yet.</p>
+          {% endif %}
+      </div>
+
+      <!-- Button to open the "Add Room" modal -->
+      <button class="add-room-btn" id="openAddRoomModalBtn">Add Room</button>
+    </div>
+  </div>
+  
+  <!-- Add Room Modal -->
+  <div id="addRoomModal" class="guest-modal">
+      <div class="guest-modal-content">
+          <span class="close" id="closeAddRoomModalBtn">&times;</span>
+          <h2>Add New Room</h2>
+          <form id="addRoomForm" method="post">
+              {% csrf_token %}
+              <label for="roomName">Room Name:</label><br>
+              <input type="text" id="roomName" name="room_name" placeholder="Enter room name" required>
+              <br>
+              <label for="personLimit">Person Limit:</label><br>
+              <input type="number" id="personLimit" name="person_limit" placeholder="Max number of people allowed" min="0" value="0" required>
+              <br>
+              <button type="submit" class="add-room-btn">Add Room</button>
+          </form>
+      </div>
+  </div>
+
+  <!-- Register Guest Modal -->
+  <div id="registerGuestModal" class="guest-modal">
+      <div class="guest-modal-content">
+          <span class="close" id="closeRegisterModalBtn">&times;</span>
+          <h2>Register Guest for Room</h2>
+          <div id="entriesCounter" style="margin-bottom: 15px; color: #28a745; display: none;"></div>
+          <form id="registerGuestForm" method="post">
+              {% csrf_token %}
+              <!-- Hidden field for room id -->
+              <input type="hidden" id="regRoomId" name="room_id">
+              
+              <label for="checkedIn">Checked In:</label>
+              <input type="date" id="checkedIn" name="checked_in" required>
+              <div id="checkedInError" class="error-message">Please select a check-in date</div>
+              
+              <label for="checkedOut">Checked Out:</label>
+              <input type="date" id="checkedOut" name="checked_out" required>
+              <div id="checkedOutError" class="error-message">Please select a check-out date</div>
+              
+              <label for="nights">No. of Nights:</label>
+              <input type="number" id="nights" name="no_of_nights" readonly placeholder="Auto-calculated" required>
+              <div id="nightsError" class="error-message">Nights will be calculated automatically</div>
+
+              <label for="numGuests">Number of Guests:</label>
+              <input type="number" id="numGuests" name="num_guests" placeholder="Enter number of guests" required>
+              
+              <label for="regMonth">Month:</label>
+              <select id="regMonth" name="month" required>
+                  <option value="" selected disabled>--Select Month--</option>
+                  <option value="January">January</option>
+                  <option value="February">February</option>
+                  <option value="March">March</option>
+                  <option value="April">April</option>
+                  <option value="May">May</option>
+                  <option value="June">June</option>
+                  <option value="July">July</option>
+                  <option value="August">August</option>
+                  <option value="September">September</option>
+                  <option value="October">October</option>
+                  <option value="November">November</option>
+                  <option value="December">December</option>
+              </select>
+              <div style="display: flex; justify-content: space-between; margin-top: 15px;">
+                  <button type="submit" class="add-room-btn">Submit Registration</button>
+                  <button type="button" id="addAnotherEntryBtn" class="add-room-btn" style="background-color: #5cb85c;">Add Another Entry</button>
+              </div>
+          </form>
+      </div>
+  </div>
+  
+  <!-- QR Code Scanner Modal -->
+  <div id="qrScannerModal" class="modal">
+    <div class="modal-content" style="max-width: 800px;">
+      <span class="close" id="closeQrScannerBtn">&times;</span>
+      <h2>Scan Guest QR Code</h2>
+      <p>Use this scanner to read QR codes from guests containing their account information and companions.</p>
+      
+      <div style="display: flex; flex-direction: column; align-items: center;">
+        <div id="scannerContainer" style="width: 100%; max-width: 500px; position: relative;">
+          <video id="qrScanner" style="width: 100%; border: 3px solid var(--primary-color); border-radius: 8px;"></video>
+          <canvas id="qrCanvas" style="display: none;"></canvas>
+        </div>
+        
+        <div id="scanResult" style="margin-top: 20px; display: none; width: 100%;">
+          <h3>Scan Result</h3>
+          <div id="guestInfoContainer" style="background-color: #f5f7f5; padding: 15px; border-radius: 8px; margin-top: 10px;">
+            <div id="userInfo">
+              <h4>Guest Information</h4>
+              <p><strong>Name:</strong> <span id="guestName">-</span></p>
+              <p><strong>Email:</strong> <span id="guestEmail">-</span></p>
+              <p><strong>Phone:</strong> <span id="guestPhone">-</span></p>
+            </div>
+            
+            <div id="companionsInfo" style="margin-top: 15px;">
+              <h4>Companions (<span id="companionCount">0</span>)</h4>
+              <div id="companionsList"></div>
+            </div>
+            
+            <button id="useGuestInfoBtn" class="button" style="background-color: var(--success-color); margin-top: 15px;">Use This Information</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  
+  <!-- Group Filter Modal -->
+  <div id="groupFilterModal" class="guest-modal">
+      <div class="guest-modal-content">
+          <span class="close" id="closeGroupFilterBtn">&times;</span>
+          <h2>Select Group Type</h2>
+          <div class="group-options">
+              <button class="group-option-btn" data-group="FAMILY">FAMILY</button>
+              <button class="group-option-btn" data-group="FRIENDS">FRIENDS</button>
+              <button class="group-option-btn" data-group="COMPANY">COMPANY</button>
+              <button class="group-option-btn" data-group="ALL">ALL GROUPS</button>
+          </div>
+      </div>
+  </div>
+
+  <!-- Room Selection Modal -->
+  <div id="roomSelectionModal" class="guest-modal">
+      <div class="guest-modal-content">
+          <span class="close" id="closeRoomSelectionBtn">&times;</span>
+          <h2>Select Room</h2>
+          <div class="room-options" id="roomOptionsContainer">
+              <!-- Room options will be loaded here via JavaScript -->
+          </div>
+      </div>
+  </div>
+  
+  <!-- Manual Check-in Form Modal -->
+  <div id="manualCheckInModal" class="modal">
+    <div class="modal-content" style="max-width: 500px;">
+        <span class="close" id="closeManualCheckInBtn">&times;</span>
+        <h2>Manual Check-in Form</h2>
+        <form action="{% url 'accom_app:minimal_check_in' %}" method="post" id="manualCheckInForm">
+            {% csrf_token %}
+            <input type="hidden" id="manualRoomId" name="room_id" value="">
+            <input type="hidden" id="manualGuestIds" name="guest_ids" value="">
+            
+            <div style="margin-bottom: 15px;">
+                <p><strong>Room:</strong> <span id="manualRoomName"></span></p>
+                <p><strong>Selected Guests:</strong> <span id="manualGuestNames"></span></p>
+            </div>
+            
+            <button type="submit" class="button" style="background-color: #34a853;">Check In Now</button>
+        </form>
+    </div>
+  </div>
+  
+  <!-- Include jQuery -->
+  <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+  <!-- Include jsQR library for QR code scanning -->
+  <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
+  <script>
+    // Get modal elements
+    var modal = document.getElementById("roomModal");
+    var addRoomModal = document.getElementById("addRoomModal");
+    var registerGuestModal = document.getElementById("registerGuestModal");
+    var qrScannerModal = document.getElementById("qrScannerModal");
+    var groupFilterModal = document.getElementById("groupFilterModal");
+    var roomSelectionModal = document.getElementById("roomSelectionModal");
+    
+    // Get buttons and close elements
+    var roomBtn = document.getElementById("roomBtn");
+    var roomNavBtn = document.getElementById("roomNavBtn");
+    var openAddRoomModalBtn = document.getElementById("openAddRoomModalBtn");
+    var closeBtn = document.getElementsByClassName("close")[0];
+    var closeAddRoomModalBtn = document.getElementById("closeAddRoomModalBtn");
+    var closeRegisterModalBtn = document.getElementById("closeRegisterModalBtn");
+    var closeQrScannerBtn = document.getElementById("closeQrScannerBtn");
+    var closeGroupFilterBtn = document.getElementById("closeGroupFilterBtn");
+    var closeRoomSelectionBtn = document.getElementById("closeRoomSelectionBtn");
+    var openQrScannerBtn = document.getElementById("openQrScannerBtn");
+    var groupFilter = document.getElementById("groupFilter");
+    var currentRoomDisplay = document.getElementById("currentRoomDisplay");
+    var checkInBtn = document.getElementById("checkInBtn");
+    
+    // QR Scanner elements
+    var video = document.getElementById("qrScanner");
+    var canvas = document.getElementById("qrCanvas");
+    var scanResult = document.getElementById("scanResult");
+    var guestName = document.getElementById("guestName");
+    var guestEmail = document.getElementById("guestEmail");
+    var guestPhone = document.getElementById("guestPhone");
+    var companionCount = document.getElementById("companionCount");
+    var companionsList = document.getElementById("companionsList");
+    var useGuestInfoBtn = document.getElementById("useGuestInfoBtn");
+    
+    var canvasContext = canvas.getContext("2d");
+    var scanning = false;
+    
+    // Current selected room and group filter
+    var currentRoomId = null;
+    var currentRoom = "ROOM 101";
+    var currentGroupFilter = "FAMILY";
+    var selectedGuests = [];
+    
+    // Track entries added in current session
+    var entriesAdded = 0;
+    
+    // Add this variable at the top near your other state variables
+    var isUsingQrData = false;
+    var qrGuestData = [];
+    
+    // Initialize the dashboard
+    $(document).ready(function() {
+        console.log("Document ready, initializing dashboard...");
+        
+        // First, set up jQuery AJAX to include the CSRF token in the header
+        $.ajaxSetup({
+            beforeSend: function(xhr, settings) {
+                if (!(/^http:.*/.test(settings.url) || /^https:.*/.test(settings.url))) {
+                    // Get CSRF token from the hidden form
+                    var csrftoken = $('#csrfForm input[name=csrfmiddlewaretoken]').val();
+                    xhr.setRequestHeader("X-CSRFToken", csrftoken);
+                    console.log("Setting CSRF token:", csrftoken);
+                }
+            }
+        });
+        
+        // Load rooms data
+        loadRooms();
+        
+        // Default room values will be set after room data loads
+        
+        // Debug function to show current state
+        $('#debugBtn').on('click', function() {
+            console.log('Current room ID:', currentRoomId);
+            console.log('Selected guests:', selectedGuests);
+            console.log('Is button attached:', $('#checkInBtn').length > 0);
+            alert('Check console for debug info');
+        });
+
+        // Direct event handler for check-in button
+        $('#checkInBtn').on('click', function() {
+            console.log('Check-in button clicked');
+            
+            if (selectedGuests.length === 0) {
+                alert("Please select at least one guest to check in.");
+                return;
+            }
+            
+            console.log('Checking in guests:', selectedGuests, 'to room ID:', currentRoomId);
+            
+            // Disable button to prevent multiple clicks
+            $(this).prop('disabled', true).text('Checking in...');
+            
+            $.ajax({
+                type: "POST",
+                url: "{% url 'accom_app:minimal_check_in' %}",
+                data: {
+                    room_id: currentRoomId,
+                    guest_ids: JSON.stringify(selectedGuests)
+                },
+                success: function(response) {
+                    console.log('Success response:', response);
+                    
+                    // Show success alert regardless of UI updates
+                    alert('Success! Guests checked in');
+                    
+                    // Reload guests to reflect changes
+                    loadGuestsForRoom(currentRoomId);
+                },
+                error: function(xhr, status, error) {
+                    console.error('Error response:', xhr.responseText);
+                    console.error('Status code:', xhr.status);
+                    console.error('Error:', error);
+                    
+                    alert('Error checking in guests. See console for details.');
+                },
+                complete: function() {
+                    // Re-enable button
+                    $('#checkInBtn').prop('disabled', false).text('CHECK IN');
+                }
+            });
+        });
+        
+        console.log("Dashboard initialization complete.");
+    });
+    
+    // When the user clicks the Room link in navbar, open the admin modal
+    roomNavBtn.onclick = function(e) {
+      e.preventDefault();
+      // Load room data via AJAX for admin modal
+      loadRoomDataForAdmin();
+      modal.style.display = "block";
+    }
+    
+    // Load rooms for the dashboard
+    function loadRooms() {
+        console.log("Loading rooms...");
+        
+        $.ajax({
+            url: "{% url 'accom_app:get_rooms_json' %}",
+            type: "GET",
+            success: function(response) {
+                console.log("Rooms loaded:", response);
+                
+                // Check if we have room data
+                if (response.rooms && response.rooms.length > 0) {
+                    updateRoomUI(response.rooms);
+                } else {
+                    console.log("No rooms found in response");
+                    // Show empty state on empty response
+                    updateRoomUI([]);
+                }
+            },
+            error: function(xhr, status, error) {
+                console.error("Error loading room data:", error);
+                console.error("Response:", xhr.responseText);
+                
+                try {
+                    var response = JSON.parse(xhr.responseText);
+                    console.error("Error details:", response);
+                } catch(e) {
+                    console.error("Could not parse error response");
+                }
+                
+                // Show empty state on error
+                updateRoomUI([]);
+            }
+        });
+    }
+    
+    // Update room UI based on data
+    function updateRoomUI(roomsData) {
+        console.log("Updating room UI with:", roomsData);
+        
+        if (!roomsData || roomsData.length === 0) {
+            // No rooms - show empty state
+            console.log("No rooms found, showing empty state");
+            $('#roomListContainer').html('<div class="empty-state">' +
+                '<p>No rooms have been registered yet.</p>' +
+                '<p>Use the Rooms button in the navigation bar to add rooms.</p>' +
+                '</div>');
+                
+            // Also update the room options container for selection modal
+            $('#roomOptionsContainer').html('<p class="empty-state">No rooms available. Please add rooms first.</p>');
+            
+            return;
+        }
+        
+        // Populate room list
+        var roomListHtml = '';
+        roomsData.forEach(function(room) {
+            console.log("Processing room:", room);
+            
+            var selectedClass = (room.id === currentRoomId) ? 'selected' : '';
+            var lockIcon = '';
+            var statusClass = '';
+            var actionButton = '';
+            
+            // Show lock icon and status for occupied rooms
+            if (room.status === 'OCCUPIED') {
+                lockIcon = '<i class="fas fa-lock" style="margin-left: 5px; color: var(--warning-color);"></i>';
+                statusClass = 'occupied';
+                actionButton = `<button class="check-out-btn" data-room-id="${room.id}">CHECK OUT</button>`;
+            }
+            
+            roomListHtml += `
+                <div class="room-item ${selectedClass} ${statusClass}" data-room-id="${room.id}" data-room-name="${room.name}" data-room-status="${room.status}">
+                    <span class="room-name">${room.name} ${lockIcon}</span>
+                    <span class="availability-count">${room.availability}</span>
+                    ${actionButton}
+                </div>
+            `;
+        });
+        
+        $('#roomListContainer').html(roomListHtml);
+        console.log("Room list HTML updated");
+        
+        // Add click handlers for room items
+        $('.room-item').on('click', function() {
+            var roomId = $(this).data('room-id');
+            var roomName = $(this).data('room-name');
+            console.log("Room clicked:", roomId, roomName);
+            selectRoom(roomId, roomName);
+        });
+        
+        // Add click handler for check-out buttons
+        $('.check-out-btn').on('click', function(e) {
+            e.stopPropagation(); // Prevent room selection when clicking the button
+            var roomId = $(this).data('room-id');
+            console.log("Check-out clicked for room:", roomId);
+            checkOutRoom(roomId);
+        });
+        
+        // Also populate room options for the room selection modal
+        var roomOptionsHtml = '';
+        roomsData.forEach(function(room) {
+            var statusIndicator = room.status === 'OCCUPIED' ? 
+                '<span style="color: var(--warning-color); margin-left: 5px;"><i class="fas fa-lock"></i> Occupied</span>' : '';
+                
+            roomOptionsHtml += `
+                <button class="room-option-btn" data-room-id="${room.id}" data-room-name="${room.name}">
+                    ${room.name} (Available: ${room.availability}/${room.capacity}) ${statusIndicator}
+                </button>
+            `;
+        });
+        
+        $('#roomOptionsContainer').html(roomOptionsHtml);
+        console.log("Room options updated");
+        
+        // Add click handlers for room option buttons
+        $('.room-option-btn').on('click', function() {
+            var roomId = $(this).data('room-id');
+            var roomName = $(this).data('room-name');
+            console.log("Room option selected:", roomId, roomName);
+            selectRoom(roomId, roomName);
+            roomSelectionModal.style.display = "none";
+        });
+        
+        // If there's at least one room but no current room selected, select the first one
+        if (!currentRoomId && roomsData.length > 0) {
+            console.log("Auto-selecting first room");
+            selectRoom(roomsData[0].id, roomsData[0].name);
+        }
+    }
+    
+    // Load room data for admin modal
+    function loadRoomDataForAdmin() {
+        console.log("Loading room data for admin modal...");
+        
+        $.ajax({
+            url: "{% url 'accom_app:get_rooms_json' %}",
+            type: "GET",
+            success: function(response) {
+                console.log("Admin room data loaded:", response);
+                
+                // Check if we have room data
+                if (response.status === 'success' && response.rooms && response.rooms.length > 0) {
+                    var roomsData = response.rooms;
+                    
+                    // Create HTML for room list in the admin modal
+                    var roomListHtml = '<ul id="roomsList">';
+                    roomsData.forEach(function(room) {
+                        roomListHtml += `
+                            <li>
+                                <span>Room: ${room.name} - Capacity: ${room.capacity} - Available: ${room.availability}</span>
+                                <div>
+                                    <button class="register-btn" data-room-id="${room.id}">Register</button>
+                                    <button class="scan-qr-btn" data-room-id="${room.id}">Scan QR</button>
+                                    <button class="delete-btn" data-room-id="${room.id}">Delete</button>
+                                </div>
+                            </li>
+                        `;
+                    });
+                    roomListHtml += '</ul>';
+                    
+                    // Set the room list HTML for the admin modal
+                    $('.modal-content #roomListContainer').html(roomListHtml);
+                    
+                    // Add event listeners to the admin modal buttons
+                    $('.modal-content .scan-qr-btn').on('click', function() {
+                        var roomId = $(this).data('room-id');
+                        $("#qrScannerModal").data('room-id', roomId);
+                        qrScannerModal.style.display = "block";
+                        scanResult.style.display = "none";
+                        // Automatically start the camera scanner
+                        startScanner();
+                    });
+                    
+                    $('.modal-content .register-btn').on('click', function() {
+                        var roomId = $(this).data('room-id');
+                        $('#regRoomId').val(roomId);
+                        registerGuestModal.style.display = "block";
+                    });
+                    
+                    $('.modal-content .delete-btn').on('click', function() {
+                        var roomId = $(this).data('room-id');
+                        if(confirm("Are you sure you want to delete this room? This will also delete all guest registrations for this room.")) {
+                            deleteRoom(roomId);
+                        }
+                    });
+                } else {
+                    console.log("No rooms found for admin modal");
+                    $('.modal-content #roomListContainer').html('<p class="no-rooms" id="noRoomsMsg">No rooms have been registered yet.</p>');
+                }
+            },
+            error: function(xhr, status, error) {
+                console.error("Error loading admin room data:", error);
+                console.error("Response:", xhr.responseText);
+                $('.modal-content #roomListContainer').html('<p class="no-rooms">Error loading rooms. Please try again.</p>');
+            }
+        });
+    }
+    
+    // Function to delete a room
+    function deleteRoom(roomId) {
+        console.log("Deleting room:", roomId);
+        
+        $.ajax({
+            type: "POST",
+            url: "{% url 'accom_app:delete_room_ajax' %}",
+            data: {
+                room_id: roomId
+            },
+            success: function(response) {
+                console.log("Room deleted successfully:", response);
+                
+                // Update the room lists
+                loadRoomDataForAdmin();
+                loadRooms();
+                
+                // If we deleted the current room, select another one
+                if (currentRoomId == roomId) {
+                    // Reset currentRoomId so a new room will be selected
+                    currentRoomId = null;
+                    loadRooms(); // This will auto-select the first room if available
+                }
+                
+                alert("Room deleted successfully!");
+            },
+            error: function(xhr, status, error) {
+                console.error("Error deleting room:", error);
+                console.error("Response:", xhr.responseText);
+                
+                try {
+                    var response = JSON.parse(xhr.responseText);
+                    alert("Error: " + response.message);
+                } catch(e) {
+                    alert("An error occurred while deleting room: " + error);
+                }
+            }
+        });
+    }
+    
+    // Development flag - set to false in production
+    var development = false;
+    
+    // Load guests for a specific room
+    function loadGuestsForRoom(roomId) {
+        if (!roomId) {
+            // No room selected, show empty state
+            console.log("No room selected");
+            $('#guestGrid').html('<div class="empty-state">No room selected. Please select a room to view guests.</div>');
+            return;
+        }
+        
+        console.log("Loading guests for room:", roomId, "with filter:", currentGroupFilter);
+        
+        // Reset selected guests when loading new room data
+        selectedGuests = [];
+        
+        // Show loading indicator
+        $('#guestGrid').html('<div class="empty-state">Loading guests...</div>');
+        
+        // AJAX call to get guests for the selected room
+        $.ajax({
+            url: "{% url 'accom_app:get_room_guests' %}",
+            type: "GET",
+            data: { room_id: roomId, group: currentGroupFilter },
+            success: function(response) {
+                console.log("Guests loaded:", response);
+                
+                if (response.guests && response.guests.length > 0) {
+                    displayGuests(response.guests);
+                } else {
+                    // No guests found for this room
+                    $('#guestGrid').html('<div class="empty-state">No guests assigned to this room yet.</div>');
+                }
+            },
+            error: function(xhr, status, error) {
+                console.error("Error loading guests:", error);
+                console.error("Response:", xhr.responseText);
+                
+                try {
+                    var response = JSON.parse(xhr.responseText);
+                    $('#guestGrid').html('<div class="empty-state">Error: ' + (response.message || response.error || error) + '</div>');
+                } catch(e) {
+                    $('#guestGrid').html('<div class="empty-state">Error loading guests. Please try again.</div>');
+                }
+            }
+        });
+    }
+    
+    // Display guests in the guest grid
+    function displayGuests(guests) {
+        // Filter guests by group if needed
+        var filteredGuests = guests;
+        if (currentGroupFilter !== "ALL") {
+            filteredGuests = guests.filter(guest => guest.group_type === currentGroupFilter);
+        }
+        
+        if (filteredGuests.length === 0) {
+            $('#guestGrid').html('<div class="empty-state">No guests found for the selected group type.</div>');
+            return;
+        }
+        
+        // Build the guest grid HTML
+        var guestGridHtml = '';
+        filteredGuests.forEach(function(guest) {
+            var selectedClass = selectedGuests.includes(guest.id) ? 'selected' : '';
+            var photoUrl = guest.photo_url || 'https://via.placeholder.com/150?text=' + encodeURIComponent(guest.first_name);
+            var statusBadge = '';
+            
+            if (guest.status) {
+                var statusClass = 'info-color'; // Default
+                
+                // Set the appropriate color based on status
+                if (guest.status.toLowerCase() === 'checked-in') {
+                    statusClass = 'success-color';
+                } else if (guest.status.toLowerCase() === 'checked-in elsewhere') {
+                    statusClass = 'warning-color';
+                }
+                
+                statusBadge = `<div class="guest-status" style="background-color: var(--${statusClass}); color: white; padding: 2px 6px; border-radius: 4px; font-size: 0.8em; margin-top: 4px;">${guest.status}</div>`;
+            }
+            
+            guestGridHtml += `
+                <div class="guest-card ${selectedClass}" data-guest-id="${guest.id}">
+                    <img src="${photoUrl}" alt="${guest.first_name} ${guest.last_name}" class="guest-photo">
+                    <div class="guest-info">
+                        <div class="guest-name">${guest.first_name} ${guest.last_name}</div>
+                        <div class="guest-role">${guest.role}</div>
+                        ${statusBadge}
+                    </div>
+                </div>
+            `;
+        });
+        
+        // Update the guest grid
+        $('#guestGrid').html(guestGridHtml);
+        
+        // Add click handlers for guest cards
+        $('.guest-card').on('click', function() {
+            var guestId = $(this).data('guest-id');
+            toggleGuestSelection(guestId);
+        });
+    }
+    
+    // Toggle guest selection
+    function toggleGuestSelection(guestId) {
+        var index = selectedGuests.indexOf(guestId);
+        if (index === -1) {
+            // Not selected, add to selection
+            selectedGuests.push(guestId);
+            $(`.guest-card[data-guest-id="${guestId}"]`).addClass('selected');
+        } else {
+            // Already selected, remove from selection
+            selectedGuests.splice(index, 1);
+            $(`.guest-card[data-guest-id="${guestId}"]`).removeClass('selected');
+        }
+    }
+    
+    // Select a room
+    function selectRoom(roomId, roomName) {
+        // Update current room
+        currentRoomId = roomId;
+        currentRoom = roomName;
+        
+        // Reset QR mode when changing rooms
+        isUsingQrData = false;
+        qrGuestData = [];
+        
+        // Update UI
+        $('.room-item').removeClass('selected');
+        $(`.room-item[data-room-id="${roomId}"]`).addClass('selected');
+        $('.current-room').text(roomName);
+        
+        // Reset selected guests
+        selectedGuests = [];
+        
+        // Load guests for the new room
+        loadGuestsForRoom(roomId);
+    }
+    
+    // Handle group filter click
+    groupFilter.onclick = function() {
+        groupFilterModal.style.display = "block";
+    };
+    
+    // Handle group option click
+    $(document).on('click', '.group-option-btn', function() {
+        var group = $(this).data('group');
+        currentGroupFilter = group;
+        
+        // Update the filter display
+        $('#groupFilter .filter-name').text(group);
+        
+        // Close the modal
+        groupFilterModal.style.display = "none";
+        
+        // If we're working with QR data, filter it locally instead of making a server request
+        if (isUsingQrData && qrGuestData.length > 0) {
+            displayScannedGuests(qrGuestData);
+        } else {
+            // Otherwise, load guests from the server
+            loadGuestsForRoom(currentRoomId);
+        }
+    });
+    
+    // Handle room selector click
+    currentRoomDisplay.onclick = function() {
+        roomSelectionModal.style.display = "block";
+    };
+    
+    // Handle QR scanner button click
+    openQrScannerBtn.onclick = function() {
+        qrScannerModal.style.display = "block";
+        scanResult.style.display = "none"; // Hide results area initially
+        // Automatically start the camera scanner
+        startScanner();
+    };
+    
+    // Close modals
+    closeGroupFilterBtn.onclick = function() {
+        groupFilterModal.style.display = "none";
+    };
+    
+    closeRoomSelectionBtn.onclick = function() {
+        roomSelectionModal.style.display = "none";
+    };
+    
+    // When the user clicks on <span> (x), close the modals
+    closeBtn.onclick = function() {
+      modal.style.display = "none";
+    }
+    
+    closeAddRoomModalBtn.onclick = function() {
+      addRoomModal.style.display = "none";
+    }
+    
+    closeRegisterModalBtn.onclick = function() {
+      registerGuestModal.style.display = "none";
+    }
+    
+    closeQrScannerBtn.onclick = function() {
+      qrScannerModal.style.display = "none";
+      stopScanner();
+    };
+    
+    // When the user clicks anywhere outside of the modals, close them
+    window.onclick = function(event) {
+      if (event.target == modal) {
+        modal.style.display = "none";
+      }
+      if (event.target == addRoomModal) {
+        addRoomModal.style.display = "none";
+      }
+      if (event.target == registerGuestModal) {
+        registerGuestModal.style.display = "none";
+      }
+      if (event.target == qrScannerModal) {
+        qrScannerModal.style.display = "none";
+        stopScanner();
+      }
+      if (event.target == groupFilterModal) {
+        groupFilterModal.style.display = "none";
+      }
+      if (event.target == roomSelectionModal) {
+        roomSelectionModal.style.display = "none";
+      }
+    }
+    
+    // Open Add Room modal
+    openAddRoomModalBtn.onclick = function() {
+      addRoomModal.style.display = "block";
+    }
+    
+    // Handle the add room form submission via AJAX
+    $("#addRoomForm").submit(function(e) {
+        e.preventDefault();
+        var roomName = $("#roomName").val();
+        var personLimit = $("#personLimit").val();
+        
+        console.log("Adding room:", roomName, "with capacity:", personLimit);
+        
+        // Show loading indicator or message
+        $(this).find('button[type="submit"]').text("Adding...").prop('disabled', true);
+        
+        $.ajax({
+            type: "POST",
+            url: "{% url 'accom_app:add_room_ajax' %}",
+            data: {
+                room_name: roomName,
+                person_limit: personLimit,
+                // The CSRF token is already included via the ajaxSetup
+            },
+            success: function(response) {
+                console.log("Room added successfully:", response);
+                // Update the room list in both the admin modal and dashboard
+                loadRoomDataForAdmin();
+                loadRooms();
+                
+                addRoomModal.style.display = "none";
+                $("#roomName").val(""); // Clear input field
+                $("#personLimit").val("0"); // Reset to default value
+                alert("Room added successfully!");
+            },
+            error: function(xhr, status, error) {
+                console.error("Error adding room:", error);
+                console.error("Response:", xhr.responseText);
+                try {
+                    var response = JSON.parse(xhr.responseText);
+                    alert("Error: " + response.message);
+                } catch(e) {
+                    alert("An error occurred: " + error);
+                }
+            },
+            complete: function() {
+                // Re-enable the submit button
+                $("#addRoomForm").find('button[type="submit"]').text("Add Room").prop('disabled', false);
+            }
+        });
+    });
+    
+    // QR Scanner functionality
+    function startScanner() {
+      // Check if already scanning
+      if (scanning) return;
+      
+      // Access the device camera
+      navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } })
+        .then(function(stream) {
+          video.srcObject = stream;
+          video.setAttribute("playsinline", true); // Required for iOS
+          video.play();
+          scanning = true;
+          requestAnimationFrame(tick);
+        })
+        .catch(function(error) {
+          console.error("Error accessing camera:", error);
+          alert("Could not access the camera. Please ensure camera permissions are granted.");
+        });
+    }
+    
+    function stopScanner() {
+      scanning = false;
+      if (video.srcObject) {
+        video.srcObject.getTracks().forEach(track => track.stop());
+        video.srcObject = null;
+      }
+    }
+    
+    function tick() {
+      if (!scanning) return;
+      
+      if (video.readyState === video.HAVE_ENOUGH_DATA) {
+        // Set canvas size to match video
+        canvas.height = video.videoHeight;
+        canvas.width = video.videoWidth;
+        
+        // Draw video frame to canvas
+        canvasContext.drawImage(video, 0, 0, canvas.width, canvas.height);
+        
+        // Get image data
+        var imageData = canvasContext.getImageData(0, 0, canvas.width, canvas.height);
+        
+        // Scan for QR code
+        var code = jsQR(imageData.data, imageData.width, imageData.height, {
+          inversionAttempts: "dontInvert",
+        });
+        
+        if (code) {
+          // QR code found!
+          console.log("QR Code detected", code.data);
+          
+          try {
+            // Parse JSON data from QR code
+            var qrData = JSON.parse(code.data);
+            
+            // Display guest information
+            displayGuestInfo(qrData);
+            
+            // Pause scanning after successful scan
+            stopScanner();
+          } catch (e) {
+            console.error("Error parsing QR code data:", e);
+            alert("Invalid QR code format. Please scan a valid guest QR code.");
+          }
+        }
+      }
+      
+      if (scanning) {
+        requestAnimationFrame(tick);
+      }
+    }
+    
+    function displayGuestInfo(data) {
+      // Show the result container
+      scanResult.style.display = "block";
+      
+      // Store the QR data globally for later use
+      window.qrCodeData = data;
+      
+      // Display user info
+      guestName.textContent = `${data.first_name || ""} ${data.last_name || ""}`;
+      guestEmail.textContent = data.email || "N/A";
+      guestPhone.textContent = data.phone_number || "N/A";
+      
+      // Display companions info
+      var companions = data.companions || [];
+      companionCount.textContent = companions.length;
+      
+      // Clear existing companions list
+      companionsList.innerHTML = "";
+      
+      if (companions.length > 0) {
+        // Create a table for companions
+        var table = document.createElement("table");
+        table.style.width = "100%";
+        table.style.borderCollapse = "collapse";
+        table.style.marginTop = "10px";
+        
+        // Add table header
+        var thead = document.createElement("thead");
+        var headerRow = document.createElement("tr");
+        ["Name", "Email", "Phone", "Group"].forEach(header => {
+          var th = document.createElement("th");
+          th.textContent = header;
+          th.style.padding = "8px";
+          th.style.borderBottom = "1px solid #ddd";
+          th.style.textAlign = "left";
+          headerRow.appendChild(th);
+        });
+        thead.appendChild(headerRow);
+        table.appendChild(thead);
+        
+        // Add table body with companion data
+        var tbody = document.createElement("tbody");
+        companions.forEach(companion => {
+          var row = document.createElement("tr");
+          
+          var nameCell = document.createElement("td");
+          nameCell.textContent = `${companion.first_name || ""} ${companion.last_name || ""}`;
+          nameCell.style.padding = "8px";
+          nameCell.style.borderBottom = "1px solid #eee";
+          
+          var emailCell = document.createElement("td");
+          emailCell.textContent = companion.email || "N/A";
+          emailCell.style.padding = "8px";
+          emailCell.style.borderBottom = "1px solid #eee";
+          
+          var phoneCell = document.createElement("td");
+          phoneCell.textContent = companion.phone_number || "N/A";
+          phoneCell.style.padding = "8px";
+          phoneCell.style.borderBottom = "1px solid #eee";
+          
+          var groupCell = document.createElement("td");
+          groupCell.textContent = companion.group || "FAMILY"; // Default to FAMILY
+          groupCell.style.padding = "8px";
+          groupCell.style.borderBottom = "1px solid #eee";
+          
+          row.appendChild(nameCell);
+          row.appendChild(emailCell);
+          row.appendChild(phoneCell);
+          row.appendChild(groupCell);
+          
+          tbody.appendChild(row);
+        });
+        table.appendChild(tbody);
+        
+        companionsList.appendChild(table);
+      } else {
+        companionsList.innerHTML = "<p>No companions found.</p>";
+      }
+    }
+    
+    // Handle using guest info
+    useGuestInfoBtn.onclick = function() {
+      var roomId = $("#qrScannerModal").data('room-id') || currentRoomId;
+      
+      if (!window.qrCodeData) {
+        alert("No QR code data available.");
+        return;
+      }
+      
+      // Extract all available groups from the QR code data
+      var availableGroups = new Set();
+      
+      // Add the main guest's group if present
+      if (window.qrCodeData.group) {
+        availableGroups.add(window.qrCodeData.group);
+      } else {
+        availableGroups.add("FAMILY"); // Default group
+      }
+      
+      // Add groups from companions
+      var companions = window.qrCodeData.companions || [];
+      companions.forEach(companion => {
+        if (companion.group) {
+          availableGroups.add(companion.group);
+        }
+      });
+      
+      // Add ALL as an option
+      availableGroups.add("ALL");
+      
+      // Convert to array and sort
+      var groupArray = Array.from(availableGroups).sort();
+      
+      // Create a display message showing detected groups
+      var detectedGroupsStr = groupArray.filter(g => g !== "ALL").join(", ");
+      console.log("Detected groups:", detectedGroupsStr);
+      
+      // Update the filter controls with visual feedback
+      $('.filter-controls').html(`
+        <div class="group-filter" id="groupFilter" style="position: relative;">
+          <span class="filter-name">${groupArray[0] || "ALL"}</span>
+          <span class="dropdown-arrow">▼</span>
+        </div>
+        <div class="detected-groups" style="margin-left: 10px; background-color: var(--info-color); color: white; padding: 3px 8px; border-radius: 4px; font-size: 0.9em;">
+          Groups: ${detectedGroupsStr}
+        </div>
+      `);
+      
+      // Add click handler to the new filter
+      $('#groupFilter').on('click', function() {
+        groupFilterModal.style.display = "block";
+      });
+      
+      // Update the group filter options in the modal
+      updateGroupFilterOptions(groupArray);
+      
+      // Create guest data for the room display
+      qrGuestData = createGuestDataFromQR(window.qrCodeData);
+      isUsingQrData = true; // Set flag to indicate we're using QR data
+      
+      // Display guest data in the guest panel
+      displayScannedGuests(qrGuestData);
+      
+      // Close QR scanner modal
+      qrScannerModal.style.display = "none";
+      
+      // Update the current room display with the guest name
+      $('.current-room').text(window.qrCodeData.first_name + "'s Group");
+    };
+    
+    // Function to update group filter options based on available groups
+    function updateGroupFilterOptions(groups) {
+      // Set current group filter to first available group
+      currentGroupFilter = groups[0] || "ALL";
+      
+      // Update the group filter modal options with a clear header showing detected groups
+      var groupOptionsHtml = `
+        <div style="padding: 10px; background-color: var(--info-color); color: white; margin-bottom: 15px; border-radius: 4px; text-align: center;">
+          <strong>Groups detected in QR code</strong>
+        </div>
+      `;
+      
+      // Add buttons for each group
+      groups.forEach(function(group) {
+        groupOptionsHtml += `
+          <button class="group-option-btn" data-group="${group}" style="display: flex; justify-content: space-between; width: 100%; margin-bottom: 8px;">
+            <span>${group}</span>
+            ${group === currentGroupFilter ? '<span style="color: var(--success-color);">✓</span>' : ''}
+          </button>
+        `;
+      });
+      
+      $('.group-options').html(groupOptionsHtml);
+    }
+    
+    // Function to create guest data from QR code data
+    function createGuestDataFromQR(qrData) {
+      var guests = [];
+      
+      // Add the main guest
+      guests.push({
+        id: qrData.guest_id || Date.now(), // Use guest_id or fallback to timestamp
+        first_name: qrData.first_name || "",
+        last_name: qrData.last_name || "",
+        photo_url: qrData.photo_url,
+        role: "OWNER",
+        group_type: qrData.group || "FAMILY",
+        status: "pending"
+      });
+      
+      // Add companions
+      var companions = qrData.companions || [];
+      companions.forEach((companion, index) => {
+        guests.push({
+          id: companion.guest_id || (Date.now() + index + 1), // Use guest_id or fallback to timestamp+index
+          first_name: companion.first_name || "",
+          last_name: companion.last_name || "",
+          photo_url: companion.photo_url,
+          role: "MEMBER",
+          group_type: companion.group || "FAMILY",
+          status: "pending"
+        });
+      });
+      
+      return guests;
+    }
+    
+    // Function to display scanned guests in the guest panel
+    function displayScannedGuests(guests) {
+      if (!guests || guests.length === 0) {
+        $('#guestGrid').html('<div class="empty-state">No guests found in QR code data.</div>');
+        return;
+      }
+      
+      // Filter guests by current group filter if not ALL
+      var filteredGuests = guests;
+      if (currentGroupFilter !== "ALL") {
+        filteredGuests = guests.filter(guest => guest.group_type === currentGroupFilter);
+      }
+      
+      if (filteredGuests.length === 0) {
+        $('#guestGrid').html(`<div class="empty-state">No guests found in the "${currentGroupFilter}" group.</div>`);
+        return;
+      }
+      
+      // Build the guest grid HTML
+      var guestGridHtml = '';
+      filteredGuests.forEach(function(guest) {
+        var selectedClass = selectedGuests.includes(guest.id) ? 'selected' : '';
+        var photoUrl = guest.photo_url || 'https://via.placeholder.com/150?text=' + encodeURIComponent(guest.first_name);
+        var statusBadge = '';
+        
+        if (guest.status) {
+          var statusClass = 'info-color'; // Default
+                
+          // Set the appropriate color based on status
+          if (guest.status.toLowerCase() === 'checked-in') {
+            statusClass = 'success-color';
+          } else if (guest.status.toLowerCase() === 'checked-in elsewhere') {
+            statusClass = 'warning-color';
+          }
+          
+          statusBadge = `<div class="guest-status" style="background-color: var(--${statusClass}); color: white; padding: 2px 6px; border-radius: 4px; font-size: 0.8em; margin-top: 4px;">${guest.status}</div>`;
+        }
+        
+        guestGridHtml += `
+            <div class="guest-card ${selectedClass}" data-guest-id="${guest.id}">
+                <img src="${photoUrl}" alt="${guest.first_name} ${guest.last_name}" class="guest-photo">
+                <div class="guest-info">
+                    <div class="guest-name">${guest.first_name} ${guest.last_name}</div>
+                    <div class="guest-role">${guest.role}</div>
+                    ${statusBadge}
+                </div>
+            </div>
+        `;
+      });
+      
+      // Update the guest grid
+      $('#guestGrid').html(guestGridHtml);
+      
+      // Add click handlers for guest cards
+      $('.guest-card').on('click', function() {
+        var guestId = $(this).data('guest-id');
+        toggleGuestSelection(guestId);
+      });
+    }
+
+    // Add a function to handle room check-out
+    function checkOutRoom(roomId) {
+        if (confirm("Are you sure you want to check out all guests from this room?")) {
+            $.ajax({
+                type: "POST",
+                url: "{% url 'accom_app:check_out_guests' %}",
+                data: {
+                    room_id: roomId
+                },
+                success: function(response) {
+                    if (response.status === "success") {
+                        // Update UI to show the room is now available
+                        var roomElement = $(`.room-item[data-room-id="${roomId}"]`);
+                        roomElement.removeClass('occupied');
+                        roomElement.find('.check-out-btn').remove();
+                        roomElement.find('.room-name i').remove();
+                        
+                        // Update availability display
+                        roomElement.find('.availability-count').text(response.new_availability);
+                        
+                        // Add occupied time information to the UI
+                        var occupiedInfoHtml = `
+                            <div class="occupied-info" style="margin-top: 15px; padding: 10px; background-color: #f5f5f5; border-radius: 5px;">
+                                <h3>Room Checkout Summary</h3>
+                                <p>Total occupied time: ${response.occupied_time}</p>
+                                <p>Checked out: ${new Date().toLocaleString()}</p>
+                            </div>
+                        `;
+                        
+                        $('#guestGrid').prepend(occupiedInfoHtml);
+                        
+                        // Show success message
+                        alert(`Room checked out successfully. Total occupied time: ${response.occupied_time}`);
+                        
+                        // Refresh room data
+                        loadRooms();
+                    } else {
+                        alert("Error: " + response.message);
+                    }
+                },
+                error: function(xhr, status, error) {
+                    alert("An error occurred while checking out the room: " + error);
+                }
+            });
+        }
+    }
+
+    // Create sample rooms button handler
+    $(document).on('click', '#createSampleRoomsBtn', function() {
+        console.log("Creating sample rooms...");
+        $(this).prop('disabled', true).text('Creating rooms...');
+        
+        $.ajax({
+            type: "GET",
+            url: "{% url 'accom_app:create_sample_rooms' %}",
+            success: function(response) {
+                console.log("Sample rooms created:", response);
+                if (response.status === 'success') {
+                    alert(`Created ${response.created_rooms.length} sample rooms: ${response.created_rooms.join(', ')}`);
+                    // Reload rooms to show the new sample rooms
+                    loadRooms();
+                    loadRoomDataForAdmin();
+                } else {
+                    alert("Error: " + response.message);
+                }
+            },
+            error: function(xhr, status, error) {
+                console.error("Error creating sample rooms:", error);
+                alert("An error occurred: " + error);
+            },
+            complete: function() {
+                $('#createSampleRoomsBtn').prop('disabled', false).text('Create Sample Rooms');
+            }
+        });
+    });
+
+    // Manual check-in button handler
+    $('#directCheckInBtn').on('click', function() {
+        if (selectedGuests.length === 0) {
+            alert("Please select at least one guest to check in.");
+            return;
+        }
+        
+        // Update the form values
+        $('#manualRoomId').val(currentRoomId);
+        $('#manualGuestIds').val(JSON.stringify(selectedGuests));
+        
+        // Show room and guest info
+        $('#manualRoomName').text(currentRoom);
+        
+        // Get guest names (this is simplified - in real app you'd get from your data)
+        var guestCountText = selectedGuests.length + " guests selected";
+        $('#manualGuestNames').text(guestCountText);
+        
+        // Show the modal
+        $('#manualCheckInModal').css('display', 'block');
+    });
+    
+    // Close button for manual check-in modal
+    $('#closeManualCheckInBtn').on('click', function() {
+        $('#manualCheckInModal').css('display', 'none');
+    });
+    
+    // Close modal when clicking outside of it
+    $(window).on('click', function(event) {
+        if (event.target == $('#manualCheckInModal')[0]) {
+            $('#manualCheckInModal').css('display', 'none');
+        }
+    });
+  </script>
+</body>
+</html>

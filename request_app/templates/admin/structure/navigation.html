@@ -1,0 +1,49 @@
+{% load static %}
+{% if request.session.user_type == 'employee' and request.session.is_admin %}
+<div style="background-color: #000; color: white; height: 100vh; padding: 20px;">
+  <h2 style="margin-bottom: 20px;">Admin Panel</h2>
+  <a href="{% url 'admin_app:admin_dashboard' %}" style="display: block; color: white; padding: 10px 5px; text-decoration: none;">Dashboard</a>
+  <a href="{% url 'admin_app:tour_calendar' %}" style="display: block; color: white; padding: 10px 5px; text-decoration: none;">Tour Calendar</a>
+  <a href="{% url 'admin_app:pending_employees' %}" style="display: block; color: white; padding: 10px 5px; text-decoration: none;">Employees</a>
+  
+  <!-- Accommodations Dropdown -->
+  <div class="dropdown" style="position: relative; display: inline-block; width: 100%;">
+    <a href="#" style="display: block; color: white; padding: 10px 5px; text-decoration: none;" class="dropdown-toggle">Accommodations</a>
+    <div class="dropdown-menu" style="display: none; position: absolute; background-color: #333; width: 100%; z-index: 100;">
+      <a href="{% url 'admin_app:create_accommodation' %}" style="display: block; color: white; padding: 10px 15px; text-decoration: none;">Hotel</a>
+      <a href="#" style="display: block; color: white; padding: 10px 15px; text-decoration: none;">Attractions</a>
+      <a href="#" style="display: block; color: white; padding: 10px 15px; text-decoration: none;">Meeting Incentives and Events</a>
+    </div>
+  </div>
+  
+  <a href="{% url 'admin_app:pending_accommodation' %}" style="display: block; color: white; padding: 10px 5px; text-decoration: none;">Check Pending Accommodations</a>
+  <a href="{% url 'admin_app:admin_create_form' %}" style="display: block; color: white; padding: 10px 5px; text-decoration: none;">Create Accommodation Summary Form</a>
+  
+  <!-- Create Tour Dropdown -->
+  <div class="dropdown" style="position: relative; display: inline-block; width: 100%;">
+    <a href="#" style="display: block; color: white; padding: 10px 5px; text-decoration: none;" class="dropdown-toggle">Create Tour</a>
+    <div class="dropdown-menu" style="display: none; position: absolute; background-color: #333; width: 100%; z-index: 100;">
+      <a href="{% url 'tour_app:add_tour' %}" style="display: block; color: white; padding: 10px 15px; text-decoration: none;">New</a>
+      <a href="{% url 'tour_app:admission_rate' %}" style="display: block; color: white; padding: 10px 15px; text-decoration: none;">Tour Check Payables</a>
+      <a href="{% url 'tour_app:pending_view' %}" style="display: block; color: white; padding: 10px 15px; text-decoration: none;">Check Pending Tours</a>
+    </div>
+  </div>
+  
+  <a href="{% url 'admin_app:map' %}" style="display: block; color: white; padding: 10px 5px; text-decoration: none;">Bayawan Map</a>
+  <a href="{% url 'admin_app:admin_logout' %}" style="display: block; color: white; padding: 10px 5px; text-decoration: none;">Logout</a>
+  
+  <style>
+    .dropdown-toggle:after {
+      content: " ▼";
+      font-size: 10px;
+    }
+    .dropdown:hover .dropdown-menu {
+      display: block;
+    }
+  </style>
+</div>
+{% else %}
+<div style="background-color: #f8f9fa; padding: 20px; text-align: center;">
+    <p>Access Denied. Please <a href="{% url 'admin_app:login' %}">login</a> with an admin account to access this panel.</p>
+</div>
+{% endif %}

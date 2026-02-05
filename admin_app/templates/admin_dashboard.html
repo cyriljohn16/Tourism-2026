@@ -1,0 +1,5011 @@
+<!DOCTYPE html>
+{% load static %}
+{% load mathfilters %}
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin Dashboard</title>
+  <!-- Add jQuery -->
+  <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+  <link rel="stylesheet" href="{% static 'css/navigation.css' %}">
+  <style>
+    /* Root Variables */
+    :root {
+      /* Brand Colors */
+      --primary-color: #875a34;
+      --primary-light: #e99c59;
+      --primary-dark: #6d4827;
+      --secondary-color: #8c6e5d;
+      
+      /* Status Colors */
+      --success-color: #34a853;
+      --warning-color: #fbbc05;
+      --error-color: #ea4335;
+      --info-color: #4285f4;
+      
+      /* Neutral Colors */
+      --bg-color: #f4f7fc;
+      --text-dark: #333;
+      --text-medium: #666;
+      --text-light: #9e9e9e;
+      --white: #fff;
+      
+      /* UI Elements */
+      --card-bg: #fff;
+      --border-color: #eee;
+      --shadow-sm: 0 2px 4px rgba(0,0,0,0.05);
+      --shadow-md: 0 4px 6px rgba(0,0,0,0.1);
+      --shadow-lg: 0 10px 15px rgba(0,0,0,0.1);
+      
+      /* Spacing */
+      --spacing-xs: 4px;
+      --spacing-sm: 8px;
+      --spacing-md: 16px;
+      --spacing-lg: 24px;
+      --spacing-xl: 32px;
+      
+      /* Border Radius */
+      --radius-sm: 4px;
+      --radius-md: 8px;
+      --radius-lg: 12px;
+      --radius-xl: 20px;
+      
+      /* Transitions */
+      --transition-fast: 0.2s ease;
+      --transition-normal: 0.3s ease;
+    }
+    
+    /* Base Styles */
+    body {
+      font-family: 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      background-color: var(--bg-color);
+      margin: 0;
+      padding: 0;
+      color: var(--text-dark);
+      line-height: 1.5;
+    }
+    
+    .dashboard-container {
+      display: flex;
+      min-height: 100vh;
+    }
+    
+    /* Main Content */
+    .content {
+      flex: 1;
+      padding: var(--spacing-xl);
+      box-sizing: border-box;
+    }
+    
+    /* Stats Container */
+    .stats-container {
+      background-color: var(--white);
+      border-radius: var(--radius-lg);
+      padding: var(--spacing-lg);
+      box-shadow: var(--shadow-sm);
+      margin-bottom: var(--spacing-xl);
+    }
+    
+    .header-with-filter {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: var(--spacing-lg);
+      padding-bottom: var(--spacing-md);
+      border-bottom: 1px solid var(--border-color);
+    }
+    
+    .header-with-filter h2 {
+      color: var(--text-dark);
+      font-size: 1.5rem;
+      font-weight: 600;
+      margin: 0;
+    }
+    
+    /* Stat Cards */
+    .stat-card {
+      background-color: var(--white);
+      border-radius: var(--radius-md);
+      padding: var(--spacing-lg);
+      box-shadow: var(--shadow-sm);
+      transition: transform var(--transition-fast);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    
+    .stat-card:hover {
+      transform: translateY(-4px);
+      box-shadow: var(--shadow-md);
+    }
+    
+    .stat-info h3 {
+      color: var(--text-medium);
+      font-size: 0.875rem;
+      font-weight: 500;
+      margin: 0 0 var(--spacing-sm) 0;
+    }
+    
+    .stat-value {
+      color: var(--text-dark);
+      font-size: 1.75rem;
+      font-weight: 600;
+      margin: 0;
+    }
+    
+    /* Tour Cards */
+    .tour-card {
+      background-color: var(--white);
+     border-radius: var(--radius-md);
+      padding: var(--spacing-lg);
+      box-shadow: var(--shadow-sm);
+      transition: transform var(--transition-fast);
+      position: relative;
+      overflow: hidden;
+    }
+    
+    .tour-card:hover {
+      transform: translateY(-4px);
+      box-shadow: var(--shadow-md);
+    }
+    
+    .tour-card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: var(--spacing-md);
+    }
+    
+    .tour-name {
+      color: var(--text-dark);
+      font-size: 1.125rem;
+      font-weight: 600;
+    }
+    
+    .tour-price {
+      color: var(--success-color);
+      font-weight: 600;
+    }
+    
+    /* Buttons */
+    .view-itinerary-btn {
+      background-color: #8c6e5d;
+      color: white;
+      border: none;
+      padding: 5px 10px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: 500;
+      transition: background-color 0.3s;
+    }
+    
+    .view-itinerary-btn:hover {
+      background-color: #755c4c;
+    }
+    
+    /* Assign Employee Button styles */
+    .assign-employee-btn {
+      background-color: #5d8c6e;
+      color: white;
+      border: none;
+      padding: 5px 10px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: 500;
+      transition: background-color 0.3s;
+      margin-top: 8px;
+    }
+    
+    .assign-employee-btn:hover {
+      background-color: #4c755c;
+    }
+    
+    .employee-checklist-progress {
+      position: absolute;
+      top: -9px;
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      background-color: #e6ccb2;
+      cursor: pointer;
+      z-index: 2;
+      transition: left 0.5s ease;
+      box-shadow: 0 0 0 4px rgba(230, 204, 178, 0.2);
+    }
+    
+    .employee-checklist-progress:hover {
+      transform: scale(1.2);
+      box-shadow: 0 0 0 6px rgba(230, 204, 178, 0.25);
+    }
+    
+    .progress-percentage {
+      position: absolute;
+      top: -24px;
+      left: 50%;
+      transform: translateX(-50%);
+      font-size: 11px;
+      font-weight: bold;
+      color: #fff;
+      background-color: #8c6e5d;
+      padding: 3px 8px;
+      border-radius: 10px;
+      box-shadow: 0 3px 6px rgba(0,0,0,0.1);
+      white-space: nowrap;
+      opacity: 0;
+      transition: opacity 0.3s ease, transform 0.3s ease;
+    }
+    
+    .employee-checklist-progress:hover .progress-percentage {
+      opacity: 1;
+      transform: translateX(-50%) translateY(-5px);
+    }
+    
+    /* Calendar */
+    .calendar-container {
+      background-color: var(--white);
+      border-radius: var(--radius-lg);
+      padding: var(--spacing-lg);
+      box-shadow: var(--shadow-sm);
+    }
+    
+    .calendar-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: var(--spacing-lg);
+    }
+    
+    .month-title {
+      color: var(--text-dark);
+      font-size: 1.25rem;
+      font-weight: 600;
+    }
+    
+    /* Timeline */
+    .timeline-progress {
+      background-color: var(--border-color);
+      border-radius: var(--radius-sm);
+      height: 4px;
+      position: relative;
+      margin: var(--spacing-md) 0;
+    }
+    
+    .timeline-progress-fill {
+      background-color: var(--primary-color);
+      height: 100%;
+      border-radius: var(--radius-sm);
+      transition: width var(--transition-normal);
+    }
+    
+    /* Status Badges */
+    .status-badge {
+      padding: var(--spacing-xs) var(--spacing-sm);
+      border-radius: var(--radius-xl);
+      font-size: 0.75rem;
+      font-weight: 500;
+    }
+    
+    .status-full {
+      background-color: #ffebe9;
+      color: var(--error-color);
+    }
+    
+    .status-almost {
+      background-color: #fff7e6;
+      color: var(--warning-color);
+    }
+    
+    .status-moderate {
+      background-color: #e6f4ea;
+      color: var(--success-color);
+    }
+    
+    .status-low {
+      background-color: #e8f0fe;
+      color: var(--info-color);
+    }
+    
+    /* Responsive Design */
+    @media (max-width: 768px) {
+      .dashboard-container {
+        flex-direction: column;
+      }
+      
+      .navigation {
+        width: 100%;
+        height: auto;
+        position: relative;
+        padding: 10px;
+      }
+      
+      .content {
+        margin-left: 0;
+        padding: var(--spacing-md);
+      }
+      
+      .stats-grid {
+        grid-template-columns: 1fr;
+      }
+      
+      .calendar-layout {
+        flex-direction: column;
+      }
+    }
+    
+    /* Stats Grid */
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+      gap: 20px;
+      margin-top: 20px;
+    }
+    
+    .stat-card {
+      background-color: white;
+      border-radius: 16px;
+      padding: 20px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      transition: transform 0.2s ease;
+    }
+    
+    .stat-card:hover {
+      transform: translateY(-5px);
+    }
+    
+    .stat-info h3 {
+      margin: 0 0 10px 0;
+      font-size: 14px;
+      font-weight: 500;
+      color: #666;
+    }
+    
+    .stat-value {
+      margin: 0;
+      font-size: 32px;
+      font-weight: bold;
+      color: #333;
+      margin-bottom: 5px;
+    }
+    
+    .growth-indicator {
+      display: inline-block;
+      padding: 3px 8px;
+      border-radius: 12px;
+      font-size: 12px;
+      color: #e99c59;
+      background-color: #fdebd7;
+    }
+    
+    .growth-positive {
+      color: #34a853; 
+      background-color: #e6f4ea;
+    }
+    
+    .growth-negative {
+      color: #ea4335;
+      background-color: #ffebe9;
+    }
+    
+    .stat-icon {
+      width: 50px;
+      height: 50px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 20px;
+      margin-left: 15px;
+    }
+    
+    .icon-completed {
+      background-color: #f9e8d9;
+      color: #e99c59;
+    }
+    
+    .icon-active {
+      background-color: #f9e8d9;
+      color: #e99c59;
+    }
+    
+    .icon-cancelled {
+      background-color: #eee;
+      color: #666;
+    }
+    
+    .icon-revenue {
+      background-color: #f9e8d9;
+      color: #e99c59;
+    }
+    
+    /* Progress bar styles for stats */
+    .stat-progress {
+      width: 100%;
+      height: 6px;
+      background-color: #f0f0f0;
+      border-radius: 3px;
+      margin-top: 10px;
+    }
+    
+    .progress-bar-completed {
+      background-color: #e99c59;
+      height: 100%;
+      border-radius: 3px;
+      width: 45%;
+    }
+    
+    .progress-bar-active {
+      background-color: #e99c59;
+      height: 100%;
+      border-radius: 3px;
+      width: 65%;
+    }
+    
+    .progress-bar-cancelled {
+      background-color: #666;
+      height: 100%;
+      border-radius: 3px;
+      width: 20%;
+    }
+    
+    .progress-bar-revenue {
+      background-color: #e99c59;
+      height: 100%;
+      border-radius: 3px;
+      width: 75%;
+    }
+    
+    /* Dropdown filter styles */
+    .filter-container {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 20px;
+    }
+    
+    .period-select {
+      padding: 8px 15px;
+      border-radius: 4px;
+      border: 1px solid #ddd;
+      background-color: white;
+      font-size: 14px;
+      cursor: pointer;
+    }
+    
+    .stats-section {
+      display: none; /* Hide all stats sections by default */
+    }
+    
+    .stats-section.active {
+      display: block; /* Show only the active section */
+    }
+    
+    .header-with-filter {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding-bottom: 15px;
+      border-bottom: 1px solid #eee;
+    }
+    
+    .header-with-filter h2 {
+      margin: 0;
+      padding: 0;
+      border: none;
+    }
+    
+    /* Tour Booking Status Styles */
+    .booking-overview {
+      display: flex;
+      margin: 20px 0;
+      background-color: #f8f9fa;
+      border-radius: 8px;
+      padding: 15px;
+    }
+    
+    .overview-card {
+      width: 180px;
+      text-align: center;
+      padding-right: 20px;
+      border-right: 1px solid #ddd;
+      margin-right: 20px;
+    }
+    
+    .overview-value {
+      font-size: 36px;
+      font-weight: bold;
+      color: #4285f4;
+    }
+    
+    .overview-label {
+      color: #666;
+      font-size: 14px;
+    }
+    
+    .overview-stats {
+      flex: 1;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+    
+    .stat-item {
+      flex: 1;
+      min-width: 120px;
+      padding: 10px;
+    }
+    
+    .stat-label {
+      color: #666;
+      font-size: 14px;
+    }
+    
+    /* New booking visualization styles */
+    .booking-viz-container {
+      background-color: #dfd7cf;
+      border-radius: 12px;
+      padding: 20px;
+      margin-top: 20px;
+    }
+    
+    .booking-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 25px;
+    }
+    
+    .booking-title {
+      display: flex;
+      align-items: baseline;
+      gap: 10px;
+    }
+    
+    .booking-title h2 {
+      font-size: 36px;
+      margin: 0;
+      color: #333;
+      border: none;
+      padding: 0;
+    }
+    
+    .booking-title .subtitle {
+      color: #666;
+      font-size: 16px;
+      margin: 0;
+    }
+    
+    .period-dropdown {
+      padding: 8px 15px;
+      background-color: rgba(255, 255, 255, 0.3);
+      border: none;
+      border-radius: 8px;
+      font-size: 14px;
+      cursor: pointer;
+      color: #333;
+    }
+    
+    .booking-bars {
+      display: flex;
+      justify-content: space-between;
+      margin-top: 15px;
+      gap: 15px;
+    }
+    
+    .booking-bar {
+      flex: 1;
+      height: 180px;
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    
+    .bar-outer {
+      width: 100%;
+      height: 100%;
+      background-color: #c4b5a3;
+      border-radius: 12px;
+      position: relative;
+      overflow: hidden;
+    }
+    
+    .bar-inner {
+      position: absolute;
+      bottom: 0;
+      width: 100%;
+      border-radius: 12px;
+      background: linear-gradient(to bottom, #e2c9a6, #7d6649);
+    }
+    
+    .full-bar .bar-inner {
+      background: linear-gradient(to bottom, #92d36e, #26533c);
+    }
+    
+    .bar-percentage {
+      position: absolute;
+      top: 10px;
+      left: 0;
+      width: 100%;
+      text-align: center;
+      font-weight: bold;
+      color: #333;
+    }
+    
+    .bar-label {
+      margin-top: 10px;
+      font-weight: bold;
+      color: #333;
+    }
+    
+    .booking-bars-container {
+      margin-top: 20px;
+    }
+    
+    .booking-bar-item {
+      margin-bottom: 20px;
+      background-color: white;
+      border-radius: 8px;
+      padding: 15px;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+    }
+    
+    .booking-bar-header {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 10px;
+    }
+    
+    .tour-name {
+      font-weight: bold;
+      color: #333;
+    }
+    
+    .booking-percentage {
+      font-weight: bold;
+    }
+    
+    .progress-container {
+      height: 12px;
+      background-color: #eee;
+      border-radius: 6px;
+      overflow: hidden;
+      margin-bottom: 8px;
+    }
+    
+    .progress-bar {
+      height: 100%;
+      border-radius: 6px;
+    }
+    
+    .progress-full {
+      background-color: #ea4335;
+    }
+    
+    .progress-almost {
+      background-color: #fbbc05;
+    }
+    
+    .progress-moderate {
+      background-color: #34a853;
+    }
+    
+    .progress-low {
+      background-color: #4285f4;
+    }
+    
+    .booking-status {
+      font-size: 14px;
+      margin-top: 5px;
+    }
+    
+    .status-badge {
+      padding: 3px 8px;
+      border-radius: 20px;
+      font-size: 12px;
+      display: inline-block;
+    }
+    
+    .status-full {
+      background-color: #ffebe9;
+      color: #d93025;
+    }
+    
+    .status-almost {
+      background-color: #fff7e6;
+      color: #d56c00;
+    }
+    
+    .status-moderate {
+      background-color: #e6f4ea;
+      color: #137333;
+    }
+    
+    .status-low {
+      background-color: #e8f0fe;
+      color: #1967d2;
+    }
+    
+    .no-data {
+      padding: 20px;
+      text-align: center;
+      color: #666;
+      font-style: italic;
+    }
+    
+    /* New Popular Tour Pack styles */
+    .tour-pack-container {
+      background-color: #fff;
+      padding: 25px;
+      border-radius: 12px;
+      text-align: center;
+      margin-top: 20px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+    }
+    
+    .tour-donut-container {
+      position: relative;
+      width: 250px;
+      height: 250px;
+      margin: 0 auto 40px auto;
+    }
+    
+    .donut-segment {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 50%;
+      transform-origin: bottom center;
+      border-radius: 125px 125px 0 0;
+    }
+    
+    .donut-center {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 150px;
+      height: 150px;
+      border-radius: 50%;
+      background-color: #e6c672;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 10;
+    }
+    
+    .tour-legend {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      max-width: 600px;
+      margin: 0 auto;
+    }
+    
+    .legend-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px 0;
+    }
+    
+    .legend-color {
+      width: 24px;
+      height: 24px;
+      border-radius: 4px;
+      margin-right: 10px;
+    }
+    
+    .legend-name {
+      font-weight: bold;
+      font-size: 16px;
+      color: #333;
+    }
+    
+    .legend-value {
+      font-weight: bold;
+      font-size: 18px;
+    }
+    
+    /* Calendar Container */
+    .calendar-container {
+      background-color: #e7ded3;
+      border-radius: 8px;
+      padding: 25px;
+      flex: 0 0 50%;
+      max-width: 500px;
+    }
+    
+    .calendar-header {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      margin-bottom: 30px;
+    }
+    
+    .month-selector {
+      display: flex;
+      align-items: center;
+      background-color: rgba(255,255,255,0.5);
+      padding: 5px 20px;
+      border-radius: 20px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    }
+    
+    .month-title {
+      font-size: 16px;
+      font-weight: bold;
+      margin: 0 15px;
+      text-transform: uppercase;
+      color: #333;
+    }
+    
+    .month-nav {
+      cursor: pointer;
+      padding: 3px 8px;
+      background-color: transparent;
+      border-radius: 50%;
+      user-select: none;
+      font-size: 12px;
+      color: #333;
+      transition: background-color 0.2s;
+    }
+    
+    .month-nav:hover {
+      background-color: rgba(0,0,0,0.1);
+    }
+    
+    /* Calendar Grid */
+    .calendar-grid {
+      display: grid;
+      grid-template-columns: repeat(7, 1fr);
+      gap: 8px;
+      max-width: 100%;
+      margin: 0 auto;
+    }
+    
+    .days-header {
+      text-align: center;
+      margin-bottom: 15px;
+    }
+    
+    .calendar-day-header {
+      text-align: center;
+      font-weight: 500;
+      padding: 5px;
+      color: #666;
+      font-size: 14px;
+    }
+    
+    .calendar-day {
+      height: 40px;
+      width: 40px;
+      border-radius: 8px;
+      background-color: rgba(255,255,255,0.6);
+      cursor: pointer;
+      transition: background-color 0.2s;
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 0 auto;
+    }
+    
+    /* First 3 days of March in the image are offset */
+    .calendar-days-grid {
+      display: grid;
+      grid-template-columns: repeat(7, 1fr);
+      gap: 8px;
+      padding: 0 4px;
+    }
+    
+    /* Start offset for first week (days 1-4 in the image) */
+    .calendar-days-grid .calendar-day:nth-child(1) {
+      grid-column-start: 4;
+    }
+    
+    .calendar-day:hover {
+      background-color: rgba(255,255,255,0.8);
+    }
+    
+    .calendar-day.selected {
+      background-color: #fff;
+      font-weight: bold;
+    }
+    
+    .calendar-day.highlighted {
+      background-color: rgba(251, 188, 5, 0.2);
+    }
+    
+    .calendar-day.selected.highlighted {
+      background-color: #fff;
+      position: relative;
+    }
+    
+    .calendar-day.selected.highlighted::after {
+      content: '';
+      position: absolute;
+      bottom: 5px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 4px;
+      height: 4px;
+      border-radius: 50%;
+      background-color: #fbbc05;
+    }
+    
+    .calendar-day.empty {
+      background-color: transparent;
+      cursor: default;
+    }
+    
+    .day-number {
+      font-weight: bold;
+      font-size: 18px;
+      color: #444;
+      position: relative;
+    }
+    
+    .day-dots {
+      position: absolute;
+      bottom: 3px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      gap: 3px;
+    }
+    
+    .tour-dot {
+      width: 4px;
+      height: 4px;
+      border-radius: 50%;
+      display: inline-block;
+    }
+    
+    /* Tour List Container */
+    .tour-list-container {
+      margin-top: 30px;
+      background-color: white;
+      border-radius: 8px;
+      padding: 20px;
+    }
+    
+    .tour-list-header {
+      font-size: 18px;
+      font-weight: bold;
+      margin-bottom: 15px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid #eee;
+    }
+    
+    .tour-list {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+      gap: 20px;
+    }
+    
+    .tour-card {
+      border-radius: 8px;
+      padding: 15px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+      transition: transform 0.2s;
+      cursor: pointer;
+      position: relative;
+      background-color: white;
+    }
+    
+    .tour-card:hover {
+      transform: translateY(-5px);
+    }
+    
+    .tour-card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 10px;
+    }
+    
+    .tour-name {
+      font-size: 16px;
+      font-weight: bold;
+      color: #333;
+    }
+    
+    .tour-price {
+      font-weight: bold;
+      color: #34a853;
+    }
+    
+    .tour-dates {
+      font-size: 14px;
+      color: #666;
+      margin-bottom: 10px;
+    }
+    
+    .tour-details {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-top: 1px solid #f0f0f0;
+      padding-top: 10px;
+      margin-top: 10px;
+    }
+    
+    .tour-bookings {
+      font-size: 14px;
+      color: #666;
+    }
+    
+    .tour-action {
+      padding: 6px 12px;
+      background-color: #4285f4;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 14px;
+      transition: background-color 0.2s;
+    }
+    
+    .tour-action:hover {
+      background-color: #1a73e8;
+    }
+    
+    .tour-color-indicator {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 5px;
+      height: 100%;
+      border-top-left-radius: 8px;
+      border-bottom-left-radius: 8px;
+    }
+    
+    /* Tour Details Modal */
+    .tour-modal {
+      display: none;
+      position: fixed;
+      top: 0;
+      right: 0;
+      width: 350px;
+      height: 100%;
+      background-color: rgba(255, 255, 255, 0.95);
+      z-index: 1000;
+      box-shadow: -5px 0 15px rgba(0, 0, 0, 0.1);
+      animation: slideIn 0.3s ease-out;
+      overflow-y: auto;
+    }
+    
+    @keyframes slideIn {
+      from {
+        right: -350px;
+        opacity: 0;
+      }
+      to {
+        right: 0;
+        opacity: 1;
+      }
+    }
+    
+    .tour-modal-content {
+      padding: 20px;
+      position: relative;
+    }
+    
+    .tour-modal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 20px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid #eee;
+    }
+    
+    .tour-modal-title {
+      font-size: 20px;
+      font-weight: bold;
+    }
+    
+    .tour-close-button {
+      background: none;
+      border: none;
+      font-size: 24px;
+      cursor: pointer;
+      color: #666;
+    }
+    
+    .tour-close-button:hover {
+      color: #333;
+    }
+    
+    .tour-modal-overlay {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background-color: rgba(0, 0, 0, 0.3);
+      z-index: 999;
+    }
+    
+    .tour-modal-details {
+      margin-bottom: 20px;
+    }
+    
+    .tour-detail-item {
+      display: flex;
+      margin-bottom: 10px;
+    }
+    
+    .tour-detail-label {
+      width: 120px;
+      font-weight: bold;
+      color: #666;
+    }
+    
+    .tour-detail-value {
+      flex: 1;
+      color: #333;
+    }
+    
+    .tour-description {
+      margin-top: 20px;
+      padding-top: 20px;
+      border-top: 1px solid #eee;
+    }
+    
+    .no-tours {
+      text-align: center;
+      padding: 20px;
+      color: #666;
+      font-style: italic;
+    }
+    
+    /* Calendar Layout */
+    .calendar-layout {
+      display: flex;
+      gap: 20px;
+      margin-top: 15px;
+    }
+    
+    .calendar-container {
+      background-color: #e7ded3;
+      border-radius: 8px;
+      padding: 20px;
+      flex: 0 0 50%;
+      max-width: 500px;
+    }
+    
+    .tour-list-container {
+      background-color: white;
+      border-radius: 8px;
+      padding: 20px;
+      flex: 1;
+      margin-top: 0;
+    }
+    
+    @media (max-width: 768px) {
+      .calendar-layout {
+        flex-direction: column;
+      }
+      
+      .calendar-container {
+        flex: 0 0 100%;
+        max-width: 100%;
+      }
+    }
+    
+    /* Itinerary Modal Styles */
+    .itinerary-modal {
+      display: none;
+      position: fixed;
+      z-index: 1000;
+      left: 0;
+      top: 0;
+      width: 100%;
+      height: 100%;
+      overflow: auto;
+      background-color: rgba(0,0,0,0.6);
+    }
+    
+    /* Ensure the modal is visible when shown */
+    .itinerary-modal[style*="display: block"] {
+      display: block !important;
+    }
+    
+    .itinerary-modal-content {
+      background-color: #fefefe;
+      margin: 5% auto;
+      padding: 30px;
+      border-radius: 12px;
+      width: 80%;
+      max-width: 800px;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.2);
+      animation: modalFadeIn 0.3s;
+      max-height: 90vh;
+      overflow-y: auto;
+      position: relative; /* Ensure proper stacking context */
+      z-index: 1001; /* Higher than the overlay */
+    }
+    
+    @keyframes modalFadeIn {
+      from {opacity: 0; transform: translateY(-20px);}
+      to {opacity: 1; transform: translateY(0);}
+    }
+    
+    .itinerary-modal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 2px solid #f0f0f0;
+      padding-bottom: 15px;
+      margin-bottom: 25px;
+    }
+    
+    .itinerary-modal-header h2 {
+      margin: 0;
+      color: #333;
+      font-size: 26px;
+      font-weight: 600;
+    }
+    
+    .itinerary-close {
+      color: #aaa;
+      font-size: 32px;
+      font-weight: bold;
+      cursor: pointer;
+      line-height: 0.8;
+    }
+    
+    .itinerary-close:hover {
+      color: #333;
+    }
+    
+    .itinerary-list {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+    }
+    
+    .itinerary-item {
+      display: flex;
+      margin-bottom: 30px;
+      position: relative;
+    }
+    
+    .itinerary-item:not(:last-child)::after {
+      content: '';
+      position: absolute;
+      left: 25px;
+      top: 40px;
+      bottom: -15px;
+      width: 2px;
+      background-color: #e0e0e0;
+    }
+    
+    .itinerary-time {
+      min-width: 120px;
+      font-weight: bold;
+      color: #875a34;
+      margin-right: 30px;
+      position: relative;
+      padding-top: 5px;
+    }
+    
+    .itinerary-time::before {
+      content: '';
+      position: absolute;
+      width: 16px;
+      height: 16px;
+      background-color: #875a34;
+      border-radius: 50%;
+      left: -25px;
+      top: 10px;
+      border: 3px solid #fff;
+      box-shadow: 0 0 0 1px #875a34;
+    }
+    
+    .itinerary-content {
+      flex: 1;
+      background-color: #f9f8f6;
+      padding: 20px;
+      border-radius: 8px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+      display: flex;
+      gap: 20px;
+    }
+    
+    .itinerary-text {
+      flex: 1;
+    }
+    
+    .itinerary-event {
+      font-weight: 600;
+      font-size: 18px;
+      margin-bottom: 10px;
+      color: #333;
+    }
+    
+    .itinerary-description {
+      color: #555;
+      font-size: 14px;
+      line-height: 1.5;
+      margin-bottom: 15px;
+    }
+    
+    .itinerary-image-container {
+      width: 150px;
+      height: 150px;
+      flex-shrink: 0;
+      overflow: hidden;
+      border-radius: 6px;
+    }
+    
+    .itinerary-image {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+    
+    .no-events-message {
+      text-align: center;
+      color: #666;
+      font-style: italic;
+      padding: 30px;
+      background-color: #f9f9f9;
+      border-radius: 8px;
+    }
+    
+    .itinerary-tour-info {
+      background-color: #f5f1eb;
+      padding: 20px;
+      border-radius: 10px;
+      margin-bottom: 30px;
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 15px;
+    }
+    
+    .itinerary-tour-info p {
+      margin: 0;
+      color: #555;
+      display: flex;
+      flex-direction: column;
+    }
+    
+    .itinerary-tour-info strong {
+      color: #333;
+      margin-bottom: 5px;
+      font-size: 14px;
+    }
+    
+    .itinerary-section-title {
+      font-size: 20px;
+      font-weight: 600;
+      margin: 20px 0;
+      color: #333;
+      border-bottom: 1px solid #eee;
+      padding-bottom: 10px;
+    }
+    
+    /* View Itinerary Button */
+    .view-itinerary-btn {
+      margin-top: 10px;
+      padding: 8px 12px;
+      background-color: #875a34;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 500;
+      transition: background-color 0.2s;
+      width: 100%;
+    }
+    
+    .view-itinerary-btn:hover {
+      background-color: #6d4827;
+    }
+    
+    /* Flip Calendar Styles */
+    .flip-calendar-container {
+      display: flex;
+      justify-content: center;
+      margin-top: 30px;
+      margin-bottom: 30px;
+    }
+    
+    .container .calendar {
+      width: 100%;
+      max-width: 600px;
+      height: 400px;
+      border-radius: 8px;
+      background-color: #fff;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+      position: relative;
+      perspective: 1000px;
+    }
+    
+    .front, .back {
+      position: absolute;
+      width: 100%;
+      height: 100%;
+      backface-visibility: hidden;
+      transition: transform 0.5s ease;
+      border-radius: 8px;
+      overflow: hidden;
+    }
+    
+    .front {
+      background-color: #fff;
+      transform: rotateY(0deg);
+    }
+    
+    .back {
+      background-color: #fff;
+      transform: rotateY(180deg);
+      padding: 20px;
+      box-sizing: border-box;
+    }
+    
+    .calendar.flipped .front {
+      transform: rotateY(180deg);
+    }
+    
+    .calendar.flipped .back {
+      transform: rotateY(0deg);
+    }
+    
+    .current-date {
+      background-color: #e99c59;
+      color: #fff;
+      padding: 20px;
+      text-align: center;
+    }
+    
+    .current-date h1 {
+      margin: 0;
+      font-size: 24px;
+      font-weight: 500;
+    }
+    
+    .week-days {
+      display: flex;
+      list-style: none;
+      padding: 0;
+      margin: 0;
+    }
+    
+    .week-days li {
+      flex: 1;
+      text-align: center;
+      color: #9e9e9e;
+      font-weight: 500;
+      padding: 10px 0;
+      font-size: 14px;
+    }
+    
+    .weeks {
+      padding: 0 10px;
+    }
+    
+    .weeks > div {
+      display: flex;
+      margin-bottom: 5px;
+    }
+    
+    .weeks span {
+      flex: 1;
+      text-align: center;
+      padding: 10px 0;
+      cursor: pointer;
+      border-radius: 50%;
+      margin: 2px;
+      font-size: 14px;
+      color: #555;
+    }
+    
+    .weeks span.last-month, .weeks span.next-month {
+      color: #ccc;
+    }
+    
+    .weeks span.active {
+      background-color: #e99c59;
+      color: #fff;
+      font-weight: bold;
+    }
+    
+    .weeks span.event {
+      position: relative;
+    }
+    
+    .weeks span.event::after {
+      content: '';
+      position: absolute;
+      bottom: 2px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background-color: #e99c59;
+    }
+    
+    .back input {
+      width: 100%;
+      padding: 15px;
+      margin-bottom: 20px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      font-size: 16px;
+    }
+    
+    .info {
+      margin-bottom: 20px;
+    }
+    
+    .info p {
+      margin: 10px 0;
+      color: #555;
+      font-size: 14px;
+    }
+    
+    .info span {
+      color: #222;
+      font-weight: 500;
+    }
+    
+    .actions {
+      display: flex;
+      justify-content: space-between;
+      padding-top: 20px;
+      border-top: 1px solid #eee;
+    }
+    
+    .actions button {
+      padding: 10px 20px;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-weight: 500;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+    
+    .actions .save {
+      background-color: #e99c59;
+      color: white;
+    }
+    
+    .actions .dismiss {
+      background-color: #f1f1f1;
+      color: #555;
+    }
+    
+    .actions i {
+      font-size: 14px;
+    }
+    
+    /* Day tabs styling */
+    .itinerary-day-tabs {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 20px;
+      padding-bottom: 15px;
+      border-bottom: 1px solid #eee;
+    }
+    
+    .day-tab {
+      padding: 8px 15px;
+      background-color: #f5f5f5;
+      border-radius: 20px;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+    
+    .day-tab:hover {
+      background-color: #e0e0e0;
+    }
+    
+    .day-tab.active {
+      background-color: #875a34;
+      color: white;
+    }
+    
+    .itinerary-day-content {
+      display: none;
+    }
+    
+    .itinerary-day-content.active {
+      display: block;
+    }
+    
+    /* Tour details popup */
+    .tour-details-popup {
+      position: absolute;
+      top: -220px; /* Increased to accommodate the larger popup */
+      left: 50%;
+      transform: translateX(-50%);
+      background-color: white;
+      border-radius: 8px;
+      padding: 15px;
+      min-width: 300px;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.15);
+      z-index: 100;
+      display: block;
+      font-size: 14px;
+      border: 1px solid #eee;
+    }
+    
+    .popup-row {
+      display: flex;
+      align-items: baseline;
+      margin-bottom: 5px;
+    }
+    
+    .popup-row .popup-label {
+      margin-top: 0;
+      margin-right: 5px;
+    }
+    
+    .popup-section.upcoming .popup-header {
+      margin-bottom: 10px;
+    }
+    
+    .popup-section {
+      margin-bottom: 8px;
+    }
+    
+    .popup-label {
+      font-weight: bold;
+      color: #666;
+      font-size: 12px;
+      margin-top: 5px;
+    }
+    
+    .popup-value {
+      color: #333;
+      margin-bottom: 5px;
+    }
+    
+    .popup-event {
+      font-weight: bold;
+      color: #875a34;
+    }
+    
+    .popup-time, .popup-next-time {
+      color: #8c6e5d;
+    }
+    
+    .popup-details {
+      font-size: 12px;
+      color: #666;
+      max-height: 60px;
+      overflow-y: auto;
+      margin-bottom: 8px;
+    }
+    
+    .popup-divider {
+      height: 1px;
+      background-color: #eee;
+      margin: 8px 0;
+    }
+    
+    .popup-header {
+      font-weight: bold;
+      font-size: 13px;
+      margin-bottom: 5px;
+      color: #333;
+      border-bottom: 1px dashed #eee;
+      padding-bottom: 3px;
+    }
+    
+    .popup-next-event {
+      font-weight: bold;
+      color: #8c6e5d;
+    }
+    
+    .popup-row {
+      display: flex;
+      align-items: baseline;
+      margin-bottom: 4px;
+    }
+    
+    .popup-row .popup-label {
+      margin-top: 0;
+      margin-right: 4px;
+    }
+    
+    /* Add modal styling to ensure it appears when displayed */
+    .modal {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background-color: rgba(0, 0, 0, 0.5);
+      z-index: 9999; /* Ensure this is higher than any other elements */
+    }
+    
+    .modal-content {
+      background-color: white;
+      padding: 20px;
+      border-radius: 8px;
+      width: 90%;
+      max-width: 500px;
+      box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+      margin: 10% auto;
+      position: relative; /* Add this to ensure positioning context */
+    }
+    
+    .modal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid #ddd;
+      padding-bottom: 15px;
+      margin-bottom: 15px;
+    }
+    
+    .modal-header h2 {
+      margin: 0;
+      color: #333;
+    }
+    
+    .close-modal {
+      font-size: 24px;
+      cursor: pointer;
+      color: #666;
+    }
+    
+    .close-modal:hover {
+      color: #333;
+    }
+    
+    /* Alert styles */
+    .alert {
+      padding: 12px 15px;
+      border-radius: 4px;
+      margin-bottom: 15px;
+    }
+    
+    .alert-info {
+      background-color: #e8f4f8;
+      border: 1px solid #bce8f1;
+      color: #31708f;
+    }
+    
+    .alert-success {
+      background-color: #dff0d8;
+      border: 1px solid #d6e9c6;
+      color: #3c763d;
+    }
+    
+    .alert-danger {
+      background-color: #f2dede;
+      border: 1px solid #ebccd1;
+      color: #a94442;
+    }
+    
+    .alert-warning {
+      background-color: #fcf8e3;
+      border: 1px solid #faebcc;
+      color: #8a6d3b;
+    }
+    
+    .messages-container {
+      margin-bottom: 20px;
+    }
+    
+    .close-alert {
+      float: right;
+      font-size: 20px;
+      font-weight: bold;
+      line-height: 1;
+      color: #000;
+      text-shadow: 0 1px 0 #fff;
+      opacity: 0.2;
+      background: none;
+      border: none;
+      cursor: pointer;
+    }
+    
+    .close-alert:hover {
+      opacity: 0.5;
+    }
+    
+    .dashboard-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 20px;
+    }
+    
+    .user-info {
+      font-size: 16px;
+      color: #666;
+    }
+    
+    .assignment-status {
+      margin: 15px 0;
+    }
+    
+    /* Modal styling to ensure it appears when displayed */
+    .modal {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background-color: rgba(0, 0, 0, 0.5);
+      z-index: 9999; /* Ensure this is higher than any other elements */
+    }
+    
+    .modal-content {
+      background-color: white;
+      padding: 20px;
+      border-radius: 8px;
+      width: 90%;
+      max-width: 500px;
+      box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+      margin: 10% auto;
+      position: relative; /* Add this to ensure positioning context */
+    }
+    
+    .modal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid #ddd;
+      padding-bottom: 15px;
+      margin-bottom: 15px;
+    }
+    
+    .modal-header h2 {
+      margin: 0;
+      color: #333;
+    }
+    
+    .close-modal {
+      font-size: 24px;
+      cursor: pointer;
+      color: #666;
+    }
+    
+    .close-modal:hover {
+      color: #333;
+    }
+  </style>
+</head>
+<body>
+  <!-- Main container with sidebar and content -->
+  <div class="dashboard-container">
+    <!-- Sidebar -->
+    <div class="navigation">
+      {% include 'components/navigation.html' %}
+    </div>
+    
+    <!-- Main content -->
+    <div class="content">
+      <div class="dashboard-header">
+        <h1>ADMIN DASHBOARD</h1>
+        <div class="user-info">Welcome, {{ request.session.first_name }}</div>
+      </div>
+      
+      <!-- Messages/Notifications -->
+      {% if messages %}
+      <div class="messages-container">
+        {% for message in messages %}
+          <div class="alert {% if message.tags == 'success' %}alert-success{% elif message.tags == 'info' %}alert-info{% elif message.tags == 'error' %}alert-danger{% else %}alert-warning{% endif %}">
+            {{ message }}
+            <button type="button" class="close-alert" onclick="this.parentElement.style.display='none';">&times;</button>
+          </div>
+        {% endfor %}
+      </div>
+      {% endif %}
+      
+      <!-- Tour Statistics Card Section with Filter -->
+      <div class="stats-container">
+        <div class="header-with-filter">
+          <h2>Tour Statistics</h2>
+          <select id="period-filter" class="period-select">
+            <option value="all-time">All Time</option>
+            <option value="weekly">Weekly</option>
+            <option value="monthly">Monthly</option>
+            <option value="yearly">Yearly</option>
+          </select>
+        </div>
+        
+        <!-- All Time Stats -->
+        <div id="all-time-stats" class="stats-section active">
+          <div class="stats-grid">
+            <div class="stat-card">
+              <div class="stat-info">
+                <h3>Completed Tour</h3>
+                <p class="stat-value">{{ tour_stats.completed_tours }}</p>
+                <div class="growth-indicator {% if all_time_growth.completed_tours >= 0 %}growth-positive{% else %}growth-negative{% endif %}">
+                  {{ all_time_growth.completed_tours|floatformat:1 }}%
+                </div>
+                <div class="stat-progress">
+                  <div class="progress-bar-completed"></div>
+                </div>
+              </div>
+              <div class="stat-icon icon-completed">✓</div>
+            </div>
+            
+            <div class="stat-card">
+              <div class="stat-info">
+                <h3>Active Tour</h3>
+                <p class="stat-value">{{ tour_stats.active_tours }}</p>
+                <div class="growth-indicator {% if all_time_growth.active_tours >= 0 %}growth-positive{% else %}growth-negative{% endif %}">
+                  {{ all_time_growth.active_tours|floatformat:1 }}%
+                </div>
+                <div class="stat-progress">
+                  <div class="progress-bar-active"></div>
+                </div>
+              </div>
+              <div class="stat-icon icon-active">🚶</div>
+            </div>
+            
+            <div class="stat-card">
+              <div class="stat-info">
+                <h3>Cancelled Tour</h3>
+                <p class="stat-value">{{ tour_stats.cancelled_tours }}</p>
+                <div class="growth-indicator {% if all_time_growth.cancelled_tours >= 0 %}growth-positive{% else %}growth-negative{% endif %}">
+                  {{ all_time_growth.cancelled_tours|floatformat:1 }}%
+                </div>
+                <div class="stat-progress">
+                  <div class="progress-bar-cancelled"></div>
+                </div>
+              </div>
+              <div class="stat-icon icon-cancelled">✗</div>
+            </div>
+            
+            <div class="stat-card">
+              <div class="stat-info">
+                <h3>Total Revenue</h3>
+                <p class="stat-value">₱{{ tour_stats.total_revenue|floatformat:0 }}</p>
+                <div class="growth-indicator {% if all_time_growth.total_revenue >= 0 %}growth-positive{% else %}growth-negative{% endif %}">
+                  {{ all_time_growth.total_revenue|floatformat:1 }}%
+                </div>
+                <div class="stat-progress">
+                  <div class="progress-bar-revenue"></div>
+                </div>
+              </div>
+              <div class="stat-icon icon-revenue">₱</div>
+            </div>
+          </div>
+        </div>
+        
+        <!-- Weekly Stats -->
+        <div id="weekly-stats" class="stats-section">
+          <div class="stats-grid">
+            <div class="stat-card">
+              <div class="stat-info">
+                <h3>Completed Tour</h3>
+                <p class="stat-value">{{ weekly_stats.completed_tours }}</p>
+                <div class="growth-indicator {% if weekly_growth.completed_tours >= 0 %}growth-positive{% else %}growth-negative{% endif %}">
+                  {{ weekly_growth.completed_tours|floatformat:1 }}%
+                </div>
+                <div class="stat-progress">
+                  <div class="progress-bar-completed" style="width: 35%;"></div>
+                </div>
+              </div>
+              <div class="stat-icon icon-completed">✓</div>
+            </div>
+            
+            <div class="stat-card">
+              <div class="stat-info">
+                <h3>Active Tour</h3>
+                <p class="stat-value">{{ weekly_stats.active_tours }}</p>
+                <div class="growth-indicator {% if weekly_growth.active_tours >= 0 %}growth-positive{% else %}growth-negative{% endif %}">
+                  {{ weekly_growth.active_tours|floatformat:1 }}%
+                </div>
+                <div class="stat-progress">
+                  <div class="progress-bar-active" style="width: 55%;"></div>
+                </div>
+              </div>
+              <div class="stat-icon icon-active">🚶</div>
+            </div>
+            
+            <div class="stat-card">
+              <div class="stat-info">
+                <h3>Cancelled Tour</h3>
+                <p class="stat-value">{{ weekly_stats.cancelled_tours }}</p>
+                <div class="growth-indicator {% if weekly_growth.cancelled_tours >= 0 %}growth-positive{% else %}growth-negative{% endif %}">
+                  {{ weekly_growth.cancelled_tours|floatformat:1 }}%
+                </div>
+                <div class="stat-progress">
+                  <div class="progress-bar-cancelled" style="width: 15%;"></div>
+                </div>
+              </div>
+              <div class="stat-icon icon-cancelled">✗</div>
+            </div>
+            
+            <div class="stat-card">
+              <div class="stat-info">
+                <h3>Weekly Revenue</h3>
+                <p class="stat-value">₱{{ weekly_stats.total_revenue|floatformat:0 }}</p>
+                <div class="growth-indicator {% if weekly_growth.total_revenue >= 0 %}growth-positive{% else %}growth-negative{% endif %}">
+                  {{ weekly_growth.total_revenue|floatformat:1 }}%
+                </div>
+                <div class="stat-progress">
+                  <div class="progress-bar-revenue" style="width: 60%;"></div>
+                </div>
+              </div>
+              <div class="stat-icon icon-revenue">₱</div>
+            </div>
+          </div>
+        </div>
+        
+        <!-- Monthly Stats -->
+        <div id="monthly-stats" class="stats-section">
+          <div class="stats-grid">
+            <div class="stat-card">
+              <div class="stat-info">
+                <h3>Completed Tour</h3>
+                <p class="stat-value">{{ monthly_stats.completed_tours }}</p>
+                <div class="growth-indicator {% if monthly_growth.completed_tours >= 0 %}growth-positive{% else %}growth-negative{% endif %}">
+                  {{ monthly_growth.completed_tours|floatformat:1 }}%
+                </div>
+                <div class="stat-progress">
+                  <div class="progress-bar-completed" style="width: 40%;"></div>
+                </div>
+              </div>
+              <div class="stat-icon icon-completed">✓</div>
+            </div>
+            
+            <div class="stat-card">
+              <div class="stat-info">
+                <h3>Active Tour</h3>
+                <p class="stat-value">{{ monthly_stats.active_tours }}</p>
+                <div class="growth-indicator {% if monthly_growth.active_tours >= 0 %}growth-positive{% else %}growth-negative{% endif %}">
+                  {{ monthly_growth.active_tours|floatformat:1 }}%
+                </div>
+                <div class="stat-progress">
+                  <div class="progress-bar-active" style="width: 60%;"></div>
+                </div>
+              </div>
+              <div class="stat-icon icon-active">🚶</div>
+            </div>
+            
+            <div class="stat-card">
+              <div class="stat-info">
+                <h3>Cancelled Tour</h3>
+                <p class="stat-value">{{ monthly_stats.cancelled_tours }}</p>
+                <div class="growth-indicator {% if monthly_growth.cancelled_tours >= 0 %}growth-positive{% else %}growth-negative{% endif %}">
+                  {{ monthly_growth.cancelled_tours|floatformat:1 }}%
+                </div>
+                <div class="stat-progress">
+                  <div class="progress-bar-cancelled" style="width: 18%;"></div>
+                </div>
+              </div>
+              <div class="stat-icon icon-cancelled">✗</div>
+            </div>
+            
+            <div class="stat-card">
+              <div class="stat-info">
+                <h3>Monthly Revenue</h3>
+                <p class="stat-value">₱{{ monthly_stats.total_revenue|floatformat:0 }}</p>
+                <div class="growth-indicator {% if monthly_growth.total_revenue >= 0 %}growth-positive{% else %}growth-negative{% endif %}">
+                  {{ monthly_growth.total_revenue|floatformat:1 }}%
+                </div>
+                <div class="stat-progress">
+                  <div class="progress-bar-revenue" style="width: 70%;"></div>
+                </div>
+              </div>
+              <div class="stat-icon icon-revenue">₱</div>
+            </div>
+          </div>
+        </div>
+        
+        <!-- Yearly Stats -->
+        <div id="yearly-stats" class="stats-section">
+          <div class="stats-grid">
+            <div class="stat-card">
+              <div class="stat-info">
+                <h3>Completed Tour</h3>
+                <p class="stat-value">{{ yearly_stats.completed_tours }}</p>
+                <div class="growth-indicator {% if yearly_growth.completed_tours >= 0 %}growth-positive{% else %}growth-negative{% endif %}">
+                  {{ yearly_growth.completed_tours|floatformat:1 }}%
+                </div>
+                <div class="stat-progress">
+                  <div class="progress-bar-completed" style="width: 45%;"></div>
+                </div>
+              </div>
+              <div class="stat-icon icon-completed">✓</div>
+            </div>
+            
+            <div class="stat-card">
+              <div class="stat-info">
+                <h3>Active Tour</h3>
+                <p class="stat-value">{{ yearly_stats.active_tours }}</p>
+                <div class="growth-indicator {% if yearly_growth.active_tours >= 0 %}growth-positive{% else %}growth-negative{% endif %}">
+                  {{ yearly_growth.active_tours|floatformat:1 }}%
+                </div>
+                <div class="stat-progress">
+                  <div class="progress-bar-active" style="width: 65%;"></div>
+                </div>
+              </div>
+              <div class="stat-icon icon-active">🚶</div>
+            </div>
+            
+            <div class="stat-card">
+              <div class="stat-info">
+                <h3>Cancelled Tour</h3>
+                <p class="stat-value">{{ yearly_stats.cancelled_tours }}</p>
+                <div class="growth-indicator {% if yearly_growth.cancelled_tours >= 0 %}growth-positive{% else %}growth-negative{% endif %}">
+                  {{ yearly_growth.cancelled_tours|floatformat:1 }}%
+                </div>
+                <div class="stat-progress">
+                  <div class="progress-bar-cancelled" style="width: 20%;"></div>
+                </div>
+              </div>
+              <div class="stat-icon icon-cancelled">✗</div>
+            </div>
+            
+            <div class="stat-card">
+              <div class="stat-info">
+                <h3>Yearly Revenue</h3>
+                <p class="stat-value">₱{{ yearly_stats.total_revenue|floatformat:0 }}</p>
+                <div class="growth-indicator {% if yearly_growth.total_revenue >= 0 %}growth-positive{% else %}growth-negative{% endif %}">
+                  {{ yearly_growth.total_revenue|floatformat:1 }}%
+                </div>
+                <div class="stat-progress">
+                  <div class="progress-bar-revenue" style="width: 75%;"></div>
+                </div>
+              </div>
+              <div class="stat-icon icon-revenue">₱</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <!-- Additional cards can be added for different statistics -->
+      <div class="stat-card" style="background-color: #f8f9fa; border-left: 4px solid #3498db;">
+        <div class="stat-info">
+          <h3>User Activity Tracking</h3>
+          <p class="stat-value">
+            <a href="{% url 'admin_app:activity_tracker' %}" style="text-decoration: none; color: #3498db;">
+              View Activity Logs
+            </a>
+          </p>
+          <span class="growth-indicator" style="background-color: #e3f2fd; color: #2196f3;">
+            <i class="fas fa-chart-line"></i> Monitor employee activity
+          </span>
+        </div>
+        <div class="stat-icon">
+          <i class="fas fa-user-clock" style="font-size: 48px; color: #3498db;"></i>
+        </div>
+      </div>
+      
+      <!-- Tour Booking Status Visualization -->
+      <div class="stats-container">
+        <div class="header-with-filter">
+          <h2>Tour Booking Status</h2>
+          <select id="booking-period-filter" class="period-select">
+            <option value="all-time">All Tours</option>
+            <option value="low">Low Booking</option>
+            <option value="moderate">Moderate Booking</option>
+            <option value="almost-full">Almost Full</option>
+            <option value="full">Fully Booked</option>
+          </select>
+        </div>
+        
+        <div class="booking-viz-container">
+          <div class="booking-header">
+            <div class="booking-title">
+              <h2>{{ average_percentage }}</h2>
+              <p class="subtitle">Reserved Tour</p>
+            </div>
+            <select class="period-dropdown">
+              <option>THIS WEEK</option>
+              <option>THIS MONTH</option>
+              <option>THIS YEAR</option>
+            </select>
+          </div>
+          
+          <div class="booking-bars">
+            {% for booking in tour_bookings %}
+            <!-- {{ booking.tour.tour_name }}: {{ booking.percentage }}% -->
+            <div class="booking-bar {% if booking.status == 'full' %}full-bar{% endif %}">
+              <div class="bar-outer">
+                <div class="bar-inner" style="height: {{ booking.percentage }}%;"></div>
+                <div class="bar-percentage">{{ booking.percentage }}%</div>
+              </div>
+              <div class="bar-label">{{ booking.tour.tour_name }}</div>
+            </div>
+            {% empty %}
+            <!-- Fallback if no tours are available -->
+            <div class="booking-bar">
+              <div class="bar-outer">
+                <div class="bar-inner" style="height: 0%;"></div>
+                <div class="bar-percentage">0%</div>
+              </div>
+              <div class="bar-label">No Tours</div>
+            </div>
+            {% endfor %}
+          </div>
+        </div>
+        
+        <div class="booking-overview">
+          <div class="overview-card">
+            <div class="overview-value">{{ average_percentage }}%</div>
+            <div class="overview-label">Average Booking Rate</div>
+          </div>
+          <div class="overview-stats">
+            <div class="stat-item">
+              <div class="stat-label">Fully Booked Tours</div>
+              <div class="stat-value">{{ full_tours }}</div>
+            </div>
+            <div class="stat-item">
+              <div class="stat-label">Almost Full Tours</div>
+              <div class="stat-value">{{ almost_full_tours }}</div>
+            </div>
+            <div class="stat-item">
+              <div class="stat-label">Moderate Booking</div>
+              <div class="stat-value">{{ moderate_tours }}</div>
+            </div>
+            <div class="stat-item">
+              <div class="stat-label">Low Booking</div>
+              <div class="stat-value">{{ low_tours }}</div>
+            </div>
+          </div>
+        </div>
+        
+        <div class="booking-bars-container">
+          {% for booking in tour_bookings %}
+          <div class="booking-bar-item" data-status="{{ booking.status }}">
+            <div class="booking-bar-header">
+              <div class="tour-name">{{ booking.tour.tour_name }}</div>
+              <div class="booking-percentage">{{ booking.percentage }}%</div>
+            </div>
+            <div class="progress-container">
+              <div class="progress-bar {% if booking.status == 'full' %}progress-full{% elif booking.status == 'almost-full' %}progress-almost{% elif booking.status == 'moderate' %}progress-moderate{% else %}progress-low{% endif %}" style="width: {{ booking.percentage }}%;"></div>
+            </div>
+            <div class="booking-status">
+              {% if booking.status == 'full' %}
+                <span class="status-badge status-full">Fully Booked</span>
+              {% elif booking.status == 'almost-full' %}
+                <span class="status-badge status-almost">Almost Full ({{ booking.remaining }}% remaining)</span>
+              {% elif booking.status == 'moderate' %}
+                <span class="status-badge status-moderate">Moderate ({{ booking.remaining }}% available)</span>
+              {% else %}
+                <span class="status-badge status-low">Low Booking ({{ booking.remaining }}% available)</span>
+              {% endif %}
+            </div>
+          </div>
+          {% empty %}
+          <div class="no-data">No tour booking data available</div>
+          {% endfor %}
+        </div>
+      </div>
+      
+      <!-- Popular Tour Pack Visualization -->
+      <div class="stats-container">
+        <div class="header-with-filter">
+          <h2>POPULAR TOUR PACK</h2>
+        </div>
+        
+        <div class="tour-pack-container" style="background-color: #f9f8f6; border-radius: 20px; padding: 30px; box-shadow: 0 2px 15px rgba(0,0,0,0.05);">
+          <!-- Modern circular visualization -->
+          <div style="max-width: 500px; margin: 0 auto;">
+            <svg viewBox="0 0 400 400" style="width: 100%; height: auto;">
+              <!-- Main circular segments representing tour percentages -->
+              {% with circumference=942 %}
+                {% for booking in tour_bookings|slice:":4" %}
+                  {% with dash_array=booking.percentage|mul:circumference|div:100 %}
+                    {% with remain=circumference|sub:dash_array %}
+                      {% with offset=forloop.counter0|mul:dash_array %}
+                        <circle cx="200" cy="200" r="150" fill="transparent" 
+                          stroke="{% if forloop.counter == 1 %}#000{% elif forloop.counter == 2 %}#777{% elif forloop.counter == 3 %}#e6c672{% else %}#999{% endif %}" 
+                          stroke-width="30" 
+                          stroke-dasharray="{{ dash_array }} {{ remain }}" 
+                          stroke-dashoffset="{{ offset }}" 
+                          transform="rotate(-90 200 200)" />
+                      {% endwith %}
+                    {% endwith %}
+                  {% endwith %}
+                {% empty %}
+                  <!-- Fallback values if no tour data is available -->
+                  <circle cx="200" cy="200" r="150" fill="transparent" stroke="#000" stroke-width="30" stroke-dasharray="236.5 707.5" stroke-dashoffset="0" transform="rotate(-90 200 200)" />
+                  <circle cx="200" cy="200" r="150" fill="transparent" stroke="#777" stroke-width="30" stroke-dasharray="236.5 707.5" stroke-dashoffset="236.5" transform="rotate(-90 200 200)" />
+                  <circle cx="200" cy="200" r="150" fill="transparent" stroke="#e6c672" stroke-width="30" stroke-dasharray="251.5 692.5" stroke-dashoffset="473" transform="rotate(-90 200 200)" />
+                  <circle cx="200" cy="200" r="150" fill="transparent" stroke="#999" stroke-width="30" stroke-dasharray="125.7 818.3" stroke-dashoffset="724.5" transform="rotate(-90 200 200)" />
+                {% endfor %}
+              {% endwith %}
+              
+              <!-- Center circle with airplane icon -->
+              <circle cx="200" cy="200" r="100" fill="#e6c672" />
+              <text x="200" y="200" text-anchor="middle" dominant-baseline="middle" font-size="40">✈️</text>
+            </svg>
+          </div>
+          
+          <!-- Tour Legend -->
+          <div style="max-width: 400px; margin: 30px auto 0; display: flex; flex-direction: column; gap: 15px;">
+            {% for booking in tour_bookings|slice:":4" %}
+              <div style="display: flex; justify-content: space-between; align-items: center;">
+                <div style="display: flex; align-items: center; gap: 10px;">
+                  <div style="width: 20px; height: 20px; border-radius: 4px; background-color: {% if forloop.counter == 1 %}#000{% elif forloop.counter == 2 %}#777{% elif forloop.counter == 3 %}#e6c672{% else %}#999{% endif %};"></div>
+                  <span style="font-weight: bold; color: #333;">{{ booking.tour.tour_name }}</span>
+                </div>
+                <span style="font-weight: bold; color: #333;">{{ booking.percentage }}%</span>
+              </div>
+            {% empty %}
+              <!-- Fallback for no tour data -->
+              <div style="display: flex; justify-content: space-between; align-items: center;">
+                <div style="display: flex; align-items: center; gap: 10px;">
+                  <div style="width: 20px; height: 20px; border-radius: 4px; background-color: #000;"></div>
+                  <span style="font-weight: bold; color: #333;">Tour 1</span>
+                </div>
+                <span style="font-weight: bold; color: #333;">38%</span>
+              </div>
+              <div style="display: flex; justify-content: space-between; align-items: center;">
+                <div style="display: flex; align-items: center; gap: 10px;">
+                  <div style="width: 20px; height: 20px; border-radius: 4px; background-color: #777;"></div>
+                  <span style="font-weight: bold; color: #333;">Tour 2</span>
+                </div>
+                <span style="font-weight: bold; color: #333;">38%</span>
+              </div>
+              <div style="display: flex; justify-content: space-between; align-items: center;">
+                <div style="display: flex; align-items: center; gap: 10px;">
+                  <div style="width: 20px; height: 20px; border-radius: 4px; background-color: #e6c672;"></div>
+                  <span style="font-weight: bold; color: #333;">Tour 3</span>
+                </div>
+                <span style="font-weight: bold; color: #333;">40%</span>
+              </div>
+              <div style="display: flex; justify-content: space-between; align-items: center;">
+                <div style="display: flex; align-items: center; gap: 10px;">
+                  <div style="width: 20px; height: 20px; border-radius: 4px; background-color: #999;"></div>
+                  <span style="font-weight: bold; color: #333;">Tour 4</span>
+                </div>
+                <span style="font-weight: bold; color: #333;">20%</span>
+              </div>
+            {% endfor %}
+          </div>
+        </div>
+      </div>
+      
+      <!-- Tour Insights and Forecasting -->
+      <div class="stats-container">
+        <div class="header-with-filter">
+          <h2>Tour Insights & Forecasting</h2>
+        </div>
+        
+        <style>
+          .insights-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-top: 20px;
+          }
+          
+          .insight-card {
+            background-color: white;
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+          }
+          
+          .insight-card h3 {
+            margin-top: 0;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #eee;
+            font-size: 18px;
+          }
+          
+          .insight-list {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+          }
+          
+          .insight-item {
+            padding: 12px 0;
+            border-bottom: 1px solid #f5f5f5;
+            display: flex;
+            align-items: center;
+          }
+          
+          .insight-item:last-child {
+            border-bottom: none;
+          }
+          
+          .insight-icon {
+            margin-right: 15px;
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 16px;
+            flex-shrink: 0;
+          }
+          
+          .insight-positive {
+            background-color: #e6f4ea;
+            color: #34a853;
+          }
+          
+          .insight-negative {
+            background-color: #ffebe9;
+            color: #ea4335;
+          }
+          
+          .insight-forecast {
+            background-color: #e8f0fe;
+            color: #1967d2;
+          }
+          
+          .insight-improve {
+            background-color: #fff7e6;
+            color: #d56c00;
+          }
+          
+          .insight-leverage {
+            background-color: #fdebd7;
+            color: #e99c59;
+          }
+          
+          .forecast-section {
+            background-color: #f8f9fa;
+            border-radius: 8px;
+            padding: 15px;
+            margin-top: 20px;
+          }
+          
+          .forecast-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+          }
+          
+          .forecast-title {
+            font-size: 16px;
+            font-weight: bold;
+            color: #333;
+          }
+          
+          .forecast-period {
+            font-size: 14px;
+            color: #666;
+          }
+          
+          .forecast-tour {
+            display: flex;
+            justify-content: space-between;
+            padding: 10px 0;
+            border-bottom: 1px solid #eee;
+          }
+          
+          .forecast-tour:last-child {
+            border-bottom: none;
+          }
+          
+          .forecast-name {
+            font-weight: 500;
+          }
+          
+          .forecast-value {
+            font-weight: bold;
+          }
+          
+          .forecast-current {
+            color: #666;
+          }
+          
+          .forecast-expected {
+            color: #1967d2;
+          }
+          
+          .tour-comparison {
+            margin-top: 20px;
+          }
+          
+          .comparison-tabs {
+            display: flex;
+            border-bottom: 1px solid #eee;
+            margin-bottom: 15px;
+          }
+          
+          .comparison-tab {
+            padding: 10px 15px;
+            cursor: pointer;
+            border-bottom: 2px solid transparent;
+            font-weight: 500;
+          }
+          
+          .comparison-tab.active {
+            border-bottom: 2px solid #1967d2;
+            color: #1967d2;
+          }
+          
+          .comparison-content {
+            background-color: white;
+            border-radius: 8px;
+            padding: 15px;
+          }
+          
+          .comparison-section {
+            display: none;
+          }
+          
+          .comparison-section.active {
+            display: block;
+          }
+          
+          .tour-rank {
+            display: flex;
+            justify-content: space-between;
+            padding: 10px 0;
+            border-bottom: 1px solid #f5f5f5;
+          }
+          
+          .tour-rank:last-child {
+            border-bottom: none;
+          }
+          
+          .rank-label {
+            font-weight: 500;
+          }
+          
+          .rank-value {
+            font-weight: bold;
+          }
+          
+          .rank-value.top {
+            color: #34a853;
+          }
+          
+          .rank-value.bottom {
+            color: #ea4335;
+          }
+        </style>
+        
+        <div class="insights-grid">
+          <div class="insight-card">
+            <h3>Booking Insights</h3>
+            <ul class="insight-list">
+              {% for insight in booking_insights %}
+                <li class="insight-item">
+                  {% if insight.type == 'positive' %}
+                    <div class="insight-icon insight-positive">↑</div>
+                  {% elif insight.type == 'negative' %}
+                    <div class="insight-icon insight-negative">↓</div>
+                  {% elif insight.type == 'forecast' %}
+                    <div class="insight-icon insight-forecast">🔮</div>
+                  {% endif %}
+                  <div>{{ insight.text }}</div>
+                </li>
+              {% empty %}
+                <li class="insight-item">No insights available yet. Check back after more tour bookings.</li>
+              {% endfor %}
+            </ul>
+          </div>
+          
+          <div class="insight-card">
+            <h3>Booking Recommendations</h3>
+            <ul class="insight-list">
+              {% for rec in booking_recommendations %}
+                <li class="insight-item">
+                  {% if rec.type == 'improve' %}
+                    <div class="insight-icon insight-improve">⚡</div>
+                  {% elif rec.type == 'leverage' %}
+                    <div class="insight-icon insight-leverage">🚀</div>
+                  {% endif %}
+                  <div>{{ rec.text }}</div>
+                </li>
+              {% empty %}
+                <li class="insight-item">No recommendations available. Check back after more tour bookings.</li>
+              {% endfor %}
+            </ul>
+          </div>
+        </div>
+        
+        <div class="tour-comparison">
+          <div class="comparison-tabs">
+            <div class="comparison-tab active" data-period="all-time">All Time</div>
+            <div class="comparison-tab" data-period="weekly">Weekly</div>
+            <div class="comparison-tab" data-period="monthly">Monthly</div>
+            <div class="comparison-tab" data-period="yearly">Yearly</div>
+          </div>
+          
+          <div class="comparison-content">
+            <div class="comparison-section active" id="all-time-comparison">
+              <div class="tour-rank">
+                <div class="rank-label">Most Popular Tour:</div>
+                <div class="rank-value top">{{ tour_bookings.0.tour.tour_name }} ({{ tour_bookings.0.percentage }}% booked)</div>
+              </div>
+              <div class="tour-rank">
+                <div class="rank-label">Least Popular Tour:</div>
+                <div class="rank-value bottom">{% with last_tour=tour_bookings|last %}{{ last_tour.tour.tour_name }} ({{ last_tour.percentage }}% booked){% endwith %}</div>
+              </div>
+              <div class="tour-rank">
+                <div class="rank-label">Fastest Growing Tour:</div>
+                <div class="rank-value top">
+                  {% for booking in tour_bookings %}
+                    {% if forloop.first %}
+                      {{ booking.tour.tour_name }} ({{ booking.yearly_growth|floatformat:1 }}% growth)
+                    {% endif %}
+                  {% endfor %}
+                </div>
+              </div>
+            </div>
+            
+            <div class="comparison-section" id="weekly-comparison">
+              <div class="tour-rank">
+                <div class="rank-label">Most Popular This Week:</div>
+                <div class="rank-value top">
+                  {% for booking in tour_bookings %}
+                    {% if forloop.first %}
+                      {{ booking.tour.tour_name }} ({{ booking.percentage }}% booked)
+                    {% endif %}
+                  {% endfor %}
+                </div>
+              </div>
+              <div class="tour-rank">
+                <div class="rank-label">Least Popular This Week:</div>
+                <div class="rank-value bottom">
+                  {% for booking in tour_bookings %}
+                    {% if forloop.last %}
+                      {{ booking.tour.tour_name }} ({{ booking.percentage }}% booked)
+                    {% endif %}
+                  {% endfor %}
+                </div>
+              </div>
+              <div class="tour-rank">
+                <div class="rank-label">Weekly Trend:</div>
+                <div class="rank-value">
+                  Average Weekly Booking: {{ weekly_average }}%
+                </div>
+              </div>
+            </div>
+            
+            <div class="comparison-section" id="monthly-comparison">
+              <div class="tour-rank">
+                <div class="rank-label">Most Popular This Month:</div>
+                <div class="rank-value top">
+                  {% for booking in tour_bookings %}
+                    {% if forloop.first %}
+                      {{ booking.tour.tour_name }} ({{ booking.percentage }}% booked)
+                    {% endif %}
+                  {% endfor %}
+                </div>
+              </div>
+              <div class="tour-rank">
+                <div class="rank-label">Least Popular This Month:</div>
+                <div class="rank-value bottom">
+                  {% for booking in tour_bookings %}
+                    {% if forloop.last %}
+                      {{ booking.tour.tour_name }} ({{ booking.percentage }}% booked)
+                    {% endif %}
+                  {% endfor %}
+                </div>
+              </div>
+              <div class="tour-rank">
+                <div class="rank-label">Monthly Trend:</div>
+                <div class="rank-value">
+                  Average Monthly Booking: {{ monthly_average }}%
+                </div>
+              </div>
+            </div>
+            
+            <div class="comparison-section" id="yearly-comparison">
+              <div class="tour-rank">
+                <div class="rank-label">Most Popular This Year:</div>
+                <div class="rank-value top">
+                  {% for booking in tour_bookings %}
+                    {% if forloop.first %}
+                      {{ booking.tour.tour_name }} ({{ booking.percentage }}% booked)
+                    {% endif %}
+                  {% endfor %}
+                </div>
+              </div>
+              <div class="tour-rank">
+                <div class="rank-label">Least Popular This Year:</div>
+                <div class="rank-value bottom">
+                  {% for booking in tour_bookings %}
+                    {% if forloop.last %}
+                      {{ booking.tour.tour_name }} ({{ booking.percentage }}% booked)
+                    {% endif %}
+                  {% endfor %}
+                </div>
+              </div>
+              <div class="tour-rank">
+                <div class="rank-label">Yearly Trend:</div>
+                <div class="rank-value">
+                  Average Yearly Booking: {{ yearly_average }}%
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        <div class="forecast-section">
+          <div class="forecast-header">
+            <div class="forecast-title">Tour Booking Forecasts</div>
+            <div class="forecast-period">Next 30 days</div>
+          </div>
+          
+          {% for booking in tour_bookings|slice:":4" %}
+            <div class="forecast-tour">
+              <div class="forecast-name">{{ booking.tour.tour_name }}</div>
+              <div class="forecast-values">
+                <span class="forecast-current">Current: {{ booking.booked_slots }}</span>
+                <span> → </span>
+                <span class="forecast-expected">Forecast: {{ booking.forecast_next_month }}</span>
+                <span class="{% if booking.monthly_growth >= 0 %}growth-positive{% else %}growth-negative{% endif %}" style="margin-left: 10px;">
+                  {{ booking.monthly_growth|floatformat:1 }}%
+                </span>
+              </div>
+            </div>
+          {% endfor %}
+        </div>
+        
+        <script>
+          document.addEventListener('DOMContentLoaded', function() {
+            // Period comparison tabs functionality
+            const comparisonTabs = document.querySelectorAll('.comparison-tab');
+            const comparisonSections = document.querySelectorAll('.comparison-section');
+            
+            comparisonTabs.forEach(tab => {
+              tab.addEventListener('click', function() {
+                // Remove active class from all tabs
+                comparisonTabs.forEach(t => t.classList.remove('active'));
+                // Add active class to clicked tab
+                this.classList.add('active');
+                
+                // Hide all sections
+                comparisonSections.forEach(section => section.classList.remove('active'));
+                
+                // Show the selected section
+                const period = this.getAttribute('data-period');
+                document.getElementById(period + '-comparison').classList.add('active');
+              });
+            });
+          });
+        </script>
+      </div>
+      
+      <!-- Tour Calendar -->
+      <div class="stats-container">
+        <div class="header-with-filter">
+          <h2>Tour Calendar</h2>
+        </div>
+        
+        <div class="calendar-layout">
+          <div class="calendar-container">
+            <div class="calendar-header">
+              <div class="month-selector">
+                <div class="month-nav" id="prev-month">◀</div>
+                <div class="month-title" id="month-year">MARCH</div>
+                <div class="month-nav" id="next-month">▶</div>
+              </div>
+            </div>
+            
+            <div class="days-header calendar-grid">
+              <div class="calendar-day-header">Sunday</div>
+              <div class="calendar-day-header">Monday</div>
+              <div class="calendar-day-header">Tuesday</div>
+              <div class="calendar-day-header">Wednesday</div>
+              <div class="calendar-day-header">Thursday</div>
+              <div class="calendar-day-header">Friday</div>
+              <div class="calendar-day-header">Saturday</div>
+            </div>
+            
+            <!-- Days will be generated by JavaScript -->
+            <div id="calendar-days" class="calendar-days-grid"></div>
+          </div>
+          
+          <!-- Tour List Container -->
+          <div class="tour-list-container">
+            <div class="tour-list-header">
+              <span id="selected-date">Tours for March 1, 2023</span>
+            </div>
+            
+            <div id="tour-list" class="tour-list">
+              <!-- Tour cards will be generated by JavaScript -->
+              <div class="no-tours">Select a date to view available tours.</div>
+            </div>
+          </div>
+        </div>
+        
+        <!-- Tour Details Modal Overlay -->
+        <div id="tour-modal-overlay" class="tour-modal-overlay"></div>
+        
+        <!-- Tour Details Modal -->
+        <div id="tour-modal" class="tour-modal">
+          <div class="tour-modal-content">
+            <div class="tour-modal-header">
+              <div class="tour-modal-title">Tour Details</div>
+              <button class="tour-close-button">&times;</button>
+            </div>
+            
+            <div id="tour-modal-details" class="tour-modal-details">
+              <!-- Tour details will be populated by JavaScript -->
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <!-- Ongoing Tour Tracker -->
+      <div class="stats-container">
+        <div class="header-with-filter">
+          <h2>ONGOING TOUR</h2>
+          <a href="#" class="see-all-link">See All</a>
+        </div>
+        
+        <div class="ongoing-tours-container" id="ongoing-tours-container">
+          {% for schedule in active_tours %}
+          <div class="ongoing-tour-card" data-tour-id="{{ schedule.sched_id }}">
+            <div class="tour-left-info">
+              <div class="tour-name-number">{{ schedule.tour_id.tour_name }}</div>
+              <!-- Fix 1: Calculate the actual day number based on start date -->
+              <div class="tour-day-indicator">Day <span class="day-number" id="day-number-{{ schedule.sched_id }}">1</span></div>
+              <div class="tour-capacity">
+                <span class="person-icon">👥</span>
+                <!-- Fix: Show capacity as booked/total slots -->
+                <span class="capacity-text">{{ schedule.slots_booked }}/{% with total_slots=schedule.slots_booked|add:schedule.slots_available %}{{ total_slots }}{% endwith %} slots</span>
+              </div>
+              <div class="tour-date">
+                <span class="calendar-icon">📅</span>
+                <span class="date-text"><strong>Start:</strong> {{ schedule.start_time|date:"F d, Y" }}</span>
+              </div>
+              <!-- Fix 4: Add end date below start date -->
+              <div class="tour-date">
+                <span class="calendar-icon">🏁</span>
+                <span class="date-text"><strong>End:</strong> {{ schedule.end_time|date:"F d, Y" }}</span>
+              </div>
+              <button class="view-itinerary-btn" data-tour-id="{{ schedule.sched_id }}">View Itinerary</button>
+              <!-- Add Assign Employee button -->
+              <button class="assign-employee-btn" data-tour-id="{{ schedule.sched_id }}" data-tour-name="{{ schedule.tour_id.tour_name }}" onclick="showAssignModal(this)">Assign Employee</button>
+            </div>
+            
+            <div class="tour-timeline">
+              <div class="timeline-item">
+                <div class="time-label">{{ schedule.start_time|time:"h:i A" }}</div>
+                <div class="location">{{ schedule.start_location|default:"Start" }}</div>
+              </div>
+              
+              <div class="timeline-progress">
+                <div class="timeline-line"></div>
+                <div class="timeline-progress-fill" style="width: 50%;"></div>
+                <div class="timeline-marker active-marker" style="left: 50%;" data-tour-id="{{ schedule.sched_id }}">
+                  <!-- Popup will be created dynamically via JavaScript -->
+                </div>
+                <!-- Add employee checklist progress marker -->
+                <div class="employee-checklist-progress" style="left: 0%;" data-tour-id="{{ schedule.sched_id }}">
+                  <span class="progress-percentage">0%</span>
+                </div>
+                <div class="timeline-text">{% with duration=schedule.start_time|timesince:schedule.end_time %}
+                  Duration: {{ duration }} (Ends: {{ schedule.end_time|date:"F d, Y" }})
+                {% endwith %}</div>
+              </div>
+              
+              <div class="timeline-item">
+                <div class="time-label">{{ schedule.end_time|time:"h:i A" }}</div>
+                <div class="location">{{ schedule.end_location|default:"End" }}</div>
+              </div>
+            </div>
+          </div>
+          {% empty %}
+          <div class="no-tours-message">
+            <p>No active tours at the moment</p>
+          </div>
+          {% endfor %}
+        </div>
+      
+        <style>
+          .see-all-link {
+            color: #666;
+            text-decoration: none;
+            font-size: 14px;
+            font-weight: 500;
+          }
+          
+          .see-all-link:hover {
+            text-decoration: underline;
+          }
+          
+          .ongoing-tours-container {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+          }
+          
+          .ongoing-tour-card {
+            background-color: white;
+            border-radius: 12px;
+            padding: 20px;
+            display: flex;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+          }
+          
+          .tour-left-info {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            padding-right: 20px;
+            border-right: 1px solid #ddd;
+            min-width: 150px;
+            width: 150px;
+          }
+          
+          .tour-name-number {
+            font-weight: bold;
+            font-size: 18px;
+            color: #333;
+          }
+          
+          .tour-day-indicator {
+            background-color: #e99c59;
+            color: white;
+            padding: 3px 10px;
+            border-radius: 12px;
+            font-size: 14px;
+            font-weight: bold;
+            display: inline-block;
+            margin-top: 5px;
+            margin-bottom: 5px;
+          }
+          
+          .day-number {
+            font-weight: bold;
+          }
+          
+          .tour-capacity,
+          .tour-date {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 14px;
+            color: #666;
+          }
+          
+          .tour-timeline {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding-left: 20px;
+            flex: 1;
+          }
+          
+          .timeline-item {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 5px;
+            min-width: 100px;
+            position: relative;
+            z-index: 2;
+          }
+          
+          .time-label {
+            font-weight: bold;
+            color: #333;
+          }
+          
+          .location {
+            color: #666;
+          }
+          
+          .timeline-progress {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 0 20px;
+            position: relative;
+          }
+          
+          .timeline-line {
+            height: 2px;
+            background-color: #e0e0e0;
+            width: 100%;
+            position: relative;
+          }
+          
+          .timeline-progress-fill {
+            position: absolute;
+            top: 0;
+            left: 0;
+            height: 2px;
+            background-color: #8c6e5d;
+            transition: width 0.5s ease;
+            z-index: 1;
+          }
+          
+          .timeline-marker {
+            position: absolute;
+            top: -9px;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background-color: #8c6e5d;
+            cursor: pointer;
+            z-index: 3;
+            transition: left 0.5s ease;
+          }
+          
+          .active-marker {
+            background-color: #e99c59;
+            box-shadow: 0 0 5px rgba(233, 156, 89, 0.5);
+          }
+          
+          .timeline-marker:hover {
+            transform: scale(1.2);
+            box-shadow: 0 0 5px rgba(0,0,0,0.3);
+          }
+          
+          .timeline-line::before,
+          .timeline-line::after {
+            content: '';
+            position: absolute;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background-color: #8c6e5d;
+            top: 50%;
+            transform: translate(-50%, -50%);
+          }
+          
+          .timeline-line::before {
+            left: 0;
+          }
+          
+          .timeline-line::after {
+            right: 0;
+            transform: translate(50%, -50%);
+          }
+          
+          .timeline-text {
+            margin-top: 10px;
+            font-size: 14px;
+            color: #666;
+            text-align: center;
+          }
+          
+          .no-tours-message {
+            text-align: center;
+            padding: 30px;
+            background-color: #f9f9f9;
+            border-radius: 8px;
+            color: #666;
+          }
+          
+          /* Tour details popup */
+          .tour-details-popup {
+            position: absolute;
+            top: -220px; /* Increased to accommodate the larger popup */
+            left: 50%;
+            transform: translateX(-50%);
+            background-color: white;
+            border-radius: 8px;
+            padding: 15px;
+            min-width: 300px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.15);
+            z-index: 100;
+            display: block;
+            font-size: 14px;
+            border: 1px solid #eee;
+          }
+          
+          .popup-row {
+            display: flex;
+            align-items: baseline;
+            margin-bottom: 5px;
+          }
+          
+          .popup-row .popup-label {
+            margin-top: 0;
+            margin-right: 5px;
+          }
+          
+          .popup-section.upcoming .popup-header {
+            margin-bottom: 10px;
+          }
+          
+          .popup-section {
+            margin-bottom: 8px;
+          }
+          
+          .popup-label {
+            font-weight: bold;
+            color: #666;
+            font-size: 12px;
+            margin-top: 5px;
+          }
+          
+          .popup-value {
+            color: #333;
+            margin-bottom: 5px;
+          }
+          
+          .popup-event {
+            font-weight: bold;
+            color: #875a34;
+          }
+          
+          .popup-time, .popup-next-time {
+            color: #8c6e5d;
+          }
+          
+          .popup-details {
+            font-size: 12px;
+            color: #666;
+            max-height: 60px;
+            overflow-y: auto;
+            margin-bottom: 8px;
+          }
+          
+          .popup-divider {
+            height: 1px;
+            background-color: #eee;
+            margin: 8px 0;
+          }
+          
+          .popup-header {
+            font-weight: bold;
+            font-size: 13px;
+            margin-bottom: 5px;
+            color: #333;
+            border-bottom: 1px dashed #eee;
+            padding-bottom: 3px;
+          }
+          
+          .popup-next-event {
+            font-weight: bold;
+            color: #8c6e5d;
+          }
+          
+          .popup-row {
+            display: flex;
+            align-items: baseline;
+            margin-bottom: 4px;
+          }
+          
+          .popup-row .popup-label {
+            margin-top: 0;
+            margin-right: 4px;
+          }
+        </style>
+        
+        <script>
+          // Ongoing Tour Tracker JavaScript
+          document.addEventListener('DOMContentLoaded', function() {
+            // Get current active tours data from Django context
+            const activeTours = [
+              {% for schedule in active_tours %}
+              {
+                tourId: "{{ schedule.sched_id }}",
+                tourName: "{{ schedule.tour_id.tour_name }}",
+                capacity: "{{ schedule.slots_booked }}/{% with total_slots=schedule.slots_booked|add:schedule.slots_available %}{{ total_slots }}{% endwith %}",
+                booked: {{ schedule.slots_booked }},
+                available: {{ schedule.slots_available }},
+                totalCapacity: {% with total_slots=schedule.slots_booked|add:schedule.slots_available %}{{ total_slots }}{% endwith %},
+                date: "{{ schedule.start_time|date:'F d, Y' }}",
+                startTime: new Date("{{ schedule.start_time|date:'Y-m-d' }}T{{ schedule.start_time|time:'H:i:s' }}"),
+                endTime: new Date("{{ schedule.end_time|date:'Y-m-d' }}T{{ schedule.end_time|time:'H:i:s' }}"),
+                startLocation: "{{ schedule.start_location|default:'Starting Point' }}",
+                endLocation: "{{ schedule.end_location|default:'Destination' }}",
+                itinerary: [
+                  {% for event in schedule.events.all %}
+                  {
+                    event: "{{ event.event_name }}",
+                    time: new Date("{{ schedule.start_time|date:'Y-m-d' }}T{{ event.event_time|time:'H:i:s' }}"),
+                    details: "{{ event.event_description|escapejs }}",
+                    image: "{% if event.image %}{{ event.image.url }}{% endif %}"
+                  }{% if not forloop.last %},{% endif %}
+                  {% empty %}
+                  {
+                    event: "Tour Start",
+                    time: new Date("{{ schedule.start_time|date:'Y-m-d' }}T{{ schedule.start_time|time:'H:i:s' }}"),
+                    details: "Tour begins"
+                  },
+                  {
+                    event: "Tour End",
+                    time: new Date("{{ schedule.end_time|date:'Y-m-d' }}T{{ schedule.end_time|time:'H:i:s' }}"),
+                    details: "Tour concludes"
+                  }
+                  {% endfor %}
+                ]
+              }{% if not forloop.last %},{% endif %}
+              {% endfor %}
+            ];
+            
+            // Make activeTours globally accessible
+            window.activeTours = activeTours;
+            
+            // FIX 1: Calculate and display the actual day of the tour
+            function calculateTourDay() {
+              const now = new Date();
+              
+              activeTours.forEach(tour => {
+                const startDate = new Date(tour.startTime);
+                // Reset hours to compare just dates
+                startDate.setHours(0, 0, 0, 0);
+                const today = new Date(now);
+                today.setHours(0, 0, 0, 0);
+                
+                // Calculate difference in days
+                const diffTime = Math.abs(today - startDate);
+                const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                
+                // Day 1 is the start date, so add 1 to the difference
+                const tourDay = today >= startDate ? diffDays + 1 : 1;
+                
+                // Update the day number in the UI
+                const dayElement = document.getElementById(`day-number-${tour.tourId}`);
+                if (dayElement) {
+                  dayElement.textContent = tourDay;
+                }
+              });
+            }
+            
+            // Function to update tour progress
+            function updateTourProgress() {
+              const now = new Date();
+              
+              activeTours.forEach(tour => {
+                const startTime = tour.startTime;
+                const endTime = tour.endTime;
+                
+                // Check if tour is ongoing
+                if (now >= startTime && now <= endTime) {
+                  // Get the tour card
+                  const tourCard = document.querySelector(`.ongoing-tour-card[data-tour-id="${tour.tourId}"]`);
+                  if (tourCard) {
+                    // Update capacity display correctly
+                    const capacityText = tourCard.querySelector('.capacity-text');
+                    if (capacityText) {
+                      capacityText.textContent = `${tour.booked}/${tour.totalCapacity}`;
+                    }
+                    
+                    // Get the current event and determine its position in the itinerary
+                    const currentEvent = getCurrentEvent(tour, now);
+                    let progressPercent = 50; // Default to middle if we can't calculate
+                    
+                    if (tour.itinerary && tour.itinerary.length > 0 && currentEvent) {
+                      // Sort itinerary by time
+                      const sortedItinerary = [...tour.itinerary].sort((a, b) => a.time - b.time);
+                      
+                      // Find the index of the current event
+                      const currentIndex = sortedItinerary.findIndex(event => 
+                        event.event === currentEvent.event &&
+                        event.time.getTime() === currentEvent.time.getTime()
+                      );
+                      
+                      if (currentIndex !== -1) {
+                        // Calculate progress based on position in itinerary
+                        progressPercent = (currentIndex / (sortedItinerary.length - 1)) * 100;
+                      } else {
+                        // Fallback to time-based calculation
+                        const totalDuration = endTime - startTime;
+                        const elapsed = now - startTime;
+                        progressPercent = Math.min(100, Math.max(0, (elapsed / totalDuration) * 100));
+                      }
+                    } else {
+                      // Fallback to time-based calculation if no itinerary or current event
+                      const totalDuration = endTime - startTime;
+                      const elapsed = now - startTime;
+                      progressPercent = Math.min(100, Math.max(0, (elapsed / totalDuration) * 100));
+                    }
+                    
+                    // Update the progress bar and marker
+                    const progressFill = tourCard.querySelector('.timeline-progress-fill');
+                    const marker = tourCard.querySelector('.timeline-marker');
+                    
+                    progressFill.style.width = `${progressPercent}%`;
+                    marker.style.left = `${progressPercent}%`;
+                    
+                    // Set marker data
+                    if (currentEvent) {
+                      marker.setAttribute('title', `Current: ${currentEvent.event}\nNext: ${getNextEventName(tour, currentEvent)}`);
+                      marker.setAttribute('data-current-event', currentEvent.event);
+                      marker.setAttribute('data-current-details', currentEvent.details);
+                      marker.setAttribute('data-next-event', getNextEventName(tour, currentEvent));
+                    }
+                  }
+                }
+              });
+              
+              // Also update day calculation
+              calculateTourDay();
+            }
+            
+            // Function to get current event from itinerary
+            function getCurrentEvent(tour, currentTime) {
+              if (!tour.itinerary || tour.itinerary.length === 0) {
+                return { event: "Tour in progress", details: "No detailed itinerary available" };
+              }
+              
+              // Sort itinerary by time
+              const sortedItinerary = [...tour.itinerary].sort((a, b) => a.time - b.time);
+              
+              // Find the last event that has started
+              let currentEvent = null;
+              for (const event of sortedItinerary) {
+                if (currentTime >= event.time) {
+                  currentEvent = event;
+                } else {
+                  break;
+                }
+              }
+              
+              return currentEvent || sortedItinerary[0];
+            }
+            
+            // Function to get the next event name
+            function getNextEventName(tour, currentEvent) {
+              if (!tour.itinerary || tour.itinerary.length <= 1) {
+                return "Tour End";
+              }
+              
+              // Sort itinerary by time
+              const sortedItinerary = [...tour.itinerary].sort((a, b) => a.time - b.time);
+              
+              // Find index of current event
+              const currentIndex = sortedItinerary.findIndex(event => 
+                event.time.getTime() === currentEvent.time.getTime() && 
+                event.event === currentEvent.event
+              );
+              
+              if (currentIndex === -1 || currentIndex === sortedItinerary.length - 1) {
+                return "Tour End";
+              }
+              
+              return sortedItinerary[currentIndex + 1].event;
+            }
+            
+            // Add click event to markers to show tour details
+            document.querySelectorAll('.timeline-marker').forEach(marker => {
+              marker.addEventListener('click', function() {
+                // Check if popup already exists and remove it if it does
+                let existingPopup = this.querySelector('.tour-details-popup');
+                if (existingPopup) {
+                  existingPopup.remove();
+                }
+                
+                // Create popup
+                let popup = document.createElement('div');
+                popup.className = 'tour-details-popup';
+                
+                const currentEvent = this.getAttribute('data-current-event') || 'Tour in progress';
+                const currentDetails = this.getAttribute('data-current-details') || 'No details available';
+                const nextEvent = this.getAttribute('data-next-event') || 'Tour end';
+                
+                // Get the current and next events from the activeToursData
+                const tourId = this.closest('.ongoing-tour-card').dataset.tourId;
+                const tourData = activeTours.find(t => t.tourId === tourId);
+                
+                let currentTime = '';
+                let nextTime = '';
+                let currentDay = document.getElementById(`day-number-${tourId}`).textContent || '1';
+                
+                if (tourData && tourData.itinerary && tourData.itinerary.length > 0) {
+                  // Find current event in itinerary
+                  const currentEventObj = tourData.itinerary.find(e => e.event === currentEvent);
+                  if (currentEventObj && currentEventObj.time) {
+                    currentTime = new Date(currentEventObj.time).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+                  }
+                  
+                  // Find next event in itinerary
+                  if (nextEvent !== 'Tour End' && nextEvent !== 'Tour Complete') {
+                    const nextEventObj = tourData.itinerary.find(e => e.event === nextEvent);
+                    if (nextEventObj && nextEventObj.time) {
+                      nextTime = new Date(nextEventObj.time).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+                    }
+                  } else {
+                    // If next event is tour end, use the end time
+                    nextTime = new Date(tourData.endTime).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+                  }
+                }
+                
+                // Create popup with the requested format
+                popup.innerHTML = `
+                  <div class="popup-section current">
+                    <div class="popup-row"><span class="popup-label">Current Itinerary:</span> <span class="popup-value popup-event">${currentEvent}</span></div>
+                    <div class="popup-row"><span class="popup-label">Current Day:</span> <span class="popup-value">Day ${currentDay}</span></div>
+                    <div class="popup-row"><span class="popup-label">Current Time:</span> <span class="popup-value popup-time">${currentTime}</span></div>
+                    <div class="popup-label">Description:</div>
+                    <div class="popup-value popup-details">${currentDetails}</div>
+                  </div>
+                  
+                  <div class="popup-divider"></div>
+                  
+                  <div class="popup-section upcoming">
+                    <div class="popup-header">Upcoming:</div>
+                    
+                    <div class="popup-row"><span class="popup-label">Next Itinerary:</span> <span class="popup-value popup-next-event">${nextEvent}</span></div>
+                    <div class="popup-row"><span class="popup-label">Current Day:</span> <span class="popup-value">Day ${currentDay}</span></div>
+                    <div class="popup-row"><span class="popup-label">Next Time:</span> <span class="popup-value popup-next-time">${nextTime}</span></div>
+                  </div>
+                `;
+                
+                this.appendChild(popup);
+                popup.style.display = 'block';
+                
+                // Close popup when clicking outside
+                document.addEventListener('click', function closePopup(e) {
+                  if (!popup.contains(e.target) && e.target !== marker) {
+                    popup.style.display = 'none';
+                    document.removeEventListener('click', closePopup);
+                  }
+                });
+              });
+            });
+            
+            // Initial update
+            updateTourProgress();
+            calculateTourDay(); // Initial day calculation
+            
+            // Update progress every 30 seconds
+            setInterval(updateTourProgress, 30000);
+            
+            // Function to update employee checklist progress
+            /*
+            function updateEmployeeProgress() {
+              $.ajax({
+                // url: "#", // Disabled
+                url: "#", // Temporarily disabled
+                type: "GET",
+                dataType: "json",
+                success: function(response) {
+                  if (response.success) {
+                    // Update progress markers for each tour
+                    $.each(response.tour_progress, function(tourId, progress) {
+                      const progressElement = $(`.employee-checklist-progress[data-tour-id="${tourId}"]`);
+                      if (progressElement.length) {
+                        // Find associated timeline marker - if they should be at the same position,
+                        // align them together (when employee has completed all current itinerary items)
+                        const timelineMarker = $(`.timeline-marker[data-tour-id="${tourId}"]`);
+                        
+                        // Get the timeline marker position
+                        const timelinePosition = parseFloat(timelineMarker.css('left')) || 50;
+                        
+                        // Decide if markers should align:
+                        // If progress is ahead of timeline position, keep them separate
+                        // If progress is behind/equal to timeline position, keep progress at its calculated percentage
+                        const shouldAlign = (progress >= timelinePosition);
+                        
+                        // Either sync with timeline marker or use original position
+                        const position = shouldAlign ? timelinePosition : progress;
+                        
+                        // Update position and text
+                        progressElement.css('left', `${position}%`);
+                        progressElement.find('.progress-percentage').text(`${progress}%`);
+                        
+                        // Get the same tour data as the timeline marker
+                        const tourData = activeTours.find(t => t.tourId === tourId);
+                        if (tourData) {
+                          const now = new Date();
+                          const currentEvent = getCurrentEvent(tourData, now);
+                          const nextEvent = getNextEventName(tourData, currentEvent);
+                          
+                          // Set data attributes for the popup
+                          progressElement.attr('data-current-event', currentEvent.event);
+                          progressElement.attr('data-current-details', currentEvent.details);
+                          progressElement.attr('data-next-event', nextEvent);
+                          
+                          // Add title with more context
+                          progressElement.attr('title', `Employee Progress: ${progress}% - ${currentEvent.event}`);
+                        }
+                      }
+                    });
+                    
+                    // Add click handlers to progress markers if not already added
+                    if (!window.progressClickHandlersAdded) {
+                      addProgressClickHandlers();
+                      window.progressClickHandlersAdded = true;
+                    }
+                  } else {
+                    console.error("Failed to get employee progress:", response.error);
+                  }
+                },
+                error: function(xhr, status, error) {
+                  console.error("AJAX error when fetching employee progress:", error);
+                }
+              });
+            }
+            */
+            
+            // Function to add click handlers to progress markers
+            function addProgressClickHandlers() {
+              document.querySelectorAll('.employee-checklist-progress').forEach(marker => {
+                marker.addEventListener('click', function() {
+                  // Check if popup already exists and remove it if it does
+                  let existingPopup = this.querySelector('.tour-details-popup');
+                  if (existingPopup) {
+                    existingPopup.remove();
+                    return;
+                  }
+                  
+                  // Create popup
+                  let popup = document.createElement('div');
+                  popup.className = 'tour-details-popup';
+                  
+                  const currentEvent = this.getAttribute('data-current-event') || 'Tour in progress';
+                  const currentDetails = this.getAttribute('data-current-details') || 'No details available';
+                  const nextEvent = this.getAttribute('data-next-event') || 'Tour end';
+                  
+                  // Get the current and next events from the activeToursData
+                  const tourId = this.getAttribute('data-tour-id');
+                  const tourData = activeTours.find(t => t.tourId === tourId);
+                  
+                  let currentTime = '';
+                  let nextTime = '';
+                  let currentDay = document.getElementById(`day-number-${tourId}`).textContent || '1';
+                  
+                  if (tourData && tourData.itinerary && tourData.itinerary.length > 0) {
+                    // Find current event in itinerary
+                    const currentEventObj = tourData.itinerary.find(e => e.event === currentEvent);
+                    if (currentEventObj && currentEventObj.time) {
+                      currentTime = new Date(currentEventObj.time).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+                    }
+                    
+                    // Find next event in itinerary
+                    if (nextEvent !== 'Tour End' && nextEvent !== 'Tour Complete') {
+                      const nextEventObj = tourData.itinerary.find(e => e.event === nextEvent);
+                      if (nextEventObj && nextEventObj.time) {
+                        nextTime = new Date(nextEventObj.time).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+                      }
+                    } else {
+                      // If next event is tour end, use the end time
+                      nextTime = new Date(tourData.endTime).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+                    }
+                  }
+                  
+                  // Create popup with the requested format
+                  popup.innerHTML = `
+                    <div class="popup-section current">
+                      <div class="popup-row"><span class="popup-label">Current Itinerary:</span> <span class="popup-value popup-event">${currentEvent}</span></div>
+                      <div class="popup-row"><span class="popup-label">Current Day:</span> <span class="popup-value">Day ${currentDay}</span></div>
+                      <div class="popup-row"><span class="popup-label">Current Time:</span> <span class="popup-value popup-time">${currentTime}</span></div>
+                      <div class="popup-label">Description:</div>
+                      <div class="popup-value popup-details">${currentDetails}</div>
+                    </div>
+                    
+                    <div class="popup-divider"></div>
+                    
+                    <div class="popup-section upcoming">
+                      <div class="popup-header">Upcoming:</div>
+                      
+                      <div class="popup-row"><span class="popup-label">Next Itinerary:</span> <span class="popup-value popup-next-event">${nextEvent}</span></div>
+                      <div class="popup-row"><span class="popup-label">Current Day:</span> <span class="popup-value">Day ${currentDay}</span></div>
+                      <div class="popup-row"><span class="popup-label">Next Time:</span> <span class="popup-value popup-next-time">${nextTime}</span></div>
+                    </div>
+                  `;
+                  
+                  this.appendChild(popup);
+                  popup.style.display = 'block';
+                  
+                  // Close popup when clicking outside
+                  document.addEventListener('click', function closePopup(e) {
+                    if (!popup.contains(e.target) && e.target !== marker) {
+                      popup.style.display = 'none';
+                      document.removeEventListener('click', closePopup);
+                    }
+                  });
+                });
+              });
+            }
+            
+            // Initial employee progress update
+            // updateEmployeeProgress();
+            
+            // Update employee progress every 30 seconds
+            // setInterval(updateEmployeeProgress, 30000);
+            
+            // Employee assignment functionality
+            document.querySelectorAll('.assign-employee-btn').forEach(button => {
+              button.addEventListener('click', function() {
+                const tourId = this.getAttribute('data-tour-id');
+                const tourName = this.getAttribute('data-tour-name');
+                
+                // Set the tour information in the modal
+                document.getElementById('assign-tour-name').textContent = tourName;
+                document.getElementById('assign-tour-id').value = tourId;
+                console.log('Setting tour ID to:', tourId);
+                console.log('Setting tour name to:', tourName);
+                
+                // Open the modal
+                const modal = document.getElementById('assign-employee-modal');
+                modal.style.display = 'block';
+                console.log('Modal should be visible now');
+              });
+            });
+            
+            // Add form submission validation
+            document.getElementById('assign-employee-form').addEventListener('submit', function(event) {
+              const employeeId = document.getElementById('employee-select').value;
+              
+              if (!employeeId) {
+                alert('Please select an employee.');
+                event.preventDefault();
+                return false;
+              }
+              
+              return true;
+            });
+            
+            // Helper function to get CSRF token
+            function getCookie(name) {
+              let cookieValue = null;
+              if (document.cookie && document.cookie !== '') {
+                const cookies = document.cookie.split(';');
+                for (let i = 0; i < cookies.length; i++) {
+                  const cookie = cookies[i].trim();
+                  if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                    cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                    break;
+                  }
+                }
+              }
+              return cookieValue;
+            }
+            
+            // Close modals
+            document.querySelectorAll('.close-modal').forEach(button => {
+              button.addEventListener('click', function() {
+                const modalId = this.getAttribute('data-modal');
+                document.getElementById(modalId).style.display = 'none';
+              });
+            });
+          });
+        </script>
+      </div>
+    </div>
+  </div>
+  
+  <script>
+    // Global function to show the employee assignment modal
+    function showAssignModal(button) {
+      const tourId = button.getAttribute('data-tour-id');
+      const tourName = button.getAttribute('data-tour-name');
+      
+      // Set the tour information in the modal
+      document.getElementById('assign-tour-name').textContent = tourName;
+      document.getElementById('assign-tour-id').value = tourId;
+      console.log('Setting tour ID to:', tourId);
+      
+      // Check if this tour already has an assigned employee
+      const assignmentStatus = document.getElementById('assignment-status');
+      const assignedEmployeeName = document.getElementById('assigned-employee-name');
+      
+      // Get tour assignments from Django context
+      const tourAssignments = {
+        {% for id, data in tour_assignments.items %}
+          "{{ id }}": {
+            "employee_id": "{{ data.employee_id }}",
+            "employee_name": "{{ data.employee_name }}"
+          }{% if not forloop.last %},{% endif %}
+        {% endfor %}
+      };
+      
+      // Check if this tour has an assignment
+      if (tourAssignments && tourAssignments[tourId]) {
+        // Tour is already assigned, show the info
+        assignmentStatus.style.display = 'block';
+        assignedEmployeeName.textContent = tourAssignments[tourId].employee_name;
+        
+        // Pre-select the assigned employee in the dropdown
+        document.getElementById('employee-select').value = tourAssignments[tourId].employee_id;
+      } else {
+        // No assignment yet, hide the info
+        assignmentStatus.style.display = 'none';
+        assignedEmployeeName.textContent = '';
+        
+        // Reset the dropdown
+        document.getElementById('employee-select').value = '';
+      }
+      
+      // Open the modal
+      const modal = document.getElementById('assign-employee-modal');
+      modal.style.display = 'block';
+    }
+    
+    // JavaScript to handle the period filter selection
+    document.addEventListener('DOMContentLoaded', function() {
+      const periodFilter = document.getElementById('period-filter');
+      const allTimeStats = document.getElementById('all-time-stats');
+      const weeklyStats = document.getElementById('weekly-stats');
+      const monthlyStats = document.getElementById('monthly-stats');
+      const yearlyStats = document.getElementById('yearly-stats');
+      
+      // Function to show the selected statistics section
+      function showStats(period) {
+        // Hide all sections
+        allTimeStats.classList.remove('active');
+        weeklyStats.classList.remove('active');
+        monthlyStats.classList.remove('active');
+        yearlyStats.classList.remove('active');
+        
+        // Show the selected section
+        switch(period) {
+          case 'weekly':
+            weeklyStats.classList.add('active');
+            break;
+          case 'monthly':
+            monthlyStats.classList.add('active');
+            break;
+          case 'yearly':
+            yearlyStats.classList.add('active');
+            break;
+          default:
+            allTimeStats.classList.add('active');
+        }
+      }
+      
+      // Listen for changes to the filter dropdown
+      periodFilter.addEventListener('change', function() {
+        showStats(this.value);
+      });
+      
+      // Booking status filter
+      const bookingFilter = document.getElementById('booking-period-filter');
+      const bookingItems = document.querySelectorAll('.booking-bar-item');
+      
+      bookingFilter.addEventListener('change', function() {
+        const selectedStatus = this.value;
+        
+        bookingItems.forEach(item => {
+          if (selectedStatus === 'all-time' || item.dataset.status === selectedStatus) {
+            item.style.display = 'block';
+          } else {
+            item.style.display = 'none';
+          }
+        });
+      });
+      
+      // Get tour data from Django context
+      const tourData = {
+        {% for schedule in active_tours %}
+          "{{ schedule.start_time|date:'j' }}": [
+            {
+              "tourName": "{{ schedule.tour_id.tour_name }}",
+              "start": "{{ schedule.start_time|date:'Y-m-d' }}",
+              "end": "{{ schedule.end_time|date:'Y-m-d' }}",
+              "price": "₱{{ schedule.price|floatformat:2 }}",
+              "confirmedBookings": {{ schedule.slots_booked }},
+              "color": "#875a34",
+              "description": "{{ schedule.tour_id.description|truncatechars:100|escapejs }}",
+              "sched_id": "{{ schedule.sched_id }}",
+              "slots_available": {{ schedule.slots_available }},
+              "slots_booked": {{ schedule.slots_booked }}
+            }
+          ]{% if not forloop.last %},{% endif %}
+        {% empty %}
+          // Sample data if no tours are available in the database
+          "1": [
+            {
+              "tourName": "Sample Tour",
+              "start": "2023-03-01",
+              "end": "2023-03-01",
+              "price": "₱500.00",
+              "confirmedBookings": 20,
+              "color": "green",
+              "description": "Sample tour data since no actual tours found in database",
+              "sched_id": "Sample",
+              "slots_available": 100,
+              "slots_booked": 20
+            }
+          ]
+        {% endfor %}
+      };
+      
+      // Calendar variables
+      let currentDate = new Date(2025, 3, 1); // April 1, 2025 (months are 0-based, so 3 = April)
+      let selectedDate = null;
+      let selectedTour = null;
+      let highlightedDates = [];
+      
+      // DOM elements
+      const calendarDays = document.getElementById('calendar-days');
+      const monthYearDisplay = document.getElementById('month-year');
+      const prevMonthBtn = document.getElementById('prev-month');
+      const nextMonthBtn = document.getElementById('next-month');
+      const selectedDateDisplay = document.getElementById('selected-date');
+      const tourList = document.getElementById('tour-list');
+      const tourModal = document.getElementById('tour-modal');
+      const tourModalOverlay = document.getElementById('tour-modal-overlay');
+      const tourModalDetails = document.getElementById('tour-modal-details');
+      const tourCloseButton = document.querySelector('.tour-close-button');
+      
+      // Initialize the calendar
+      function initCalendar() {
+        renderCalendar();
+        setupEventListeners();
+      }
+      
+      // Render the calendar for the current month
+      function renderCalendar() {
+        // Clear previous calendar
+        calendarDays.innerHTML = '';
+        
+        // Update month and year display
+        const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+        monthYearDisplay.textContent = monthNames[currentDate.getMonth()].toUpperCase();
+        
+        // Calculate the first and last day of the month
+        const firstDay = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
+        const lastDay = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0);
+        
+        // Get the day of the week for the first day (0 = Sunday, 1 = Monday, etc.)
+        const firstDayOfWeek = firstDay.getDay();
+        
+        // Get the total number of days in the month
+        const totalDays = lastDay.getDate();
+        
+        // Add empty cells for days before the first day of the month
+        for (let i = 0; i < firstDayOfWeek; i++) {
+          const emptyDay = document.createElement('div');
+          emptyDay.classList.add('calendar-day', 'empty');
+          calendarDays.appendChild(emptyDay);
+        }
+        
+        // Add cells for each day of the month
+        for (let day = 1; day <= totalDays; day++) {
+          const dayCell = document.createElement('div');
+          dayCell.classList.add('calendar-day');
+          dayCell.dataset.date = `${currentDate.getFullYear()}-${(currentDate.getMonth() + 1).toString().padStart(2, '0')}-${day.toString().padStart(2, '0')}`;
+          dayCell.dataset.day = day;
+          
+          // Add day number
+          const dayNumber = document.createElement('div');
+          dayNumber.classList.add('day-number');
+          dayNumber.textContent = day;
+          dayCell.appendChild(dayNumber);
+          
+          // Add tour dots if there are tours on this day
+          if (tourData[day]) {
+            const dayDots = document.createElement('div');
+            dayDots.classList.add('day-dots');
+            
+            tourData[day].forEach(tour => {
+              const tourDot = document.createElement('span');
+              tourDot.classList.add('tour-dot');
+              tourDot.style.backgroundColor = tour.color || "#875a34";
+              dayDots.appendChild(tourDot);
+            });
+            
+            dayCell.appendChild(dayDots);
+          }
+          
+          // Highlight dates in the range if applicable
+          const dateStr = `${currentDate.getFullYear()}-${(currentDate.getMonth() + 1).toString().padStart(2, '0')}-${day.toString().padStart(2, '0')}`;
+          if (highlightedDates.includes(dateStr)) {
+            dayCell.classList.add('highlighted');
+          }
+          
+          // Add selection state if applicable
+          if (selectedDate && selectedDate.getDate() === day && 
+              selectedDate.getMonth() === currentDate.getMonth() && 
+              selectedDate.getFullYear() === currentDate.getFullYear()) {
+            dayCell.classList.add('selected');
+          }
+          
+          calendarDays.appendChild(dayCell);
+        }
+      }
+      
+      // Set up event listeners
+      function setupEventListeners() {
+        // Previous month button
+        prevMonthBtn.addEventListener('click', function() {
+          currentDate.setMonth(currentDate.getMonth() - 1);
+          renderCalendar();
+        });
+        
+        // Next month button
+        nextMonthBtn.addEventListener('click', function() {
+          currentDate.setMonth(currentDate.getMonth() + 1);
+          renderCalendar();
+        });
+        
+        // Day selection
+        document.addEventListener('click', function(event) {
+          const dayCell = event.target.closest('.calendar-day:not(.empty)');
+          if (dayCell) {
+            const day = parseInt(dayCell.dataset.day);
+            
+            // Remove selection from previously selected day
+            const previouslySelected = document.querySelector('.calendar-day.selected');
+            if (previouslySelected) {
+              previouslySelected.classList.remove('selected');
+            }
+            
+            // Add selection to this day
+            dayCell.classList.add('selected');
+            
+            // Update selected date
+            selectedDate = new Date(currentDate.getFullYear(), currentDate.getMonth(), day);
+            
+            // Update the tour list for the selected date
+            updateTourList(day);
+          }
+        });
+        
+        // Close modal button
+        tourCloseButton.addEventListener('click', function() {
+          tourModal.style.display = 'none';
+          tourModalOverlay.style.display = 'none';
+          
+          // Clear highlighted dates
+          highlightedDates = [];
+          renderCalendar();
+        });
+        
+        // Close modal when clicking overlay
+        tourModalOverlay.addEventListener('click', function() {
+          tourModal.style.display = 'none';
+          tourModalOverlay.style.display = 'none';
+          
+          // Clear highlighted dates
+          highlightedDates = [];
+          renderCalendar();
+        });
+      }
+      
+      // Show detailed tour information in the modal
+      function showTourDetails(tour) {
+        // Clear previous details
+        tourModalDetails.innerHTML = '';
+        
+        // Create tour details content
+        const tourDetailItems = [
+          { label: 'Tour Name', value: tour.tourName },
+          { label: 'Start Date', value: formatDate(tour.start) },
+          { label: 'End Date', value: formatDate(tour.end) },
+          { label: 'Price', value: tour.price },
+          { label: 'Bookings', value: `${tour.confirmedBookings}/${tour.slots_available}` }
+        ];
+        
+        tourDetailItems.forEach(item => {
+          const detailItem = document.createElement('div');
+          detailItem.classList.add('tour-detail-item');
+          
+          const detailLabel = document.createElement('div');
+          detailLabel.classList.add('tour-detail-label');
+          detailLabel.textContent = item.label + ':';
+          
+          const detailValue = document.createElement('div');
+          detailValue.classList.add('tour-detail-value');
+          detailValue.textContent = item.value;
+          
+          detailItem.appendChild(detailLabel);
+          detailItem.appendChild(detailValue);
+          
+          tourModalDetails.appendChild(detailItem);
+        });
+        
+        // Add description if available
+        if (tour.description) {
+          const descriptionContainer = document.createElement('div');
+          descriptionContainer.classList.add('tour-description');
+          
+          const descriptionLabel = document.createElement('div');
+          descriptionLabel.classList.add('tour-detail-label');
+          descriptionLabel.textContent = 'Description:';
+          
+          const descriptionValue = document.createElement('div');
+          descriptionValue.classList.add('tour-detail-value');
+          descriptionValue.textContent = tour.description;
+          
+          descriptionContainer.appendChild(descriptionLabel);
+          descriptionContainer.appendChild(descriptionValue);
+          
+          tourModalDetails.appendChild(descriptionContainer);
+        }
+        
+        // Highlight dates in the range
+        highlightTourDates(tour);
+        
+        // Show the modal and overlay
+        tourModalOverlay.style.display = 'block';
+        tourModal.style.display = 'block';
+      }
+      
+      // Highlight dates corresponding to the tour duration
+      function highlightTourDates(tour) {
+        const startDate = new Date(tour.start);
+        const endDate = new Date(tour.end);
+        
+        highlightedDates = [];
+        
+        // Get all dates between start and end
+        const currentDate = new Date(startDate);
+        while (currentDate <= endDate) {
+          const dateStr = currentDate.toISOString().split('T')[0];
+          highlightedDates.push(dateStr);
+          currentDate.setDate(currentDate.getDate() + 1);
+        }
+        
+        // Rerender the calendar to show highlighted dates
+        renderCalendar();
+      }
+      
+      // Helper function to format dates
+      function formatDate(dateString) {
+        const date = new Date(dateString);
+        return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+      }
+      
+      // Update the tour list when a date is selected
+      function updateTourList(day) {
+        // Format the date for display
+        const options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
+        const formattedDate = selectedDate.toLocaleDateString('en-US', options);
+        selectedDateDisplay.textContent = `Tours for ${formattedDate}`;
+        
+        // Clear previous tour list
+        tourList.innerHTML = '';
+        
+        // Get tours for the selected day
+        const tours = tourData[day] || [];
+        
+        if (tours.length === 0) {
+          const noTours = document.createElement('div');
+          noTours.classList.add('no-tours');
+          noTours.textContent = 'No tours scheduled for this date.';
+          tourList.appendChild(noTours);
+          return;
+        }
+        
+        // Create tour cards
+        tours.forEach(tour => {
+          const tourCard = document.createElement('div');
+          tourCard.classList.add('tour-card');
+          tourCard.style.borderLeft = `5px solid ${tour.color || "#875a34"}`;
+          
+          const tourCardHeader = document.createElement('div');
+          tourCardHeader.classList.add('tour-card-header');
+          
+          const tourName = document.createElement('div');
+          tourName.classList.add('tour-name');
+          tourName.textContent = tour.tourName;
+          
+          const tourPrice = document.createElement('div');
+          tourPrice.classList.add('tour-price');
+          tourPrice.textContent = tour.price;
+          
+          tourCardHeader.appendChild(tourName);
+          tourCardHeader.appendChild(tourPrice);
+          
+          const tourDates = document.createElement('div');
+          tourDates.classList.add('tour-dates');
+          tourDates.textContent = `${formatDate(tour.start)} to ${formatDate(tour.end)}`;
+          
+          const tourDetails = document.createElement('div');
+          tourDetails.classList.add('tour-details');
+          
+          const tourBookings = document.createElement('div');
+          tourBookings.classList.add('tour-bookings');
+          tourBookings.textContent = `${tour.confirmedBookings}/${tour.slots_available} slots booked`;
+          
+          const tourAction = document.createElement('button');
+          tourAction.classList.add('tour-action');
+          tourAction.textContent = 'View Details';
+          tourAction.addEventListener('click', function() {
+            showTourDetails(tour);
+          });
+          
+          tourDetails.appendChild(tourBookings);
+          tourDetails.appendChild(tourAction);
+          
+          tourCard.appendChild(tourCardHeader);
+          tourCard.appendChild(tourDates);
+          tourCard.appendChild(tourDetails);
+          
+          tourList.appendChild(tourCard);
+        });
+      }
+      
+      // Initialize the calendar with today's date
+      currentDate = new Date();
+      initCalendar();
+    });
+  </script>
+  
+  <!-- Itinerary Modal -->
+  <div class="itinerary-modal" id="itinerary-modal">
+    <div class="itinerary-modal-content">
+      <div class="itinerary-modal-header">
+        <h2 id="itinerary-tour-name">Tour Itinerary</h2>
+        <span class="itinerary-close">&times;</span>
+      </div>
+      <!-- Add day selector tabs for multi-day tours -->
+      <div class="itinerary-day-tabs" id="itinerary-day-tabs">
+        <!-- Day tabs will be generated dynamically -->
+      </div>
+      <div class="itinerary-modal-body">
+        <div id="itinerary-details"></div>
+      </div>
+    </div>
+  </div>
+  
+  <style>
+    /* Day tabs styling */
+    .itinerary-day-tabs {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 20px;
+      padding-bottom: 15px;
+      border-bottom: 1px solid #eee;
+    }
+    
+    .day-tab {
+      padding: 8px 15px;
+      background-color: #f5f5f5;
+      border-radius: 20px;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+    
+    .day-tab:hover {
+      background-color: #e0e0e0;
+    }
+    
+    .day-tab.active {
+      background-color: #875a34;
+      color: white;
+    }
+    
+    .itinerary-day-content {
+      display: none;
+    }
+    
+    .itinerary-day-content.active {
+      display: block;
+    }
+  </style>
+  
+  <script>
+    document.addEventListener('DOMContentLoaded', function() {
+      console.log("DOM loaded, setting up itinerary buttons");
+      
+      // Add event listeners to View Itinerary buttons
+      const itineraryButtons = document.querySelectorAll('.view-itinerary-btn');
+      const itineraryModal = document.getElementById('itinerary-modal');
+      const itineraryClose = document.querySelector('.itinerary-close');
+      const itineraryTourName = document.getElementById('itinerary-tour-name');
+      const itineraryDetails = document.getElementById('itinerary-details');
+      const itineraryDayTabs = document.getElementById('itinerary-day-tabs');
+      
+      console.log(`Found ${itineraryButtons.length} itinerary buttons`);
+      console.log("Modal element:", itineraryModal);
+      
+      // Make itinerary buttons work immediately
+      itineraryButtons.forEach(button => {
+        button.addEventListener('click', function(e) {
+          e.preventDefault();
+          e.stopPropagation();
+          
+          const tourId = this.getAttribute('data-tour-id');
+          console.log("Button clicked for tour ID:", tourId);
+          
+          // Find the matching tour data - use global activeTours array
+          let tourData = null;
+          if (window.activeTours && window.activeTours.length > 0) {
+            console.log("Active tours array exists with", window.activeTours.length, "tours");
+            for (let i = 0; i < window.activeTours.length; i++) {
+              if (window.activeTours[i].tourId === tourId) {
+                tourData = window.activeTours[i];
+                break;
+              }
+            }
+          } else {
+            console.error("activeTours array is not available!");
+          }
+          
+          if (tourData) {
+            console.log("Found tour data:", tourData);
+            
+            // Set tour name in modal header
+            itineraryTourName.textContent = `${tourData.tourName} Itinerary`;
+            
+            // Calculate number of days in tour
+            const startDate = new Date(tourData.startTime);
+            const endDate = new Date(tourData.endTime);
+            startDate.setHours(0, 0, 0, 0);
+            endDate.setHours(0, 0, 0, 0);
+            
+            // Calculate difference in days
+            const diffTime = Math.abs(endDate - startDate);
+            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+            const totalDays = diffDays > 0 ? diffDays : 1;
+            
+            console.log(`Tour duration: ${totalDays} days`);
+            
+            // Create day tabs
+            itineraryDayTabs.innerHTML = '';
+            
+            // Group itinerary events by day
+            const eventsByDay = {};
+            
+            // Initialize day containers for each day
+            for (let day = 1; day <= totalDays; day++) {
+              eventsByDay[day] = [];
+              
+              // Create a tab for each day
+              const dayTab = document.createElement('div');
+              dayTab.className = 'day-tab';
+              dayTab.setAttribute('data-day', day);
+              dayTab.textContent = `Day ${day}`;
+              
+              // Make the first day active by default
+              if (day === 1) {
+                dayTab.classList.add('active');
+              }
+              
+              itineraryDayTabs.appendChild(dayTab);
+              
+              // Event listener for day tab
+              dayTab.addEventListener('click', function() {
+                // Remove active class from all tabs
+                document.querySelectorAll('.day-tab').forEach(tab => {
+                  tab.classList.remove('active');
+                });
+                
+                // Add active class to clicked tab
+                this.classList.add('active');
+                
+                // Show the corresponding day content
+                const selectedDay = parseInt(this.getAttribute('data-day'));
+                showDayContent(selectedDay);
+              });
+            }
+            
+            // If tour has itinerary events, group them by day
+            if (tourData.itinerary && tourData.itinerary.length > 0) {
+              console.log("Itinerary has", tourData.itinerary.length, "events");
+              
+              // Sort itinerary by time
+              const sortedItinerary = [...tourData.itinerary].sort((a, b) => {
+                return new Date(a.time) - new Date(b.time);
+              });
+              
+              // Assign events to days based on their date
+              sortedItinerary.forEach(event => {
+                const eventDate = new Date(event.time);
+                eventDate.setHours(0, 0, 0, 0);
+                startDate.setHours(0, 0, 0, 0);
+                
+                // Calculate which day this event belongs to
+                const eventDiffTime = Math.abs(eventDate - startDate);
+                const eventDay = Math.ceil(eventDiffTime / (1000 * 60 * 60 * 24)) + 1;
+                
+                // Add to the appropriate day (default to day 1 if calculation fails)
+                const day = (eventDay >= 1 && eventDay <= totalDays) ? eventDay : 1;
+                eventsByDay[day].push(event);
+              });
+            }
+            
+            // Create tour info section
+            let tourInfo = `
+              <div class="itinerary-tour-info">
+                <p><strong>Schedule ID</strong> <span>${tourData.tourId}</span></p>
+                <p><strong>Start Date</strong> <span>${new Date(tourData.startTime).toLocaleDateString('en-US', {weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'})}</span></p>
+                <p><strong>End Date</strong> <span>${new Date(tourData.endTime).toLocaleDateString('en-US', {weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'})}</span></p>
+                <p><strong>Duration</strong> <span>${totalDays} day${totalDays > 1 ? 's' : ''}</span></p>
+                <p><strong>Capacity</strong> <span>${tourData.booked}/${tourData.totalCapacity} slots</span></p>
+              </div>
+            `;
+            
+            // Create container for all days' content
+            let allDaysContent = '';
+            
+            // Function to show a specific day's content
+            function showDayContent(day) {
+              // Hide all day contents
+              document.querySelectorAll('.itinerary-day-content').forEach(content => {
+                content.classList.remove('active');
+              });
+              
+              // Show the selected day's content
+              const selectedDayContent = document.getElementById(`day-content-${day}`);
+              if (selectedDayContent) {
+                selectedDayContent.classList.add('active');
+              }
+            }
+            
+            // Create content for each day
+            for (let day = 1; day <= totalDays; day++) {
+              const dayEvents = eventsByDay[day] || [];
+              
+              let dayContent = `
+                <div id="day-content-${day}" class="itinerary-day-content ${day === 1 ? 'active' : ''}">
+                  <h3 class="itinerary-section-title">Day ${day} - Event Schedule</h3>
+              `;
+              
+              if (dayEvents.length > 0) {
+                dayContent += '<ul class="itinerary-list">';
+                
+                // Add each event to the list
+                dayEvents.forEach(event => {
+                  const eventTime = new Date(event.time).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+                  const imageHtml = event.image ? `<div class="itinerary-image-container"><img src="${event.image}" class="itinerary-image" alt="${event.event}"></div>` : '';
+                  
+                  dayContent += `
+                    <li class="itinerary-item">
+                      <div class="itinerary-time">${eventTime}</div>
+                      <div class="itinerary-content">
+                        <div class="itinerary-text">
+                          <div class="itinerary-event">${event.event}</div>
+                          <div class="itinerary-description">${event.details}</div>
+                        </div>
+                        ${imageHtml}
+                      </div>
+                    </li>
+                  `;
+                });
+                
+                dayContent += '</ul>';
+              } else {
+                // No events message
+                dayContent += `
+                  <div class="no-events-message">
+                    No detailed itinerary events available for Day ${day}.
+                  </div>
+                `;
+              }
+              
+              dayContent += '</div>';
+              allDaysContent += dayContent;
+            }
+            
+            // Put it all together
+            itineraryDetails.innerHTML = tourInfo + allDaysContent;
+            
+            // Show the modal
+            console.log("Displaying modal");
+            itineraryModal.style.display = 'block';
+            document.body.style.overflow = 'hidden'; // Prevent scrolling behind modal
+          } else {
+            console.error("Tour data not found for ID:", tourId);
+            alert("Tour details not available.");
+          }
+        });
+      });
+      
+      // Close modal when clicking on X button
+      if (itineraryClose) {
+        itineraryClose.addEventListener('click', function() {
+          console.log("Closing modal");
+          itineraryModal.style.display = 'none';
+          document.body.style.overflow = ''; // Restore scrolling
+        });
+      } else {
+        console.error("Close button not found!");
+      }
+      
+      // Close modal when clicking outside of it
+      window.addEventListener('click', function(event) {
+        if (event.target === itineraryModal) {
+          console.log("Clicked outside modal, closing");
+          itineraryModal.style.display = 'none';
+          document.body.style.overflow = ''; // Restore scrolling
+        }
+      });
+    });
+  </script>
+  
+  <!-- Flip Calendar -->
+  <div class="stats-container">
+    <h2>Calendar Overview</h2>
+    <div class="flip-calendar-container">
+      <div class="container">
+        <div class="calendar">
+          <div class="front">
+            <div class="current-date">
+              <h1 id="flip-calendar-day"></h1>
+              <h1 id="flip-calendar-month-year"></h1> 
+            </div>
+
+            <div class="current-month">
+              <ul class="week-days">
+                <li>MON</li>
+                <li>TUE</li>
+                <li>WED</li>
+                <li>THU</li>
+                <li>FRI</li>
+                <li>SAT</li>
+                <li>SUN</li>
+              </ul>
+
+              <div class="weeks" id="flip-calendar-weeks">
+                <!-- Calendar weeks will be dynamically generated -->
+              </div>
+            </div>
+          </div>
+
+          <div class="back">
+            <input placeholder="What's the event?">
+            <div class="info">
+              <div class="date">
+                <p class="info-date">
+                Date: <span id="event-date"></span>
+                </p>
+                <p class="info-time">
+                  Time: <span id="event-time"></span>
+                </p>
+              </div>
+              <div class="address">
+                <p>
+                  Address: <span id="event-address">Bayawan City, Negros Oriental</span>
+                </p>
+              </div>
+              <div class="observations">
+                <p>
+                  Observations: <span id="event-observations">Tour details will appear here</span>
+                </p>
+              </div>
+            </div>
+
+            <div class="actions">
+              <button class="save">
+                Save <i class="ion-checkmark"></i>
+              </button>
+              <button class="dismiss">
+                Dismiss <i class="ion-android-close"></i>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <style>
+    /* Flip Calendar Styles */
+    .flip-calendar-container {
+      display: flex;
+      justify-content: center;
+      margin-top: 30px;
+      margin-bottom: 30px;
+    }
+    
+    .container .calendar {
+      width: 100%;
+      max-width: 600px;
+      height: 400px;
+      border-radius: 8px;
+      background-color: #fff;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+      position: relative;
+      perspective: 1000px;
+    }
+    
+    .front, .back {
+      position: absolute;
+      width: 100%;
+      height: 100%;
+      backface-visibility: hidden;
+      transition: transform 0.5s ease;
+      border-radius: 8px;
+      overflow: hidden;
+    }
+    
+    .front {
+      background-color: #fff;
+      transform: rotateY(0deg);
+    }
+    
+    .back {
+      background-color: #fff;
+      transform: rotateY(180deg);
+      padding: 20px;
+      box-sizing: border-box;
+    }
+    
+    .calendar.flipped .front {
+      transform: rotateY(180deg);
+    }
+    
+    .calendar.flipped .back {
+      transform: rotateY(0deg);
+    }
+    
+    .current-date {
+      background-color: #e99c59;
+      color: #fff;
+      padding: 20px;
+      text-align: center;
+    }
+    
+    .current-date h1 {
+      margin: 0;
+      font-size: 24px;
+      font-weight: 500;
+    }
+    
+    .week-days {
+      display: flex;
+      list-style: none;
+      padding: 0;
+      margin: 0;
+    }
+    
+    .week-days li {
+      flex: 1;
+      text-align: center;
+      color: #9e9e9e;
+      font-weight: 500;
+      padding: 10px 0;
+      font-size: 14px;
+    }
+    
+    .weeks {
+      padding: 0 10px;
+    }
+    
+    .weeks > div {
+      display: flex;
+      margin-bottom: 5px;
+    }
+    
+    .weeks span {
+      flex: 1;
+      text-align: center;
+      padding: 10px 0;
+      cursor: pointer;
+      border-radius: 50%;
+      margin: 2px;
+      font-size: 14px;
+      color: #555;
+    }
+    
+    .weeks span.last-month, .weeks span.next-month {
+      color: #ccc;
+    }
+    
+    .weeks span.active {
+      background-color: #e99c59;
+      color: #fff;
+      font-weight: bold;
+    }
+    
+    .weeks span.event {
+      position: relative;
+    }
+    
+    .weeks span.event::after {
+      content: '';
+      position: absolute;
+      bottom: 2px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background-color: #e99c59;
+    }
+    
+    .back input {
+      width: 100%;
+      padding: 15px;
+      margin-bottom: 20px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      font-size: 16px;
+    }
+    
+    .info {
+      margin-bottom: 20px;
+    }
+    
+    .info p {
+      margin: 10px 0;
+      color: #555;
+      font-size: 14px;
+    }
+    
+    .info span {
+      color: #222;
+      font-weight: 500;
+    }
+    
+    .actions {
+      display: flex;
+      justify-content: space-between;
+      padding-top: 20px;
+      border-top: 1px solid #eee;
+    }
+    
+    .actions button {
+      padding: 10px 20px;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-weight: 500;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+    
+    .actions .save {
+      background-color: #e99c59;
+      color: white;
+    }
+    
+    .actions .dismiss {
+      background-color: #f1f1f1;
+      color: #555;
+    }
+    
+    .actions i {
+      font-size: 14px;
+    }
+  </style>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', function() {
+      // Flip Calendar JavaScript
+      const calendarElement = document.querySelector('.calendar');
+      const dayDisplay = document.getElementById('flip-calendar-day');
+      const monthYearDisplay = document.getElementById('flip-calendar-month-year');
+      const weeksContainer = document.getElementById('flip-calendar-weeks');
+      const eventDateDisplay = document.getElementById('event-date');
+      const eventTimeDisplay = document.getElementById('event-time');
+      
+      // Initialize with current date
+      const today = new Date();
+      const monthNames = [
+        'January', 'February', 'March', 'April', 'May', 'June',
+        'July', 'August', 'September', 'October', 'November', 'December'
+      ];
+      const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+      
+      // Format date display
+      const formatDay = (date) => {
+        const day = date.getDate();
+        const suffix = getDaySuffix(day);
+        return `${dayNames[date.getDay()]} ${day}${suffix}`;
+      };
+      
+      const getDaySuffix = (day) => {
+        if (day > 3 && day < 21) return 'th';
+        switch (day % 10) {
+          case 1: return 'st';
+          case 2: return 'nd';
+          case 3: return 'rd';
+          default: return 'th';
+        }
+      };
+      
+      // Update calendar header
+      dayDisplay.textContent = formatDay(today);
+      monthYearDisplay.textContent = `${monthNames[today.getMonth()]} ${today.getFullYear()}`;
+      
+      // Generate calendar days
+      function generateCalendar(date) {
+        weeksContainer.innerHTML = '';
+        
+        const year = date.getFullYear();
+        const month = date.getMonth();
+        
+        // First day of month
+        const firstDay = new Date(year, month, 1);
+        const lastDay = new Date(year, month + 1, 0);
+        
+        // Calculate days from previous month
+        let dayOfWeek = firstDay.getDay() || 7; // Convert Sunday (0) to 7
+        dayOfWeek--; // Adjust to start week on Monday
+        
+        // Create weeks
+        const weeks = [
+          document.createElement('div'),
+          document.createElement('div'),
+          document.createElement('div'),
+          document.createElement('div'),
+          document.createElement('div'),
+          document.createElement('div')
+        ];
+        
+        // Add previous month days
+        const prevMonthLastDay = new Date(year, month, 0).getDate();
+        for (let i = 0; i < dayOfWeek; i++) {
+          const daySpan = document.createElement('span');
+          daySpan.textContent = prevMonthLastDay - dayOfWeek + i + 1;
+          daySpan.classList.add('last-month');
+          weeks[0].appendChild(daySpan);
+        }
+        
+        // Add current month days
+        let weekIndex = 0;
+        for (let day = 1; day <= lastDay.getDate(); day++) {
+          // Check if we need to move to next week
+          if ((day + dayOfWeek - 1) % 7 === 0 && day !== 1) {
+            weekIndex++;
+          }
+          
+          const daySpan = document.createElement('span');
+          daySpan.textContent = day < 10 ? `0${day}` : day;
+          
+          // Mark current day
+          if (day === today.getDate() && month === today.getMonth() && year === today.getFullYear()) {
+            daySpan.classList.add('active');
+          }
+          
+          // Add event indicators (you can modify this to use your tour data)
+          if (tourData && tourData[day] && tourData[day].length > 0) {
+            daySpan.classList.add('event');
+          }
+          
+          // Add click event for days
+          daySpan.addEventListener('click', function() {
+            // Remove active class from all days
+            document.querySelectorAll('.weeks span').forEach(span => {
+              span.classList.remove('active');
+            });
+            
+            // Add active class to clicked day
+            daySpan.classList.add('active');
+            
+            // Update event details
+            const selectedDate = new Date(year, month, day);
+            eventDateDisplay.textContent = `${monthNames[month]} ${day}${getDaySuffix(day)}, ${year}`;
+            eventTimeDisplay.textContent = '9:00 AM';
+            
+            // Show tour details if available
+            if (tourData && tourData[day] && tourData[day].length > 0) {
+              const tour = tourData[day][0];
+              document.getElementById('event-observations').textContent = tour.description || 'Tour details not available';
+            } else {
+              document.getElementById('event-observations').textContent = 'No tours scheduled for this day';
+            }
+            
+            // Flip the calendar
+            calendarElement.classList.add('flipped');
+          });
+          
+          weeks[weekIndex].appendChild(daySpan);
+        }
+        
+        // Fill remaining days with next month
+        let remainingDays = 7 - (weeks[weekIndex].children.length % 7);
+        if (remainingDays < 7) {
+          for (let i = 1; i <= remainingDays; i++) {
+            const daySpan = document.createElement('span');
+            daySpan.textContent = i < 10 ? `0${i}` : i;
+            daySpan.classList.add('next-month');
+            weeks[weekIndex].appendChild(daySpan);
+          }
+        }
+        
+        // Append weeks to container
+        weeks.forEach(week => {
+          if (week.children.length > 0) {
+            weeksContainer.appendChild(week);
+          }
+        });
+      }
+      
+      // Generate calendar for current month
+      generateCalendar(today);
+      
+      // Add event listener for dismiss button
+      document.querySelector('.dismiss').addEventListener('click', function() {
+        calendarElement.classList.remove('flipped');
+      });
+      
+      // Add event listener for save button
+      document.querySelector('.save').addEventListener('click', function() {
+        // Here you can add functionality to save the event
+        alert('Event saved!');
+        calendarElement.classList.remove('flipped');
+      });
+    });
+  </script>
+
+  <!-- Add navigation handling script at the end of the body -->
+  <script>
+    document.addEventListener('DOMContentLoaded', function() {
+      // Get navigation and content elements
+      const navigation = document.querySelector('.navigation');
+      const content = document.querySelector('.content');
+      
+      // Function to handle responsive navigation
+      function handleResponsiveNavigation() {
+        // Check if screen is mobile
+        if (window.innerWidth <= 768) {
+          document.body.classList.add('mobile-view');
+          document.body.classList.remove('desktop-view');
+        } else {
+          document.body.classList.add('desktop-view');
+          document.body.classList.remove('mobile-view');
+        }
+      }
+      
+      // Initial check
+      handleResponsiveNavigation();
+      
+      // Add resize event listener
+      window.addEventListener('resize', handleResponsiveNavigation);
+      
+      // Add scroll class when scrolling
+      window.addEventListener('scroll', function() {
+        if (window.scrollY > 50) {
+          navigation.classList.add('scrolled');
+        } else {
+          navigation.classList.remove('scrolled');
+        }
+      });
+    });
+  </script>
+  
+  <!-- Employee Assignment Modal -->
+  <div id="assign-employee-modal" class="modal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2>Assign Employee to Tour</h2>
+        <span class="close-modal" data-modal="assign-employee-modal">&times;</span>
+      </div>
+      <div class="modal-body">
+        <form id="assign-employee-form" method="post" action="{% url 'admin_app:assign_employee_direct' %}">
+          {% csrf_token %}
+          <div class="tour-details-section">
+            <h3 id="assign-tour-name">Tour Name</h3>
+            <input type="hidden" id="assign-tour-id" name="tour_id" value="">
+          </div>
+          
+          <!-- Assignment status section - will show if employee already assigned -->
+          <div id="assignment-status" class="assignment-status" style="display: none;">
+            <div class="alert alert-info">
+              <p><strong>Already Assigned:</strong> <span id="assigned-employee-name"></span></p>
+            </div>
+          </div>
+          
+          <div class="employee-selection-section">
+            <label for="employee-select">Select Employee:</label>
+            <select id="employee-select" name="employee_id" class="form-control">
+              <option value="">Choose an employee</option>
+              {% for employee in employees %}
+                <option value="{{ employee.emp_id }}">{{ employee.first_name }} {{ employee.last_name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="assignment-actions">
+            <button type="submit" class="btn btn-primary">Assign Employee</button>
+            <button type="button" class="btn btn-secondary close-modal" data-modal="assign-employee-modal">Cancel</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+  
+  <style>
+    /* Employee Assignment Modal styles */
+    .employee-selection-section {
+      margin: 20px 0;
+    }
+    
+    .employee-selection-section label {
+      display: block;
+      margin-bottom: 8px;
+      font-weight: 500;
+    }
+    
+    .employee-selection-section select {
+      width: 100%;
+      padding: 10px;
+      border-radius: 4px;
+      border: 1px solid #ddd;
+    }
+    
+    .assignment-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 10px;
+      margin-top: 20px;
+    }
+    
+    .assignment-actions button {
+      padding: 8px 16px;
+      border-radius: 4px;
+      cursor: pointer;
+      border: none;
+    }
+    
+    .btn-primary {
+      background-color: #8c6e5d;
+      color: white;
+    }
+    
+    .btn-secondary {
+      background-color: #e0e0e0;
+      color: #333;
+    }
+    
+    /* Alert styles */
+    .alert {
+      padding: 12px 15px;
+      border-radius: 4px;
+      margin-bottom: 15px;
+    }
+    
+    .alert-info {
+      background-color: #e8f4f8;
+      border: 1px solid #bce8f1;
+      color: #31708f;
+    }
+    
+    .alert-success {
+      background-color: #dff0d8;
+      border: 1px solid #d6e9c6;
+      color: #3c763d;
+    }
+    
+    .alert-danger {
+      background-color: #f2dede;
+      border: 1px solid #ebccd1;
+      color: #a94442;
+    }
+    
+    .alert-warning {
+      background-color: #fcf8e3;
+      border: 1px solid #faebcc;
+      color: #8a6d3b;
+    }
+    
+    .messages-container {
+      margin-bottom: 20px;
+    }
+    
+    .close-alert {
+      float: right;
+      font-size: 20px;
+      font-weight: bold;
+      line-height: 1;
+      color: #000;
+      text-shadow: 0 1px 0 #fff;
+      opacity: 0.2;
+      background: none;
+      border: none;
+      cursor: pointer;
+    }
+    
+    .close-alert:hover {
+      opacity: 0.5;
+    }
+    
+    .dashboard-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 20px;
+    }
+    
+    .user-info {
+      font-size: 16px;
+      color: #666;
+    }
+    
+    .assignment-status {
+      margin: 15px 0;
+    }
+  </style>
+</body>
+</html>
+
+
+
+
+

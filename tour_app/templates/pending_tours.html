@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+{% load static %}
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pending Tours</title>
+    <link rel="stylesheet" href="{% static 'css/navigation.css' %}">
+    <style>
+        :root {
+            /* Brand Colors */
+            --primary-color: #875a34;    /* Main brand color */
+            --primary-light: #e99c59;   /* Lighter version for accents */
+            --primary-dark: #6d4827;    /* Darker version for hover states */
+            --secondary-color: #8c6e5d; /* Secondary brand color */
+            
+            /* Status Colors */
+            --success-color: #34a853;   /* Green for success states */
+            --warning-color: #fbbc05;   /* Yellow for warnings */
+            --error-color: #ea4335;     /* Red for errors */
+            --info-color: #4285f4;      /* Blue for information */
+            
+            /* Neutral Colors */
+            --bg-color: #f4f7fc;        /* Light background */
+            --text-dark: #333;          /* Dark text */
+            --text-medium: #666;        /* Medium text */
+            --text-light: #9e9e9e;      /* Light text */
+            --white: #fff;              /* White */
+        }
+
+        body {
+            background-color: var(--bg-color);
+            font-family: 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            color: var(--text-dark);
+            margin: 0;
+            padding: 0;
+        }
+        
+        .dashboard-container {
+            display: flex;
+            min-height: 100vh;
+        }
+        
+        .content {
+            flex: 1;
+            padding: 32px;
+            box-sizing: border-box;
+        }
+        
+        .container {
+            max-width: 1000px;
+            margin: 20px auto;
+            padding: 30px;
+            background-color: var(--white);
+            border-radius: 10px;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+        }
+        
+        h1 {
+            color: var(--text-dark);
+            text-align: center;
+            margin-bottom: 30px;
+            font-weight: 600;
+        }
+
+        .info-text {
+            color: var(--text-medium);
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        
+        .tours-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 20px;
+            margin-top: 30px;
+        }
+        
+        .tour-card {
+            background-color: var(--white);
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+        
+        .tour-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+        }
+        
+        .tour-image {
+            height: 180px;
+            background-color: var(--primary-light);
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .tour-image img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+        
+        .tour-status {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            padding: 5px 10px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 500;
+            color: white;
+            background-color: var(--warning-color);
+        }
+        
+        .tour-content {
+            padding: 20px;
+        }
+        
+        .tour-title {
+            font-size: 18px;
+            font-weight: 600;
+            margin: 0 0 10px 0;
+            color: var(--text-dark);
+        }
+        
+        .tour-date, .tour-client {
+            font-size: 14px;
+            color: var(--text-medium);
+            margin-bottom: 5px;
+            display: flex;
+            align-items: center;
+        }
+        
+        .tour-date i, .tour-client i {
+            margin-right: 8px;
+            color: var(--primary-color);
+        }
+        
+        .tour-actions {
+            margin-top: 15px;
+            display: flex;
+            justify-content: space-between;
+        }
+        
+        .approve-btn, .reject-btn, .view-btn {
+            padding: 8px 12px;
+            border: none;
+            border-radius: 4px;
+            font-size: 14px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+        
+        .approve-btn {
+            background-color: var(--success-color);
+            color: white;
+        }
+        
+        .reject-btn {
+            background-color: var(--error-color);
+            color: white;
+        }
+        
+        .view-btn {
+            background-color: var(--primary-color);
+            color: white;
+        }
+        
+        .approve-btn:hover, .reject-btn:hover, .view-btn:hover {
+            opacity: 0.9;
+        }
+        
+        .filters {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+        
+        .filter-btn {
+            background-color: var(--white);
+            border: 1px solid var(--primary-color);
+            color: var(--primary-color);
+            padding: 8px 15px;
+            border-radius: 20px;
+            cursor: pointer;
+            transition: all 0.3s;
+            font-size: 14px;
+        }
+        
+        .filter-btn:hover, .filter-btn.active {
+            background-color: var(--primary-color);
+            color: white;
+        }
+        
+        .empty-state {
+            text-align: center;
+            padding: 50px 0;
+        }
+        
+        .empty-state i {
+            font-size: 48px;
+            color: var(--text-light);
+            margin-bottom: 20px;
+        }
+    </style>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+<div class="dashboard-container">
+    <div class="navigation">
+        {% include 'components/navigation.html' %}
+    </div>
+    <div class="content">
+        <div class="container">
+            <h1>Pending Tours</h1>
+            <p class="info-text">Review and manage tour requests awaiting approval.</p>
+            
+            <div class="filters">
+                <button class="filter-btn active">All Pending</button>
+                <button class="filter-btn">New Requests</button>
+                <button class="filter-btn">This Week</button>
+                <button class="filter-btn">This Month</button>
+            </div>
+            
+            {% if pending_tours %}
+            <div class="tours-grid">
+                {% for tour in pending_tours %}
+                <div class="tour-card">
+                    <div class="tour-image">
+                        {% if tour.image %}
+                        <img src="{{ tour.image.url }}" alt="{{ tour.tour_name }}">
+                        {% else %}
+                        <img src="{% static 'images/default-tour.jpg' %}" alt="Default tour image">
+                        {% endif %}
+                        <div class="tour-status">Pending</div>
+                    </div>
+                    <div class="tour-content">
+                        <h3 class="tour-title">{{ tour.tour_name }}</h3>
+                        <div class="tour-date">
+                            <i class="far fa-calendar-alt"></i>
+                            <span>{{ tour.start_date }}</span>
+                        </div>
+                        <div class="tour-client">
+                            <i class="far fa-user"></i>
+                            <span>{{ tour.client_name }}</span>
+                        </div>
+                        <div class="tour-actions">
+                            <button class="approve-btn">Approve</button>
+                            <button class="reject-btn">Reject</button>
+                            <button class="view-btn">View Details</button>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <div class="empty-state">
+                <i class="fas fa-clipboard-check"></i>
+                <h3>No pending tours</h3>
+                <p>There are currently no tours awaiting approval.</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Filter buttons functionality
+        const filterButtons = document.querySelectorAll('.filter-btn');
+        
+        if (filterButtons.length > 0) {
+            filterButtons.forEach(button => {
+                button.addEventListener('click', function() {
+                    // Remove active class from all buttons
+                    filterButtons.forEach(btn => btn.classList.remove('active'));
+                    
+                    // Add active class to clicked button
+                    this.classList.add('active');
+                    
+                    // Filter logic would go here
+                    const filter = this.textContent.trim();
+                    console.log('Filtering by:', filter);
+                    
+                    // You could implement filtering of the tour cards here
+                });
+            });
+        }
+    });
+</script>
+</body>
+</html> 

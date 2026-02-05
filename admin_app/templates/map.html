@@ -1,0 +1,2170 @@
+<!DOCTYPE html>
+{% load static %}
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Bayawan City Map - Admin</title>
+  
+  <!-- Leaflet CSS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+  
+  <style>
+    body, html {
+      margin: 0;
+      padding: 0;
+      height: 100%;
+      font-family: 'Poppins', sans-serif;
+    }
+    #map {
+      width: 100%;
+      height: calc(100vh - 60px);
+      margin-top: 60px;
+    }
+    .navbar {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      background-color: #104CBA;
+      color: white;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 0 20px;
+      height: 60px;
+      z-index: 1001;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+    }
+    .navbar-title {
+      font-weight: bold;
+      font-size: 18px;
+    }
+    .navbar-links {
+      display: flex;
+      gap: 15px;
+    }
+    .navbar-links a {
+      color: white;
+      text-decoration: none;
+      padding: 5px 10px;
+      border-radius: 4px;
+      transition: background-color 0.2s;
+    }
+    .navbar-links a:hover {
+      background-color: rgba(255,255,255,0.2);
+    }
+    .back-button {
+      position: absolute;
+      left: 20px;
+      background-color: rgba(16, 76, 186, 0.9);
+      color: white;
+      padding: 10px 15px;
+      border-radius: 5px;
+      font-weight: bold;
+      text-decoration: none;
+      box-shadow: 0 0 10px rgba(0, 0, 0, 0.2);
+      transition: all 0.3s ease;
+    }
+    .back-button:hover {
+      background-color: rgba(16, 76, 186, 1);
+      transform: translateY(-2px);
+    }
+    .custom-marker-controls {
+      position: absolute;
+      bottom: 100px;
+      right: 20px;
+      z-index: 1000;
+      background: white;
+      padding: 15px;
+      border-radius: 5px;
+      box-shadow: 0 0 10px rgba(0, 0, 0, 0.2);
+    }
+    .control-button {
+      display: block;
+      width: 100%;
+      padding: 8px;
+      margin-bottom: 10px;
+      background-color: #1A67D2;
+      color: white;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+      font-weight: bold;
+    }
+    .control-button:hover {
+      background-color: #1558b3;
+    }
+    .custom-input {
+      width: 100%;
+      padding: 8px;
+      margin-bottom: 10px;
+      border: 1px solid #ccc;
+      border-radius: 5px;
+    }
+    .search-box {
+      position: absolute;
+      top: 70px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 1000;
+      width: 300px;
+    }
+    .search-box input {
+      width: 100%;
+      padding: 10px;
+      border: 1px solid #ccc;
+      border-radius: 5px;
+      box-shadow: 0 0 10px rgba(0, 0, 0, 0.2);
+    }
+    .edit-form button {
+      padding: 8px;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+      font-weight: bold;
+    }
+    #save-edit {
+      background-color: #1A67D2;
+      color: white;
+    }
+    #cancel-edit {
+      background-color: #f5f5f5;
+      color: #333;
+      border: 1px solid #ccc;
+    }
+    .legend {
+      position: absolute;
+      bottom: 20px;
+      left: 20px;
+      z-index: 1000;
+      background-color: rgba(255, 255, 255, 0.8);
+      padding: 10px;
+      border-radius: 5px;
+      box-shadow: 0 0 10px rgba(0, 0, 0, 0.2);
+      font-size: 0.85rem;
+    }
+    .legend h4 {
+      margin-top: 0;
+      margin-bottom: 5px;
+    }
+    .legend-item {
+      display: flex;
+      align-items: center;
+      margin-bottom: 3px;
+    }
+    .legend-color {
+      width: 15px;
+      height: 15px;
+      margin-right: 5px;
+      border-radius: 50%;
+    }
+    .legend-label {
+      font-size: 0.8rem;
+    }
+    /* GPS Controls */
+    .gps-controls {
+      position: absolute;
+      top: 120px;
+      right: 20px;
+      z-index: 1002;
+      background: white;
+      padding: 10px;
+      border-radius: 5px;
+      box-shadow: 0 0 10px rgba(0,0,0,0.2);
+    }
+    
+    .user-location {
+      animation: pulse 1.5s infinite;
+      z-index: 1000 !important;
+    }
+    
+    @keyframes pulse {
+      0% { transform: scale(1); opacity: 1; }
+      50% { transform: scale(1.3); opacity: 0.7; }
+      100% { transform: scale(1); opacity: 1; }
+    }
+    
+    .route-info {
+      position: absolute;
+      top: 70px;
+      left: 20px;
+      z-index: 1000;
+      background: white;
+      padding: 15px;
+      border-radius: 5px;
+      box-shadow: 0 0 10px rgba(0,0,0,0.2);
+      max-width: 300px;
+      display: none;
+    }
+    
+    /* Add these to your existing CSS styles */
+    .location-tooltip {
+      background-color: #000000;
+      border: 2px solid #FFFF00;
+      color: #FFFF00;
+      font-weight: bold;
+      padding: 5px 10px;
+      border-radius: 4px;
+      box-shadow: 0 0 10px rgba(255, 255, 0, 0.7);
+      z-index: 1000 !important;
+      font-size: 12px;
+    }
+    
+    .location-tooltip:before {
+      border-top-color: rgba(0, 0, 0, 0.8);
+    }
+    
+    /* Enhance the user location marker */
+    .user-location div {
+      box-shadow: 0 0 0 5px rgba(255, 255, 0, 0.6), 0 0 20px rgba(255, 255, 0, 0.9) !important;
+    }
+    
+    .calibration-mode {
+      background-color: rgba(255, 0, 0, 0.1);
+      position: fixed;
+      top: 60px;
+      left: 0;
+      right: 0;
+      padding: 15px;
+      z-index: 1000;
+      text-align: center;
+      font-weight: bold;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+    }
+    
+    .calibration-point {
+      cursor: pointer;
+      transition: transform 0.2s;
+    }
+    
+    .calibration-point:hover {
+      transform: scale(1.2);
+    }
+  </style>
+</head>
+<body>
+  <!-- Navigation Bar -->
+  <div class="navbar">
+    <div class="navbar-title">Bayawan City - Interactive Tourist Map (Admin View)</div>
+    <div class="navbar-links">
+      <a href="{% url 'admin_app:admin_dashboard' %}">Dashboard</a>
+      <a href="#">Map</a>
+    </div>
+  </div>
+  
+  <!-- Map Container -->
+  <div id="map"></div>
+  
+  <!-- Search Box -->
+  <div class="search-box">
+    <input type="text" id="search-input" placeholder="Search for locations...">
+  </div>
+  
+  <!-- Legend -->
+  <div class="legend">
+    <h4>Map Legend</h4>
+    <div class="legend-item">
+      <div class="legend-color" style="background-color: #e25562;"></div>
+      <div class="legend-label">Food & Restaurants</div>
+    </div>
+    <div class="legend-item">
+      <div class="legend-color" style="background-color: #ffd700;"></div>
+      <div class="legend-label">Hotels & Accommodations</div>
+    </div>
+    <div class="legend-item">
+      <div class="legend-color" style="background-color: #2A81CB;"></div>
+      <div class="legend-label">Public Services</div>
+    </div>
+    <div class="legend-item">
+      <div class="legend-color" style="background-color: #2AAD27;"></div>
+      <div class="legend-label">Shopping</div>
+    </div>
+    <div class="legend-item">
+      <div class="legend-color" style="background-color: #f49630;"></div>
+      <div class="legend-label">Landmarks</div>
+    </div>
+    <div class="legend-item">
+      <div class="legend-color" style="background-color: #2A81CB;"></div>
+      <div class="legend-label">Custom Places</div>
+    </div>
+  </div>
+  
+  <!-- Custom Marker Controls -->
+  <div class="custom-marker-controls">
+    <h4>Add Custom Marker</h4>
+    <input type="text" class="custom-input" id="marker-name" placeholder="Enter location name">
+    <select class="custom-input" id="marker-category">
+      <option value="restaurant">Food & Restaurant</option>
+      <option value="hotel">Hotel & Accommodation</option>
+      <option value="public">Public Service</option>
+      <option value="shopping">Shopping</option>
+      <option value="landmark">Landmark</option>
+      <option value="custom">Custom Place</option>
+    </select>
+    <textarea class="custom-input" id="marker-details" placeholder="Additional details (optional)"></textarea>
+    
+    <!-- Image upload field -->
+    <div class="custom-input">
+      <label for="marker-image">Add Image (Optional):</label>
+      <input type="file" id="marker-image" accept="image/*" class="file-input">
+      <div id="image-preview" style="margin-top: 5px; max-width: 100%; display: none;">
+        <img id="preview-img" style="max-width: 100%; max-height: 150px;">
+      </div>
+    </div>
+    
+    <button class="control-button" id="add-marker">Place Marker</button>
+  </div>
+  
+  <!-- GPS Controls -->
+  <div class="gps-controls">
+    <button class="control-button" id="locate-me">
+      <i class="fas fa-location-arrow"></i> Find My Location
+    </button>
+    <button class="control-button" id="start-navigation" style="display: none;">
+      <i class="fas fa-directions"></i> Navigate
+    </button>
+    <button class="control-button" id="stop-navigation" style="display: none;">
+      <i class="fas fa-times"></i> Stop Navigation
+    </button>
+    <div id="gps-status" style="margin-top: 10px; font-size: 0.9em;"></div>
+  </div>
+  
+  <div class="route-info" id="route-info">
+    <h4>Route Information</h4>
+    <div id="route-details">
+      <p>Distance: <span id="route-distance">0</span> meters</p>
+      <p>Estimated time: <span id="route-time">0</span> minutes</p>
+    </div>
+    <button class="control-button" id="close-route">Close</button>
+  </div>
+  
+  <!-- Leaflet JS -->
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script>
+    // Include the CSRF token directly in the template
+    const csrftoken = "{{ csrf_token }}";
+    console.log("CSRF Token from template:", csrftoken ? "✓ Success" : "✗ Failed");
+    
+    // Initialize map
+    var map = L.map('map', {
+      crs: L.CRS.Simple,
+      minZoom: -1,
+      maxZoom: 2
+    });
+    
+    var bounds = [[0, 0], [1500, 1200]];
+    L.imageOverlay("{% static 'images/bayawan_map.png' %}", bounds).addTo(map);
+    map.fitBounds(bounds);
+    
+    // Custom icons for different categories
+    var icons = {
+      restaurant: L.icon({
+        iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-red.png',
+        shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
+        iconSize: [25, 41],
+        iconAnchor: [12, 41],
+        popupAnchor: [1, -34],
+        shadowSize: [41, 41]
+      }),
+      hotel: L.icon({
+        iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-gold.png',
+        shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
+        iconSize: [25, 41],
+        iconAnchor: [12, 41],
+        popupAnchor: [1, -34],
+        shadowSize: [41, 41]
+      }),
+      public: L.icon({
+        iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-blue.png',
+        shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
+        iconSize: [25, 41],
+        iconAnchor: [12, 41],
+        popupAnchor: [1, -34],
+        shadowSize: [41, 41]
+      }),
+      shopping: L.icon({
+        iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-green.png',
+        shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
+        iconSize: [25, 41],
+        iconAnchor: [12, 41],
+        popupAnchor: [1, -34],
+        shadowSize: [41, 41]
+      }),
+      landmark: L.icon({
+        iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-orange.png',
+        shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
+        iconSize: [25, 41],
+        iconAnchor: [12, 41],
+        popupAnchor: [1, -34],
+        shadowSize: [41, 41]
+      }),
+      custom: L.icon({
+        iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-blue.png',
+        shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
+        iconSize: [25, 41],
+        iconAnchor: [12, 41],
+        popupAnchor: [1, -34],
+        shadowSize: [41, 41]
+      })
+    };
+    
+    // Add CSS for colored markers
+    var style = document.createElement('style');
+    style.innerHTML = `
+      .restaurant-marker {
+        filter: hue-rotate(0deg) saturate(1.5) brightness(1.2) !important;  /* Red */
+      }
+      .hotel-marker {
+        filter: hue-rotate(45deg) saturate(1.5) brightness(1.2) !important;  /* Gold */
+      }
+      .public-marker {
+        filter: hue-rotate(210deg) saturate(1.5) brightness(1.2) !important;  /* Blue */
+      }
+      .shopping-marker {
+        filter: hue-rotate(90deg) saturate(1.5) brightness(1.2) !important;  /* Green */
+      }
+      .landmark-marker {
+        filter: hue-rotate(30deg) saturate(1.5) brightness(1.2) !important;  /* Orange */
+      }
+      .custom-marker {
+        filter: hue-rotate(210deg) saturate(1.5) brightness(1.2) !important;  /* Blue */
+      }
+    `;
+    document.head.appendChild(style);
+    
+    // Track markers by ID for editing
+    var markersById = {};
+    var markerLayers = {
+      restaurant: L.layerGroup(),
+      hotel: L.layerGroup(),
+      public: L.layerGroup(),
+      shopping: L.layerGroup(),
+      landmark: L.layerGroup(),
+      custom: L.layerGroup()
+    };
+    
+    // Add all layer groups to the map
+    Object.values(markerLayers).forEach(layer => layer.addTo(map));
+    
+    // Function to add a marker to the map
+    function addMarkerToMap(loc, isDraggable = false, id = null) {
+      var marker = L.marker([loc.lat, loc.lng], {
+        icon: icons[loc.category] || icons.custom,
+        draggable: isDraggable
+      });
+      
+      // Store the location's name and GPS coordinates in the marker's options for later use
+      marker.options.locationName = loc.name;
+      
+      // Find corresponding GPS coordinates if this is a known location
+      let gpsCoords = null;
+      for (const point of referencePoints) {
+        if (point.name === loc.name || 
+            (loc.name.includes(point.name) || point.name.includes(loc.name))) {
+          gpsCoords = point.gps;
+          break;
+        }
+      }
+      
+      // If we couldn't find it in reference points, calculate it
+      if (!gpsCoords) {
+        gpsCoords = mapToGpsCoordinates(loc.lat, loc.lng);
+      }
+      
+      // Store GPS coordinates in marker options
+      marker.options.gpsCoords = gpsCoords;
+      
+      // Create popup content
+      var popupContent = `<div style="max-width: 300px;">
+        <h3 style="margin-top: 0; margin-bottom: 5px;">${loc.name}</h3>
+        <div style="color: #666; margin-bottom: 10px;">${getCategoryName(loc.category)}</div>`;
+      
+      // Add details if available
+      if (loc.details) {
+        popupContent += `<div style="margin-bottom: 15px;">${loc.details}</div>`;
+      }
+      
+      // Add Google Maps navigation button
+      popupContent += `
+        <button class="google-maps-nav control-button" style="background-color: #1A73E8; margin-bottom: 15px; width: 100%; display: flex; align-items: center; justify-content: center; gap: 8px;">
+          <span style="font-size: 16px;">&#128205;</span> Navigate with Google Maps
+        </button>
+      `;
+      
+      // Add images container if it has an ID (saved in database)
+      if (id) {
+        popupContent += `
+          <div class="bookmark-images" style="margin-top: 10px; margin-bottom: 15px;">
+            <h4 style="margin-top: 0; margin-bottom: 10px;">Images</h4>
+            <div class="images-container" data-bookmark-id="${id}" style="max-height: 200px; overflow-y: auto;"></div>
+          </div>
+        `;
+      }
+      
+      // Add edit/delete buttons if the marker has an ID (saved in database)
+      if (id) {
+        popupContent += `
+          <div style="display: flex; gap: 10px; margin-top: 10px;">
+            <button class="edit-bookmark" data-id="${id}" style="flex: 1; padding: 8px; background-color: #4CAF50; color: white; border: none; border-radius: 4px; cursor: pointer;">Edit</button>
+            <button class="delete-bookmark" data-id="${id}" style="flex: 1; padding: 8px; background-color: #f44336; color: white; border: none; border-radius: 4px; cursor: pointer;">Delete</button>
+          </div>
+        </div>`;
+      }
+      
+      marker.bindPopup(popupContent, { minWidth: 250 });
+      
+      // Add to appropriate layer group and set up popup events
+      if (markerLayers[loc.category]) {
+        marker.addTo(markerLayers[loc.category]);
+        
+        // Store reference if it has an ID
+        if (id) {
+          markersById[id] = marker;
+          
+          // Load images when popup opens
+          marker.on('popupopen', function() {
+            const container = document.querySelector(`.images-container[data-bookmark-id="${id}"]`);
+            if (container) {
+              loadBookmarkImages(id, container);
+            }
+            
+            // Add event listeners for edit and delete buttons
+            const editBtn = document.querySelector(`.edit-bookmark[data-id="${id}"]`);
+            const deleteBtn = document.querySelector(`.delete-bookmark[data-id="${id}"]`);
+            
+            if (editBtn) {
+              editBtn.addEventListener('click', function() {
+                editBookmark(id, marker.getPopup());
+              });
+            }
+            
+            if (deleteBtn) {
+              deleteBtn.addEventListener('click', function() {
+                deleteBookmark(id);
+              });
+            }
+            
+            // Add event listener for Google Maps navigation
+            const navBtn = document.querySelector('.google-maps-nav');
+            if (navBtn) {
+              navBtn.addEventListener('click', function() {
+                navigateWithGoogleMaps(marker.options.locationName, marker.options.gpsCoords);
+              });
+            }
+          });
+          
+          // Update position when dragged
+          if (isDraggable) {
+            marker.on('dragend', function(e) {
+              updateBookmarkPosition(id, e.target.getLatLng());
+            });
+          }
+        } else {
+          // For markers without an ID, still add Google Maps navigation functionality
+          marker.on('popupopen', function() {
+            const navBtn = document.querySelector('.google-maps-nav');
+            if (navBtn) {
+              navBtn.addEventListener('click', function() {
+                navigateWithGoogleMaps(marker.options.locationName, marker.options.gpsCoords);
+              });
+            }
+          });
+        }
+      }
+      
+      return marker;
+    }
+    
+    // Helper function to get human-readable category name
+    function getCategoryName(category) {
+      switch(category) {
+        case 'restaurant': return 'Food & Restaurant';
+        case 'hotel': return 'Hotel & Accommodation';
+        case 'public': return 'Public Service';
+        case 'shopping': return 'Shopping';
+        case 'landmark': return 'Landmark';
+        case 'custom': return 'Custom Place';
+        default: return category;
+      }
+    }
+    
+    // Add image preview functionality for the main form
+    document.getElementById('marker-image').addEventListener('change', function(e) {
+      var preview = document.getElementById('preview-img');
+      var previewContainer = document.getElementById('image-preview');
+      
+      if (e.target.files && e.target.files[0]) {
+        var reader = new FileReader();
+        reader.onload = function(e) {
+          preview.src = e.target.result;
+          previewContainer.style.display = 'block';
+        }
+        reader.readAsDataURL(e.target.files[0]);
+      } else {
+        previewContainer.style.display = 'none';
+      }
+    });
+    
+    // Add custom marker functionality with image
+    document.getElementById('add-marker').addEventListener('click', function() {
+      var name = document.getElementById('marker-name').value;
+      var category = document.getElementById('marker-category').value;
+      var details = document.getElementById('marker-details').value;
+      var imageInput = document.getElementById('marker-image');
+      
+      if (!name) {
+        alert("Please enter a name for your marker");
+        return;
+      }
+      
+      // Enable placing mode with a click
+      map.once('click', function(e) {
+        // Prepare bookmark data
+        var bookmarkData = {
+          name: name,
+          category: category,
+          lat: e.latlng.lat,
+          lng: e.latlng.lng,
+          details: details
+        };
+        
+        // Create the bookmark in the database
+        createBookmark(bookmarkData, imageInput.files[0]);
+        
+        // Clear form fields
+        document.getElementById('marker-name').value = '';
+        document.getElementById('marker-details').value = '';
+        document.getElementById('image-preview').style.display = 'none';
+        imageInput.value = '';
+      });
+    });
+    
+    // API functions for bookmark management
+    function loadBookmarks() {
+      console.log("Starting to load bookmarks...");
+      fetch('{% url "bookmark_list" %}', {
+        headers: {
+          'X-Requested-With': 'XMLHttpRequest',
+          'Accept': 'application/json'
+        }
+      })
+      .then(response => {
+        console.log("Bookmark API response received:", response.status);
+        return response.json();
+      })
+      .then(data => {
+        console.log("Bookmark data:", data);
+        if (data.bookmarks && data.bookmarks.length > 0) {
+          console.log("Found", data.bookmarks.length, "bookmarks to display");
+          data.bookmarks.forEach(bookmark => {
+            addMarkerToMap({
+              name: bookmark.name,
+              category: bookmark.category,
+              lat: bookmark.lat,
+              lng: bookmark.lng,
+              details: bookmark.details
+            }, true, bookmark.id);
+          });
+        } else {
+          console.log("No bookmarks found in the response");
+        }
+      })
+      .catch(error => {
+        console.error("Error loading bookmarks:", error);
+        alert("Error loading bookmarks. Check the console for details.");
+      });
+    }
+    
+    function createBookmark(bookmarkData, imageFile) {
+      console.log("Creating bookmark:", bookmarkData);
+      fetch('{% url "bookmark_create" %}', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRFToken': csrftoken,
+          'X-Requested-With': 'XMLHttpRequest'
+        },
+        body: JSON.stringify(bookmarkData)
+      })
+      .then(response => {
+        console.log("Create bookmark response:", response.status);
+        return response.json();
+      })
+      .then(data => {
+        console.log("Create bookmark result:", data);
+        if (data.success) {
+          // Add marker to map with the new ID
+          const newMarker = addMarkerToMap({
+            name: bookmarkData.name,
+            category: bookmarkData.category,
+            lat: bookmarkData.lat,
+            lng: bookmarkData.lng,
+            details: bookmarkData.details
+          }, true, data.id);
+          
+          // If there's an image file, upload it
+          if (imageFile) {
+            uploadBookmarkImage(data.id, imageFile);
+          }
+        } else {
+          alert("Error creating bookmark: " + data.message);
+        }
+      })
+      .catch(error => {
+        console.error("Error creating bookmark:", error);
+        alert("Error creating bookmark. Check the console for details.");
+      });
+    }
+    
+    function updateBookmarkPosition(id, latlng) {
+      fetch(`{% url "bookmark_update" bookmark_id=0 %}`.replace('0', id), {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRFToken': csrftoken,
+          'X-Requested-With': 'XMLHttpRequest'
+        },
+        body: JSON.stringify({
+          lat: latlng.lat,
+          lng: latlng.lng
+        })
+      })
+      .then(response => response.json())
+      .then(data => {
+        if (!data.success) {
+          console.error("Error updating bookmark position:", data.message);
+        }
+      })
+      .catch(error => console.error("Error updating bookmark:", error));
+    }
+    
+    function deleteBookmark(id) {
+      if (!confirm("Are you sure you want to delete this bookmark and all its images?")) {
+        return;
+      }
+      
+      // Show loading indicator
+      map.closePopup();
+      const loadingPopup = L.popup()
+        .setLatLng(markersById[id].getLatLng())
+        .setContent('<div style="text-align: center;">Deleting bookmark...</div>')
+        .openOn(map);
+      
+      fetch(`{% url "bookmark_delete" bookmark_id=0 %}`.replace('0', id), {
+        method: 'POST',
+        headers: {
+          'X-CSRFToken': csrftoken,
+          'X-Requested-With': 'XMLHttpRequest'
+        }
+      })
+      .then(response => response.json())
+      .then(data => {
+        map.closePopup(); // Close the loading popup
+        
+        if (data.success) {
+          // Remove marker from map
+          if (markersById[id]) {
+            const marker = markersById[id];
+            Object.values(markerLayers).forEach(layer => {
+              layer.removeLayer(marker);
+            });
+            delete markersById[id];
+          }
+        } else {
+          console.error("Error deleting bookmark:", data.message);
+          alert("Error deleting bookmark: " + data.message);
+        }
+      })
+      .catch(error => {
+        map.closePopup(); // Close the loading popup
+        console.error("Error deleting bookmark:", error);
+        alert("Error deleting bookmark. Please try again.");
+      });
+    }
+    
+    function editBookmark(id, popup) {
+      // Get current marker
+      const marker = markersById[id];
+      if (!marker) return;
+      
+      // Get current position
+      const position = marker.getLatLng();
+      
+      // Prepare to fetch bookmark details directly from server for accuracy
+      fetch(`{% url "bookmark_list" %}?id=${id}`, {
+        headers: {
+          'X-Requested-With': 'XMLHttpRequest',
+          'Accept': 'application/json'
+        }
+      })
+      .then(response => response.json())
+      .then(data => {
+        // Find the bookmark in the response
+        const bookmark = data.bookmarks.find(b => b.id == id);
+        
+        if (!bookmark) {
+          console.error("Bookmark not found in API response");
+          return;
+        }
+        
+        // Create compact edit form in popup
+        const formHTML = `
+          <div class="edit-form" style="width: 100%; max-width: 300px;">
+            <input type="text" id="edit-name" value="${bookmark.name}" 
+                   placeholder="Location name" style="width: 100%; padding: 8px; margin-bottom: 10px; 
+                   border: 1px solid #ccc; border-radius: 4px;">
+            
+            <select id="edit-category" style="width: 100%; padding: 8px; margin-bottom: 10px; 
+                    border: 1px solid #ccc; border-radius: 4px;">
+              <option value="restaurant" ${bookmark.category === 'restaurant' ? 'selected' : ''}>Food & Restaurant</option>
+              <option value="hotel" ${bookmark.category === 'hotel' ? 'selected' : ''}>Hotel & Accommodation</option>
+              <option value="public" ${bookmark.category === 'public' ? 'selected' : ''}>Public Service</option>
+              <option value="shopping" ${bookmark.category === 'shopping' ? 'selected' : ''}>Shopping</option>
+              <option value="landmark" ${bookmark.category === 'landmark' ? 'selected' : ''}>Landmark</option>
+              <option value="custom" ${bookmark.category === 'custom' ? 'selected' : ''}>Custom Place</option>
+            </select>
+            
+            <textarea id="edit-details" placeholder="Additional details" 
+                      style="width: 100%; padding: 8px; margin-bottom: 10px; 
+                      border: 1px solid #ccc; border-radius: 4px; min-height: 60px;">${bookmark.details || ''}</textarea>
+            
+            <!-- Image section -->
+            <div style="border: 1px solid #eee; padding: 10px; border-radius: 4px; margin-bottom: 15px;">
+              <div id="edit-current-images" style="max-height: 180px; overflow-y: auto; margin-bottom: 10px;"></div>
+              
+              <div style="margin-top: 10px;">
+                <label for="edit-new-image">Add New Image:</label>
+                <input type="file" id="edit-new-image" accept="image/*" style="margin-top: 5px; width: 100%;">
+                <div id="edit-image-preview" style="margin-top: 8px; display: none; text-align: center;">
+                  <img id="edit-preview-img" style="max-width: 100%; max-height: 120px; border-radius: 4px; border: 1px solid #ddd;">
+                </div>
+              </div>
+            </div>
+            
+            <div style="display: flex; gap: 8px;">
+              <button id="save-edit" style="flex: 1; padding: 10px; background-color: #1A67D2; color: white; 
+                      border: none; border-radius: 4px; cursor: pointer; font-weight: bold;">Save Changes</button>
+              <button id="cancel-edit" style="flex: 1; padding: 10px; background-color: #f5f5f5; color: #333; 
+                      border: 1px solid #ccc; border-radius: 4px; cursor: pointer;">Cancel</button>
+            </div>
+          </div>
+        `;
+        
+        // Set popup content to form
+        popup.setContent(formHTML);
+        
+        // After popup content is set, load existing images and add event handlers
+        setTimeout(() => {
+          // Load existing images
+          loadExistingImages();
+          
+          // Add image preview functionality
+          document.getElementById('edit-new-image').addEventListener('change', function(e) {
+            var preview = document.getElementById('edit-preview-img');
+            var previewContainer = document.getElementById('edit-image-preview');
+            
+            if (e.target.files && e.target.files[0]) {
+              var reader = new FileReader();
+              reader.onload = function(e) {
+                preview.src = e.target.result;
+                previewContainer.style.display = 'block';
+              }
+              reader.readAsDataURL(e.target.files[0]);
+            } else {
+              previewContainer.style.display = 'none';
+            }
+          });
+          
+          // Set up cancel button
+          document.getElementById('cancel-edit').addEventListener('click', function() {
+            map.closePopup();
+          });
+          
+          // Set up save button
+          document.getElementById('save-edit').addEventListener('click', function() {
+            // Get updated values
+            const newName = document.getElementById('edit-name').value;
+            const newCategory = document.getElementById('edit-category').value;
+            const newDetails = document.getElementById('edit-details').value;
+            const newImageInput = document.getElementById('edit-new-image');
+            
+            // Validate input
+            if (!newName) {
+              alert("Please enter a name for your bookmark");
+              return;
+            }
+            
+            // Show loading state
+            this.textContent = "Saving...";
+            this.disabled = true;
+            
+            // Save data
+            saveBookmarkData();
+            
+            function saveBookmarkData() {
+              fetch(`{% url "bookmark_update" bookmark_id=0 %}`.replace('0', id), {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'X-CSRFToken': csrftoken,
+                  'X-Requested-With': 'XMLHttpRequest'
+                },
+                body: JSON.stringify({
+                  name: newName,
+                  category: newCategory,
+                  details: newDetails,
+                  lat: position.lat,
+                  lng: position.lng
+                })
+              })
+              .then(response => response.json())
+              .then(data => {
+                if (data.success) {
+                  // Upload image if provided
+                  if (newImageInput.files && newImageInput.files[0]) {
+                    uploadBookmarkImage(id, newImageInput.files[0], finishSave);
+                  } else {
+                    finishSave();
+                  }
+                } else {
+                  alert("Error updating bookmark: " + data.message);
+                }
+              })
+              .catch(error => {
+                console.error("Error updating bookmark:", error);
+                alert("Error updating bookmark. Please try again.");
+              });
+            }
+            
+            function finishSave() {
+              // Remove old marker
+              Object.values(markerLayers).forEach(layer => {
+                layer.removeLayer(marker);
+              });
+              
+              // Add new marker with updated info
+              const newMarker = addMarkerToMap({
+                name: newName,
+                category: newCategory,
+                lat: position.lat,
+                lng: position.lng,
+                details: newDetails
+              }, true, id);
+              
+              // Update reference
+              markersById[id] = newMarker;
+              
+              // Close popup
+              map.closePopup();
+            }
+          });
+        }, 100);
+        
+        // Function to load existing images for this bookmark
+        function loadExistingImages() {
+          const container = document.getElementById('edit-current-images');
+          if (!container) return;
+          
+          if (bookmark.images && bookmark.images.length > 0) {
+            container.innerHTML = '';
+            
+            bookmark.images.forEach(image => {
+              const imageDiv = document.createElement('div');
+              imageDiv.className = 'edit-bookmark-image';
+              imageDiv.style.marginBottom = '10px';
+              imageDiv.style.padding = '8px';
+              imageDiv.style.borderBottom = '1px solid #eee';
+              
+              imageDiv.innerHTML = `
+                <div style="display: flex; align-items: center; justify-content: space-between;">
+                  <img src="${image.url}" alt="${image.title}" style="max-width: 100px; max-height: 70px; object-fit: cover; border-radius: 4px;">
+                  <button class="delete-image-btn" data-image-id="${image.id}" style="background-color: #f44336; color: white; border: none; border-radius: 4px; padding: 5px 10px; cursor: pointer;">Delete</button>
+                </div>
+                <div style="margin-top: 5px; font-size: 0.9em; color: #666;">${image.title || 'Uploaded image'}</div>
+              `;
+              
+              container.appendChild(imageDiv);
+              
+              // Add delete handler
+              imageDiv.querySelector('.delete-image-btn').addEventListener('click', function() {
+                const imageId = this.getAttribute('data-image-id');
+                if (confirm("Are you sure you want to delete this image?")) {
+                  deleteBookmarkImage(imageId, () => {
+                    imageDiv.remove();
+                  });
+                }
+              });
+            });
+          } else {
+            container.innerHTML = '<p style="text-align: center; color: #666;">No images available.</p>';
+          }
+        }
+      })
+      .catch(error => {
+        console.error("Error fetching bookmark details:", error);
+        alert("Error loading bookmark details. Please try again.");
+      });
+    }
+    
+    // Search functionality
+    document.getElementById('search-input').addEventListener('input', function(e) {
+      var searchTerm = e.target.value.toLowerCase();
+      if (searchTerm.length < 2) return;
+      
+      // Search in our markers
+      var results = [];
+      
+      Object.entries(markersById).forEach(([id, marker]) => {
+        const popup = marker.getPopup();
+        const content = popup.getContent();
+        
+        // Extract name from popup content
+        const nameMatch = content.match(/<b>(.*?)<\/b>/);
+        const name = nameMatch ? nameMatch[1] : '';
+        
+        if (name.toLowerCase().includes(searchTerm)) {
+          results.push({
+            id: id,
+            marker: marker,
+            name: name
+          });
+        }
+      });
+      
+      if (results.length > 0) {
+        // Center map on first result
+        const result = results[0];
+        map.setView(result.marker.getLatLng(), 1);
+        result.marker.openPopup();
+      }
+    });
+    
+    // Load saved bookmarks from the database
+    loadBookmarks();
+    
+    // Create test bookmark if no bookmarks exist after 3 seconds
+    setTimeout(() => {
+      // Check if any bookmarks were loaded
+      const hasBookmarks = Object.keys(markersById).length > 0;
+      console.log("Bookmark check:", hasBookmarks ? `${Object.keys(markersById).length} bookmarks found` : "No bookmarks found");
+      
+      // If no bookmarks, create a test one
+      if (!hasBookmarks) {
+        console.log("Creating a test bookmark...");
+        const testBookmark = {
+          name: "Bayawan City Hall",
+          category: "landmark",
+          lat: 750,
+          lng: 640,
+          details: "The Bayawan City Hall is the center of local government"
+        };
+        
+        // Create a test bookmark automatically
+        createBookmark(testBookmark);
+      }
+    }, 3000);
+    
+    // Function to upload an image for a bookmark
+    function uploadBookmarkImage(bookmarkId, file, callback) {
+      if (!file) {
+        if (typeof callback === 'function') callback();
+        return;
+      }
+      
+      // Read the file as base64
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        const imageData = e.target.result; // base64 data
+        
+        // Send to the server
+        fetch(`{% url "bookmark_add_image" bookmark_id=0 %}`.replace('0', bookmarkId), {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': csrftoken,
+            'X-Requested-With': 'XMLHttpRequest'
+          },
+          body: JSON.stringify({
+            image: imageData,
+            title: 'Uploaded image',
+            description: 'Image uploaded from map'
+          })
+        })
+        .then(response => response.json())
+        .then(data => {
+          console.log("Image upload result:", data);
+          if (!data.success) {
+            alert("Error uploading image: " + data.message);
+          }
+          if (typeof callback === 'function') {
+            callback();
+          }
+        })
+        .catch(error => {
+          console.error("Error uploading image:", error);
+          if (typeof callback === 'function') {
+            callback();
+          }
+        });
+      };
+      reader.readAsDataURL(file);
+    }
+    
+    // Function to delete a bookmark image
+    function deleteBookmarkImage(imageId, callback) {
+      if (!confirm("Are you sure you want to delete this image?")) {
+        return;
+      }
+      
+      fetch(`{% url "bookmark_delete_image" image_id=0 %}`.replace('0', imageId), {
+        method: 'POST',
+        headers: {
+          'X-CSRFToken': csrftoken,
+          'X-Requested-With': 'XMLHttpRequest'
+        }
+      })
+      .then(response => response.json())
+      .then(data => {
+        if (data.success) {
+          if (typeof callback === 'function') {
+            callback();
+          }
+        } else {
+          alert("Error deleting image: " + data.message);
+        }
+      })
+      .catch(error => {
+        console.error("Error deleting image:", error);
+      });
+    }
+    
+    // Add this function to load and display images for a bookmark in its popup
+    function loadBookmarkImages(bookmarkId, container) {
+      fetch(`{% url "bookmark_get_images" bookmark_id=0 %}`.replace('0', bookmarkId), {
+        headers: {
+          'X-Requested-With': 'XMLHttpRequest'
+        }
+      })
+      .then(response => response.json())
+      .then(data => {
+        if (data.success && data.images.length > 0) {
+          container.innerHTML = '';
+          
+          data.images.forEach(image => {
+            const imgDiv = document.createElement('div');
+            imgDiv.className = 'bookmark-image';
+            imgDiv.style.marginBottom = '10px';
+            
+            imgDiv.innerHTML = `
+              <img src="${image.url}" alt="${image.title}" style="max-width: 100%; max-height: 150px; object-fit: cover; border-radius: 4px;">
+              <div style="margin-top: 5px; font-size: 0.9em; color: #666;">${image.title || 'Uploaded image'}</div>
+            `;
+            
+            container.appendChild(imgDiv);
+          });
+        } else {
+          container.innerHTML = '<p style="color: #666; text-align: center;">No images available</p>';
+        }
+      })
+      .catch(error => {
+        console.error("Error loading images:", error);
+        container.innerHTML = '<p style="color: red; text-align: center;">Error loading images</p>';
+      });
+    }
+    
+    // Reference points for coordinate conversion
+    const referencePoints = [
+      {
+        name: "Partosa Store",
+        gps: { lat: 9.368771, lng: 122.805572 },
+        map: { lat: 714.8, lng: 1040.0 }
+      },
+      { 
+        name: "Puregold", 
+        gps: { lat: 9.367364, lng: 122.805485 }, 
+        map: { lat: 715.9, lng: 885.7 }
+      },
+      {
+        name: "Bayawan District Hospital", 
+        gps: { lat: 9.368352, lng: 122.803838 },
+        map: { lat: 832.5, lng: 1000.5 }
+      },
+      {
+        name: "Catholic Church", 
+        gps: { lat: 9.367582, lng: 122.804770 },
+        map: { lat: 777.5, lng: 945.5 }
+      },
+      {
+        name: "Puregold Grocery Section", 
+        gps: { lat: 9.367412, lng: 122.805487 },
+        map: { lat: 715.5, lng: 889.4 }
+      },
+      {
+        name: "Bayawan City Plaza", 
+        gps: { lat: 9.366320, lng: 122.804893 },
+        map: { lat: 792.0, lng: 820.5 }
+      },
+      {
+        name: "Bayawan City Public Terminal", 
+        gps: { lat: 9.367904, lng: 122.807103 },
+        map: { lat: 531.5, lng: 976.9 }
+      },
+      {
+        name: "Bayawan City Fire Station", 
+        gps: { lat: 9.367723, lng: 122.807781 },
+        map: { lat: 430.5, lng: 1006.9 }
+      },
+      {
+        name: "Wins Garden", 
+        gps: { lat: 9.366173, lng: 122.805753 },
+        map: { lat: 673.0, lng: 845.0 }
+      },
+      {
+        name: "7-Eleven-BAYAWAN", 
+        gps: { lat: 9.365415, lng: 122.805075 },
+        map: { lat: 751.5, lng: 728.0 }
+      },
+      {
+        name: "Kitchiess Bubble Tea Shop", 
+        gps: { lat: 9.365791, lng: 122.806297 },
+        map: { lat: 625.0, lng: 825.5 }
+      },
+      {
+        name: "ACE Medical Center Bayawan", 
+        gps: { lat: 9.368781, lng: 122.813756 },
+        map: { lat: 42.9, lng: 973.9 }
+      },
+      {
+        name: "Cañamaque Royal Suites", 
+        gps: { lat: 9.364171, lng: 122.806765 },
+        map: { lat: 613.5, lng: 630.5 }
+      },
+      {
+        name: "Eskina Restaurant", 
+        gps: { lat: 9.363390, lng: 122.799181 }, 
+        map: { lat: 1240.6, lng: 666.0 }
+      },
+      {
+        name: "Hayahay Square", 
+        gps: { lat: 9.361274, lng: 122.798739 }, 
+        map: { lat: 1293.1, lng: 460.0 }
+      },
+      {
+        name: "Handurawan Cafe", 
+        gps: { lat: 9.362982, lng: 122.802543 }, 
+        map: { lat: 979.7, lng: 476.8 }
+      },
+      {
+        name: "ALBERTO Food Hub", 
+        gps: { lat: 9.363842, lng: 122.802133 }, 
+        map: { lat: 1001.9, lng: 578.5 }
+      },
+      {
+        name: "GAL'Z LECHON", 
+        gps: { lat: 9.368319, lng: 122.802057 }, 
+        map: { lat: 999.6, lng: 991.8 }
+      },
+      {
+        name: "Nang ANNIE'S Food House", 
+        gps: { lat: 9.364330, lng: 122.800488 }, 
+        map: { lat: 1044.5, lng: 736.0 }
+      },
+      {
+        name: "GOTO", 
+        gps: { lat: 9.363853, lng: 122.803538 }, 
+        map: { lat: 870.8, lng: 586.0 }
+      },
+      {
+        name: "Alberto's Pizza Bayawan", 
+        gps: { lat: 9.364475, lng: 122.802892 }, 
+        map: { lat: 892.6, lng: 685.5 }
+      },
+      {
+        name: "Tyne's Lutong Bahay", 
+        gps: { lat: 9.366681, lng: 122.803163 }, 
+        map: { lat: 880.1, lng: 804.5 }
+      },
+      {
+        name: "Shack of Wings", 
+        gps: { lat: 9.367169, lng: 122.803269 }, 
+        map: { lat: 923.4, lng: 857.5 }
+      },
+      {
+        name: "Extreme Snack Hauze", 
+        gps: { lat: 9.365458, lng: 122.803958 }, 
+        map: { lat: 842.9, lng: 773.0 }
+      },
+      {
+        name: "Morgado's Cycle Center", 
+        gps: { lat: 9.363003, lng: 122.805785 }, 
+        map: { lat: 708.2, lng: 686.5 }
+      },
+      {
+        name: "Ivon Baye-Baye", 
+        gps: { lat: 9.363708, lng: 122.805972 }, 
+        map: { lat: 676.4, lng: 659.0 }
+      },
+      {
+        name: "Primos Pizzeria", 
+        gps: { lat: 9.362958, lng: 122.803141 }, 
+        map: { lat: 896.3, lng: 464.0 }
+      },
+      {
+        name: "Jo's Chicken Inato", 
+        gps: { lat: 9.363494, lng: 122.803743 }, 
+        map: { lat: 875.9, lng: 543.5 }
+      },
+      {
+        name: "Bayawan City Public Market", 
+        gps: { lat: 9.363832, lng: 122.804670 }, 
+        map: { lat: 776.9, lng: 558.0 }
+      },
+      {
+        name: "Elisse Coffee", 
+        gps: { lat: 9.363224, lng: 122.805921 }, 
+        map: { lat: 766.3, lng: 488.5 }
+      },
+      {
+        name: "MoOnbeezZz Kitchen Expressions", 
+        gps: { lat: 9.362378, lng: 122.805037 }, 
+        map: { lat: 784.4, lng: 425.5 }
+      },
+      {
+        name: "Ocean Drive", 
+        gps: { lat: 9.360596, lng: 122.804310 }, 
+        map: { lat: 774.9, lng: 333.0 }
+      },
+      {
+        name: "TOCINO CITY", 
+        gps: { lat: 9.360459, lng: 122.804400 }, 
+        map: { lat: 733.4, lng: 306.5 }
+      },
+      {
+        name: "Balay ni Bob", 
+        gps: { lat: 9.360244, lng: 122.805588 }, 
+        map: { lat: 646.7, lng: 313.0 }
+      },
+      {
+        name: "Shawarmine", 
+        gps: { lat: 9.363183, lng: 122.806345 }, 
+        map: { lat: 663.1, lng: 501.0 }
+      },
+      {
+        name: "Twelve 82 Food House", 
+        gps: { lat: 9.363658, lng: 122.806257 }, 
+        map: { lat: 644.4, lng: 624.0 }
+      },
+      {
+        name: "38 Coffee Shop", 
+        gps: { lat: 9.363274, lng: 122.807224 }, 
+        map: { lat: 564.9, lng: 564.5 }
+      },
+      {
+        name: "BUSGANAY RESTAURANT", 
+        gps: { lat: 9.364267, lng: 122.808027 }, 
+        map: { lat: 463.6, lng: 643.1 }
+      },
+      {
+        name: "Crispy King - Bayawan", 
+        gps: { lat: 9.364153, lng: 122.808083 }, 
+        map: { lat: 445.2, lng: 678.5 }
+      },
+      {
+        name: "Andok's Bayawan 1", 
+        gps: { lat: 9.363754, lng: 122.809262 }, 
+        map: { lat: 397.3, lng: 627.3 }
+      },
+      {
+        name: "Wash and Brew Laundry + Coffee", 
+        gps: { lat: 9.363427, lng: 122.810224 }, 
+        map: { lat: 362.6, lng: 622.0 }
+      },
+      {
+        name: "Pepe's Place Grill House", 
+        gps: { lat: 9.359672, lng: 122.808337 }, 
+        map: { lat: 459.0, lng: 262.5 }
+      },
+      {
+        name: "BCC FOOD HOUSE", 
+        gps: { lat: 9.361372, lng: 122.808193 }, 
+        map: { lat: 521.4, lng: 399.0 }
+      },
+      {
+        name: "Adri's Bistro", 
+        gps: { lat: 9.362825, lng: 122.810080 }, 
+        map: { lat: 364.5, lng: 521.5 }
+      },
+      {
+        name: "Baker's Choice Pizza", 
+        gps: { lat: 9.363140, lng: 122.810982 }, 
+        map: { lat: 296.0, lng: 606.0 }
+      },
+      {
+        name: "KAPIHAN NI BEBANG", 
+        gps: { lat: 9.363108, lng: 122.811077 }, 
+        map: { lat: 255.9, lng: 534.0 }
+      },
+      {
+        name: "DON MACCHIATOS", 
+        gps: { lat: 9.361687, lng: 122.814158 }, 
+        map: { lat: 9.3, lng: 431.0 }
+      }
+    ];
+    
+    // Variables for GPS and navigation
+    let userMarker = null;
+    let userCircle = null;
+    let watchId = null;
+    let routeLine = null;
+    let destinationMarker = null;
+    let navigationActive = false;
+    
+    // Create a special icon for user location
+    const userIcon = L.divIcon({
+      className: 'user-location',
+      html: '<div style="background-color: #FFFF00; width: 18px; height: 18px; border-radius: 50%; border: 4px solid black; box-shadow: 0 0 15px rgba(255, 255, 0, 0.8);"></div>',
+      iconSize: [26, 26],
+      iconAnchor: [13, 13]
+    });
+    
+    // Function to convert GPS coordinates to map coordinates
+    function gpsToMapCoordinates(gpsLat, gpsLng) {
+      // Skip if no reference points are available
+      if (!referencePoints || referencePoints.length < 3) {
+        console.warn("Not enough reference points for accurate transformation");
+        
+        // Fallback to simple linear mapping if we have at least one point
+        if (referencePoints && referencePoints.length > 0) {
+          return {
+            lat: referencePoints[0].map.lat + (gpsLat - referencePoints[0].gps.lat) * 5000,
+            lng: referencePoints[0].map.lng + (gpsLng - referencePoints[0].gps.lng) * 5000
+          };
+        }
+        
+        // Last resort fallback
+        return { lat: 750, lng: 640 };
+      }
+      
+      // Use Helmert transformation (simplified affine transformation)
+      
+      // Step 1: Calculate centroids for both coordinate systems
+      let gpsLatSum = 0, gpsLngSum = 0, mapLatSum = 0, mapLngSum = 0;
+      
+      referencePoints.forEach(point => {
+        gpsLatSum += point.gps.lat;
+        gpsLngSum += point.gps.lng;
+        mapLatSum += point.map.lat;
+        mapLngSum += point.map.lng;
+      });
+      
+      const gpsLatCentroid = gpsLatSum / referencePoints.length;
+      const gpsLngCentroid = gpsLngSum / referencePoints.length;
+      const mapLatCentroid = mapLatSum / referencePoints.length;
+      const mapLngCentroid = mapLngSum / referencePoints.length;
+      
+      // Step 2: Calculate transformation parameters
+      let numeratorA = 0, numeratorB = 0, denominator = 0;
+      
+      referencePoints.forEach(point => {
+        // Shift coordinates to be relative to centroids
+        const shiftedGpsLat = point.gps.lat - gpsLatCentroid;
+        const shiftedGpsLng = point.gps.lng - gpsLngCentroid;
+        const shiftedMapLat = point.map.lat - mapLatCentroid;
+        const shiftedMapLng = point.map.lng - mapLngCentroid;
+        
+        // Calculate terms for transformation matrix
+        numeratorA += (shiftedGpsLat * shiftedMapLat + shiftedGpsLng * shiftedMapLng);
+        numeratorB += (shiftedGpsLng * shiftedMapLat - shiftedGpsLat * shiftedMapLng);
+        denominator += (shiftedMapLat * shiftedMapLat + shiftedMapLng * shiftedMapLng);
+      });
+      
+      if (denominator === 0) {
+        console.error("Error in transformation calculation");
+        return { lat: 750, lng: 640 }; // Center of map as fallback
+      }
+      
+      // Calculate transformation parameters
+      const a = numeratorA / denominator;
+      const b = numeratorB / denominator;
+      
+      // Calculate scale and rotation factors
+      const s = Math.sqrt(a*a + b*b);  // scale
+      
+      // Step 3: Apply transformation to the input GPS coordinates
+      // Shift input coordinates relative to centroids
+      const shiftedInputLat = gpsLat - gpsLatCentroid;
+      const shiftedInputLng = gpsLng - gpsLngCentroid;
+      
+      // Apply transformation
+      const transformedLat = 
+        mapLatCentroid + 
+        a * shiftedInputLat - 
+        b * shiftedInputLng;
+      
+      const transformedLng = 
+        mapLngCentroid + 
+        b * shiftedInputLat + 
+        a * shiftedInputLng;
+      
+      // Return the transformed coordinates
+      return {
+        lat: transformedLat,
+        lng: transformedLng
+      };
+    }
+    
+    // Function to convert map coordinates back to GPS
+    function mapToGpsCoordinates(mapLat, mapLng) {
+      // Skip if no reference points are available
+      if (!referencePoints || referencePoints.length < 3) {
+        console.warn("Not enough reference points for accurate inverse transformation");
+        
+        // Fallback to simple linear mapping if we have at least one point
+        if (referencePoints && referencePoints.length > 0) {
+          return {
+            lat: referencePoints[0].gps.lat + (mapLat - referencePoints[0].map.lat) / 5000,
+            lng: referencePoints[0].gps.lng + (mapLng - referencePoints[0].map.lng) / 5000
+          };
+        }
+        
+        // Last resort fallback
+        return { lat: 9.367, lng: 122.805 }; // Approximate center of Bayawan
+      }
+      
+      // Use inverse Helmert transformation
+      
+      // Step 1: Calculate centroids for both coordinate systems
+      let gpsLatSum = 0, gpsLngSum = 0, mapLatSum = 0, mapLngSum = 0;
+      
+      referencePoints.forEach(point => {
+        gpsLatSum += point.gps.lat;
+        gpsLngSum += point.gps.lng;
+        mapLatSum += point.map.lat;
+        mapLngSum += point.map.lng;
+      });
+      
+      const gpsLatCentroid = gpsLatSum / referencePoints.length;
+      const gpsLngCentroid = gpsLngSum / referencePoints.length;
+      const mapLatCentroid = mapLatSum / referencePoints.length;
+      const mapLngCentroid = mapLngSum / referencePoints.length;
+      
+      // Step 2: Calculate transformation parameters
+      let numeratorA = 0, numeratorB = 0, denominator = 0;
+      
+      referencePoints.forEach(point => {
+        // Shift coordinates to be relative to centroids
+        const shiftedGpsLat = point.gps.lat - gpsLatCentroid;
+        const shiftedGpsLng = point.gps.lng - gpsLngCentroid;
+        const shiftedMapLat = point.map.lat - mapLatCentroid;
+        const shiftedMapLng = point.map.lng - mapLngCentroid;
+        
+        // Calculate terms for transformation matrix
+        numeratorA += (shiftedGpsLat * shiftedMapLat + shiftedGpsLng * shiftedMapLng);
+        numeratorB += (shiftedGpsLng * shiftedMapLat - shiftedGpsLat * shiftedMapLng);
+        denominator += (shiftedMapLat * shiftedMapLat + shiftedMapLng * shiftedMapLng);
+      });
+      
+      if (denominator === 0) {
+        console.error("Error in inverse transformation calculation");
+        return { lat: 9.367, lng: 122.805 }; // Approximate center of Bayawan
+      }
+      
+      // Calculate transformation parameters for inverse transformation
+      const a = numeratorA / denominator;
+      const b = numeratorB / denominator;
+      
+      // Step 3: Apply inverse transformation to the input map coordinates
+      // Shift input coordinates relative to centroids
+      const shiftedInputLat = mapLat - mapLatCentroid;
+      const shiftedInputLng = mapLng - mapLngCentroid;
+      
+      // Apply inverse transformation (derived from the forward transformation matrix)
+      const determinant = a*a + b*b;
+      if (determinant === 0) {
+        console.error("Singular transformation matrix");
+        return { lat: 9.367, lng: 122.805 }; // Approximate center of Bayawan
+      }
+      
+      const transformedLat = 
+        gpsLatCentroid + 
+        (a * shiftedInputLat + b * shiftedInputLng) / determinant;
+      
+      const transformedLng = 
+        gpsLngCentroid + 
+        (a * shiftedInputLng - b * shiftedInputLat) / determinant;
+      
+      // Return the transformed coordinates
+      return {
+        lat: transformedLat,
+        lng: transformedLng
+      };
+    }
+    
+    // Function to start location tracking
+    function startLocationTracking() {
+      const statusDiv = document.getElementById('gps-status');
+      
+      // First remove any existing markers
+      if (userMarker) {
+        map.removeLayer(userMarker);
+        userMarker = null;
+      }
+      if (userCircle) {
+        map.removeLayer(userCircle);
+        userCircle = null;
+      }
+      
+      // Create a clearer, more visible user location icon
+      const userLocationIcon = L.divIcon({
+        className: 'user-location',
+        html: '<div style="background-color: #FFFF00; width: 14px; height: 14px; border-radius: 50%; border: 3px solid black; box-shadow: 0 0 10px rgba(255, 255, 0, 0.7);"></div>',
+        iconSize: [20, 20],
+        iconAnchor: [10, 10]
+      });
+      
+      // Show status while acquiring location
+      statusDiv.textContent = "Detecting your location...";
+      
+      // Try to get geolocation automatically
+      if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(
+          function(position) {
+            // Got GPS coordinates
+            const { latitude, longitude } = position.coords;
+            console.log("GPS coordinates detected:", latitude, longitude);
+            
+            // Convert to map coordinates
+            try {
+              const mapCoords = gpsToMapCoordinates(latitude, longitude);
+              console.log("Converted to map coordinates:", mapCoords);
+              
+              // Create user marker at detected position
+              userMarker = L.marker(mapCoords, {
+                icon: userLocationIcon,
+                zIndexOffset: 1000
+              }).addTo(map);
+              
+              // Add accuracy circle
+              const accuracyRadius = Math.min(position.coords.accuracy / 5, 50); // Scale down and cap the radius
+              userCircle = L.circle(mapCoords, {
+                radius: accuracyRadius,
+                color: '#FFFF00',
+                fillColor: '#FFFF00',
+                fillOpacity: 0.2,
+                weight: 2
+              }).addTo(map);
+              
+              // Add tooltip
+              userMarker.bindTooltip("Your Location", {
+                permanent: false,
+                direction: 'top',
+                offset: [0, -8],
+                className: 'location-tooltip'
+              });
+              
+              // Center map on user's location
+              map.setView(mapCoords, 1);
+              
+              // Update status
+              statusDiv.textContent = "✓ Location detected automatically";
+              document.getElementById('locate-me').textContent = "Refresh Location";
+              document.getElementById('start-navigation').style.display = 'block';
+            } catch (err) {
+              console.error("Error converting coordinates:", err);
+              fallbackToManualPlacement("Could not convert GPS coordinates. Click to set location manually.");
+            }
+          },
+          function(error) {
+            console.log("Geolocation error:", error.code, error.message);
+            fallbackToManualPlacement("Could not detect location: " + error.message);
+          },
+          { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+        );
+      } else {
+        fallbackToManualPlacement("Your browser doesn't support geolocation");
+      }
+      
+      // Fallback function for manual placement
+      function fallbackToManualPlacement(message) {
+        statusDiv.textContent = message + ". Click anywhere on the map to set your location";
+        
+        // Let user manually place their location marker
+        map.once('click', function(e) {
+          // Create marker at clicked position
+          userMarker = L.marker(e.latlng, {
+            icon: userLocationIcon,
+            zIndexOffset: 1000
+          }).addTo(map);
+          
+          // Add a circle
+          userCircle = L.circle(e.latlng, {
+            radius: 25,
+            color: '#FFFF00',
+            fillColor: '#FFFF00',
+            fillOpacity: 0.2,
+            weight: 2
+          }).addTo(map);
+          
+          // Add a tooltip
+          userMarker.bindTooltip("Your Location", {
+            permanent: false,
+            direction: 'top',
+            offset: [0, -8],
+            className: 'location-tooltip'
+          });
+          
+          statusDiv.textContent = "Location manually set";
+          document.getElementById('locate-me').textContent = "Refresh Location";
+          document.getElementById('start-navigation').style.display = 'block';
+        });
+      }
+    }
+    
+    // Function to stop location tracking
+    function stopLocationTracking() {
+      if (watchId) {
+        navigator.geolocation.clearWatch(watchId);
+        watchId = null;
+      }
+      
+      if (userMarker) {
+        map.removeLayer(userMarker);
+        userMarker = null;
+      }
+      
+      if (userCircle) {
+        map.removeLayer(userCircle);
+        userCircle = null;
+      }
+      
+      document.getElementById('gps-status').textContent = "";
+      document.getElementById('start-navigation').style.display = 'none';
+      document.getElementById('stop-navigation').style.display = 'none';
+    }
+    
+    // Function to start navigation mode
+    function startNavigationMode() {
+      navigationActive = true;
+      const statusDiv = document.getElementById('gps-status');
+      
+      // If user marker doesn't exist yet, create it automatically
+      if (!userMarker) {
+        statusDiv.textContent = "First detecting your location...";
+        
+        // Start location tracking automatically 
+        startLocationTracking();
+        
+        // Wait for location to be established before continuing
+        const checkInterval = setInterval(() => {
+          if (userMarker) {
+            clearInterval(checkInterval);
+            continueNavigation();
+          }
+        }, 500);
+        
+        // Timeout after 10 seconds
+        setTimeout(() => {
+          if (!userMarker) {
+            clearInterval(checkInterval);
+            statusDiv.textContent = "Could not detect location automatically. Please use 'Locate Me' first.";
+          }
+        }, 10000);
+      } else {
+        continueNavigation();
+      }
+      
+      function continueNavigation() {
+        statusDiv.textContent = "Select a destination on the map";
+        document.getElementById('start-navigation').style.display = 'none';
+        document.getElementById('stop-navigation').style.display = 'block';
+        
+        // Set up click handler to select destination
+        map.once('click', function(e) {
+          // Create destination marker
+          if (destinationMarker) {
+            map.removeLayer(destinationMarker);
+          }
+          
+          destinationMarker = L.marker(e.latlng, {
+            draggable: true,
+            icon: L.icon({
+              iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-red.png',
+              shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
+              iconSize: [25, 41],
+              iconAnchor: [12, 41],
+              popupAnchor: [1, -34],
+              shadowSize: [41, 41]
+            })
+          }).addTo(map);
+          
+          // Update route when destination is dragged
+          destinationMarker.on('dragend', updateNavigationRoute);
+          
+          // Create initial route
+          updateNavigationRoute();
+          
+          statusDiv.textContent = "Navigation active";
+        });
+      }
+    }
+    
+    // Function to stop navigation
+    function stopNavigationMode() {
+      navigationActive = false;
+      
+      // Remove route and destination
+      if (routeLine) {
+        map.removeLayer(routeLine);
+        routeLine = null;
+      }
+      
+      if (destinationMarker) {
+        map.removeLayer(destinationMarker);
+        destinationMarker = null;
+      }
+      
+      // Hide route info
+      document.getElementById('route-info').style.display = 'none';
+      document.getElementById('start-navigation').style.display = 'block';
+      document.getElementById('stop-navigation').style.display = 'none';
+      document.getElementById('gps-status').textContent = "Navigation stopped";
+    }
+    
+    // Optional: Add a calibration tool to help set up reference points
+    // This could be enabled in development mode to help calibrate the map
+    function showCalibrationPoints() {
+      referencePoints.forEach(point => {
+        L.marker(point.map, {
+          icon: L.divIcon({
+            className: 'calibration-point',
+            html: '<div style="background-color: purple; width: 10px; height: 10px; border-radius: 50%; border: 2px solid white;"></div>',
+            iconSize: [14, 14],
+            iconAnchor: [7, 7]
+          })
+        })
+        .addTo(map)
+        .bindPopup(`${point.name}<br>Map: ${point.map.lat}, ${point.map.lng}<br>GPS: ${point.gps.lat}, ${point.gps.lng}`);
+      });
+    }
+    
+    // Set up event listeners
+    document.getElementById('locate-me').addEventListener('click', function() {
+      if (!userMarker) {
+        startLocationTracking();
+      } else {
+        stopLocationTracking();
+      }
+    });
+    
+    document.getElementById('start-navigation').addEventListener('click', startNavigationMode);
+    document.getElementById('stop-navigation').addEventListener('click', stopNavigationMode);
+    document.getElementById('close-route').addEventListener('click', function() {
+      document.getElementById('route-info').style.display = 'none';
+    });
+    
+    // Uncomment this line to show calibration points:
+    // showCalibrationPoints();
+  </script>
+  
+  <!-- Calibration Panel -->
+  <div class="calibration-panel" style="display: none; position: absolute; right: 20px; top: 200px; background: white; padding: 15px; border-radius: 5px; box-shadow: 0 0 10px rgba(0,0,0,0.2); z-index: 1000; max-width: 350px;">
+    <h4>Map Calibration</h4>
+    <p style="font-size: 0.9em; color: #666;">Add reference points by collecting real GPS coordinates and matching map positions.</p>
+    
+    <div class="reference-points-list" style="max-height: 200px; overflow-y: auto; margin: 10px 0; border: 1px solid #eee; padding: 10px;">
+      <!-- Reference points will be listed here -->
+    </div>
+    
+    <div style="margin-bottom: 10px;">
+      <input type="text" id="ref-point-name" class="custom-input" placeholder="Location name" style="margin-bottom: 5px;">
+      <div style="display: flex; gap: 5px; margin-bottom: 5px;">
+        <input type="text" id="ref-point-gps-lat" class="custom-input" placeholder="GPS Latitude" style="flex: 1;">
+        <input type="text" id="ref-point-gps-lng" class="custom-input" placeholder="GPS Longitude" style="flex: 1;">
+      </div>
+      <div style="display: flex; gap: 5px; margin-bottom: 10px;">
+        <input type="text" id="ref-point-map-lat" class="custom-input" placeholder="Map Latitude" style="flex: 1;">
+        <input type="text" id="ref-point-map-lng" class="custom-input" placeholder="Map Longitude" style="flex: 1;">
+      </div>
+    </div>
+    
+    <div style="display: flex; gap: 5px; margin-bottom: 10px;">
+      <button id="add-ref-point" class="control-button" style="flex: 1;">Add Point</button>
+      <button id="pick-map-point" class="control-button" style="flex: 1;">Pick on Map</button>
+    </div>
+    
+    <button id="collect-gps" class="control-button">Collect Real GPS</button>
+    <button id="save-calibration" class="control-button">Save Calibration</button>
+    <button id="close-calibration" class="control-button" style="background-color: #f5f5f5; color: #333; border: 1px solid #ccc;">Close</button>
+  </div>
+
+  <script>
+    // Calibration system
+    document.addEventListener('DOMContentLoaded', function() {
+      // Add the calibration button to GPS Controls
+      const gpsControls = document.querySelector('.gps-controls');
+      const calibrationBtn = document.createElement('button');
+      calibrationBtn.className = 'control-button';
+      calibrationBtn.id = 'start-calibration';
+      calibrationBtn.innerHTML = '<i class="fas fa-compass"></i> Calibrate Map';
+      gpsControls.appendChild(calibrationBtn);
+      
+      const calibrationPanel = document.querySelector('.calibration-panel');
+      const referencePointsList = document.querySelector('.reference-points-list');
+      
+      // Local storage of reference points
+      let calibrationPoints = JSON.parse(localStorage.getItem('mapCalibrationPoints') || '[]');
+      
+      // Display existing reference points
+      function displayReferencePoints() {
+        referencePointsList.innerHTML = '';
+        
+        if (calibrationPoints.length === 0) {
+          referencePointsList.innerHTML = '<p style="text-align: center; color: #666;">No reference points added yet.</p>';
+          return;
+        }
+        
+        calibrationPoints.forEach((point, index) => {
+          const pointElement = document.createElement('div');
+          pointElement.style.padding = '5px';
+          pointElement.style.borderBottom = '1px solid #eee';
+          pointElement.style.marginBottom = '5px';
+          
+          pointElement.innerHTML = `
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+              <strong>${point.name}</strong>
+              <button class="delete-ref-point" data-index="${index}" style="background: none; border: none; color: red; cursor: pointer;">×</button>
+            </div>
+            <div style="font-size: 0.8em; color: #666;">
+              GPS: ${point.gps.lat.toFixed(6)}, ${point.gps.lng.toFixed(6)}<br>
+              Map: ${point.map.lat.toFixed(1)}, ${point.map.lng.toFixed(1)}
+            </div>
+          `;
+          
+          referencePointsList.appendChild(pointElement);
+          
+          // Add delete handler
+          pointElement.querySelector('.delete-ref-point').addEventListener('click', function() {
+            const index = parseInt(this.getAttribute('data-index'));
+            calibrationPoints.splice(index, 1);
+            localStorage.setItem('mapCalibrationPoints', JSON.stringify(calibrationPoints));
+            displayReferencePoints();
+          });
+        });
+      }
+      
+      // Open calibration panel
+      document.getElementById('start-calibration').addEventListener('click', function() {
+        calibrationPanel.style.display = 'block';
+        displayReferencePoints();
+      });
+      
+      // Close calibration panel
+      document.getElementById('close-calibration').addEventListener('click', function() {
+        calibrationPanel.style.display = 'none';
+      });
+      
+      // Pick point on map
+      let mapPointSelectionActive = false;
+      document.getElementById('pick-map-point').addEventListener('click', function() {
+        mapPointSelectionActive = true;
+        calibrationPanel.style.display = 'none';
+        
+        // Visual indicator
+        const indicator = document.createElement('div');
+        indicator.className = 'calibration-mode';
+        indicator.textContent = 'Click on the map to select reference point location';
+        document.body.appendChild(indicator);
+        
+        // Wait for map click
+        map.once('click', function(e) {
+          document.getElementById('ref-point-map-lat').value = e.latlng.lat.toFixed(1);
+          document.getElementById('ref-point-map-lng').value = e.latlng.lng.toFixed(1);
+          
+          // Clean up
+          document.body.removeChild(indicator);
+          mapPointSelectionActive = false;
+          calibrationPanel.style.display = 'block';
+        });
+      });
+      
+      // Collect GPS
+      document.getElementById('collect-gps').addEventListener('click', function() {
+        this.textContent = 'Collecting...';
+        this.disabled = true;
+        
+        if (navigator.geolocation) {
+          navigator.geolocation.getCurrentPosition(
+            function(position) {
+              document.getElementById('ref-point-gps-lat').value = position.coords.latitude.toFixed(6);
+              document.getElementById('ref-point-gps-lng').value = position.coords.longitude.toFixed(6);
+              
+              document.getElementById('collect-gps').textContent = 'Collect Real GPS';
+              document.getElementById('collect-gps').disabled = false;
+            },
+            function(error) {
+              alert('Error getting location: ' + error.message);
+              document.getElementById('collect-gps').textContent = 'Collect Real GPS';
+              document.getElementById('collect-gps').disabled = false;
+            },
+            { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+          );
+        } else {
+          alert('Geolocation is not supported by this browser');
+          this.textContent = 'Collect Real GPS';
+          this.disabled = false;
+        }
+      });
+      
+      // Add reference point
+      document.getElementById('add-ref-point').addEventListener('click', function() {
+        const name = document.getElementById('ref-point-name').value;
+        const gpsLat = parseFloat(document.getElementById('ref-point-gps-lat').value);
+        const gpsLng = parseFloat(document.getElementById('ref-point-gps-lng').value);
+        const mapLat = parseFloat(document.getElementById('ref-point-map-lat').value);
+        const mapLng = parseFloat(document.getElementById('ref-point-map-lng').value);
+        
+        if (!name) {
+          alert('Please enter a name for this reference point');
+          return;
+        }
+        
+        if (isNaN(gpsLat) || isNaN(gpsLng) || isNaN(mapLat) || isNaN(mapLng)) {
+          alert('Please enter valid coordinates');
+          return;
+        }
+        
+        // Add new reference point
+        calibrationPoints.push({
+          name: name,
+          gps: { lat: gpsLat, lng: gpsLng },
+          map: { lat: mapLat, lng: mapLng }
+        });
+        
+        // Save to local storage
+        localStorage.setItem('mapCalibrationPoints', JSON.stringify(calibrationPoints));
+        
+        // Update reference points display
+        displayReferencePoints();
+        
+        // Clear form
+        document.getElementById('ref-point-name').value = '';
+        document.getElementById('ref-point-gps-lat').value = '';
+        document.getElementById('ref-point-gps-lng').value = '';
+        document.getElementById('ref-point-map-lat').value = '';
+        document.getElementById('ref-point-map-lng').value = '';
+      });
+      
+      // Save calibration
+      document.getElementById('save-calibration').addEventListener('click', function() {
+        if (calibrationPoints.length < 3) {
+          alert('Please add at least 3 reference points for accurate calibration');
+          return;
+        }
+        
+        // Update the referencePoints array
+        referencePoints = [...calibrationPoints];
+        
+        // Save to localStorage
+        localStorage.setItem('mapCalibrationPoints', JSON.stringify(calibrationPoints));
+        
+        // Show calibration points on map
+        showCalibrationPoints();
+        
+        alert('Calibration saved with ' + calibrationPoints.length + ' reference points');
+        calibrationPanel.style.display = 'none';
+      });
+    });
+  </script>
+
+  <script>
+    // Function to launch navigation using Google Maps app or website
+    function navigateWithGoogleMaps(destinationName, destinationCoords) {
+      console.log(`Navigating to ${destinationName} at ${JSON.stringify(destinationCoords)}`);
+      
+      // Special handling for Puregold - this is our reference point with known coordinates
+      const isPuregold = destinationName.toLowerCase().includes('puregold');
+      
+      // Get user's current position
+      if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(
+          function(position) {
+            const origin = `${position.coords.latitude},${position.coords.longitude}`;
+            const destination = `${destinationCoords.lat},${destinationCoords.lng}`;
+            
+            // Create Google Maps URL
+            let googleMapsUrl;
+            
+            // Check if it's likely a mobile device
+            const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+            
+            // Set desired heading to 320 degrees (northwest)
+            const heading = 320;
+            
+            if (isMobile) {
+              // Use URL that will open in Google Maps app on mobile
+              googleMapsUrl = `https://www.google.com/maps/dir/?api=1&origin=${origin}&destination=${destination}&travelmode=walking&dir_action=navigate&heading=${heading}`;
+            } else {
+              // Use URL for desktop browsers
+              googleMapsUrl = `https://www.google.com/maps/dir/?api=1&origin=${origin}&destination=${destination}&travelmode=walking&heading=${heading}`;
+            }
+            
+            // For advanced map control, we can also try to use the @notation for camera control
+            // This adds the center point, zoom level, and heading in the format: @lat,lng,zoom,heading
+            const mapCenter = destination;
+            const zoomLevel = 18;
+            const alternateUrl = `https://www.google.com/maps/@${destination},${zoomLevel}z,${heading}h/data=!3m1!1e3`;
+            
+            if (isPuregold) {
+              // Show a confirmation dialog with some information for Puregold
+              const confirmed = confirm(
+                `Navigate to Puregold Bayawan?\n\n` +
+                `• Google Maps will open in a new tab\n` +
+                `• You'll get turn-by-turn directions\n` +
+                `• Map will be oriented to match your local map view\n` +
+                `• Estimated time: ~3 minutes on foot\n\n` +
+                `Continue to Google Maps?`
+              );
+              
+              if (!confirmed) return;
+            }
+            
+            // Open Google Maps in a new tab
+            window.open(googleMapsUrl, '_blank');
+            
+            // Also provide a link to the alternate URL with precise camera control
+            document.getElementById('gps-status').innerHTML = 
+              `Opened Google Maps navigation to ${destinationName}<br>` +
+              `<a href="${alternateUrl}" target="_blank" style="color: #1A67D2; text-decoration: underline;">View with custom orientation</a>`;
+          },
+          function(error) {
+            console.error("Error getting current location:", error);
+            
+            // Fallback - just use destination coordinates
+            const destination = `${destinationCoords.lat},${destinationCoords.lng}`;
+            // Include heading in the search URL too
+            const heading = 320;
+            const googleMapsUrl = `https://www.google.com/maps/search/?api=1&query=${destination}&heading=${heading}`;
+            
+            if (confirm(`Could not get your current location (${error.message}).\n\nOpen Google Maps to search for ${destinationName} instead?`)) {
+              window.open(googleMapsUrl, '_blank');
+            }
+          },
+          { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 }
+        );
+      } else {
+        // Fallback for browsers without geolocation
+        alert("Your browser doesn't support geolocation. Please enter your location manually in Google Maps.");
+        
+        // Just search for the destination
+        const destination = `${destinationCoords.lat},${destinationCoords.lng}`;
+        // Include heading in this URL too
+        const heading = 320;
+        const googleMapsUrl = `https://www.google.com/maps/search/?api=1&query=${destination}&heading=${heading}`;
+        window.open(googleMapsUrl, '_blank');
+      }
+    }
+  </script>
+</body>
+</html>

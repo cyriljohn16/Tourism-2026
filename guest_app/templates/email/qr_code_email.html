@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Your Companion QR Code</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Arial, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            margin: 0;
+            padding: 0;
+            background-color: #f9f9f9;
+        }
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #ffffff;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .header {
+            text-align: center;
+            padding: 20px 0;
+            border-bottom: 1px solid #eee;
+        }
+        .header h1 {
+            color: #4a6741;
+            margin: 0;
+            font-size: 24px;
+        }
+        .content {
+            padding: 20px 0;
+        }
+        .qr-container {
+            text-align: center;
+            margin: 20px 0;
+            padding: 15px;
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        .qr-container img {
+            width: 200px;
+            height: 200px;
+            object-fit: contain;
+        }
+        .info {
+            background-color: #f5f7f5;
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+        }
+        .footer {
+            text-align: center;
+            padding-top: 20px;
+            border-top: 1px solid #eee;
+            font-size: 12px;
+            color: #777;
+        }
+        .button {
+            display: inline-block;
+            background-color: #4a6741;
+            color: white;
+            padding: 10px 20px;
+            text-decoration: none;
+            border-radius: 5px;
+            margin-top: 15px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Your Companion Management QR Code</h1>
+        </div>
+        <div class="content">
+            <p>Hello {{ user.first_name }},</p>
+            
+            <p>As requested, here is your QR code containing your account information and details for your {{ companion_count }} companion(s).</p>
+            
+            <div class="info">
+                <p><strong>Generated on:</strong> {{ date }}</p>
+                <p><strong>User:</strong> {{ user.first_name }} {{ user.last_name }}</p>
+                <p><strong>Email:</strong> {{ user.email }}</p>
+                <p><strong>Companions included:</strong> {{ companion_count }}</p>
+            </div>
+            
+            <p>You can use this QR code when traveling or booking tours to quickly provide your information and your companions' details. Simply show this QR code to the staff member who will scan it to retrieve your information.</p>
+            
+            <div class="qr-container">
+                <p><strong>Your QR Code:</strong></p>
+                <p style="font-size: 16px; margin: 15px 0;">Your QR code is attached to this email as companion_qr_code.png</p>
+                <p style="font-size: 14px; color: #555; margin-top: 8px;"><i>Open the attachment to view your QR code</i></p>
+            </div>
+            
+            <p>For security reasons, please do not share this QR code with unauthorized individuals. The QR code contains personal information about you and your companions.</p>
+        </div>
+        <div class="footer">
+            <p>This is an automated message. Please do not reply to this email.</p>
+            <p>&copy; {% now "Y" %} IBAYAW Tours. All rights reserved.</p>
+        </div>
+    </div>
+</body>
+</html> 

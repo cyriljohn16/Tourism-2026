@@ -1,0 +1,1320 @@
+<!DOCTYPE html>
+<html lang="{{ current_language|default:'en' }}">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tour Schedule</title>
+  <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+  <!-- Add Font Awesome for icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
+  <!-- Add reCAPTCHA API -->
+  <script src="https://www.google.com/recaptcha/api.js?onload=onloadCallback&render=explicit" async defer></script>
+  <style>
+    /* Global Styles */
+    body {
+      font-family: 'Poppins', sans-serif;
+      background-color: #f5f5f5;
+      margin: 0;
+      padding: 20px;
+    }
+    .container {
+      max-width: 800px;
+      margin: auto;
+      background-color: #fff;
+      padding: 30px;
+      border-radius: 8px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
+    /* Tour Header */
+    .tour-header {
+      text-align: center;
+      margin-bottom: 40px;
+    }
+    .tour-header img {
+      max-width: 300px;
+      width: 100%;
+      border-radius: 8px;
+      margin-bottom: 20px;
+    }
+    .tour-header h1 {
+      margin-bottom: 10px;
+      color: #104CBA;
+    }
+    .tour-header p {
+      color: #555;
+    }
+    /* Schedule Section */
+    .schedule {
+      border-bottom: 1px solid #ddd;
+      padding-bottom: 20px;
+      margin-bottom: 20px;
+      position: relative;
+    }
+    .schedule p {
+      margin: 6px 0;
+    }
+    .book-btn {
+      display: inline-block;
+      margin-top: 10px;
+      padding: 10px 20px;
+      background: linear-gradient(45deg, #104CBA, #1A67D2);
+      color: #fff;
+      border: none;
+      border-radius: 25px;
+      cursor: pointer;
+      text-decoration: none;
+      transition: all 0.3s ease;
+      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    }
+    .book-btn:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 12px rgba(0, 0, 0, 0.15);
+    }
+    /* Back Button at the Bottom */
+    .back-button {
+      display: inline-block;
+      margin-top: 30px;
+      padding: 10px 20px;
+      background: linear-gradient(45deg, #104CBA, #1A67D2);
+      color: #fff;
+      border: none;
+      border-radius: 25px;
+      cursor: pointer;
+      text-decoration: none;
+      text-align: center;
+      transition: all 0.3s ease;
+    }
+    .back-button:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 12px rgba(0, 0, 0, 0.15);
+    }
+    .action-buttons {
+      display: flex;
+      gap: 10px;
+      margin-top: 15px;
+    }
+    /* Language selector */
+    .language-bar {
+      display: flex;
+      justify-content: flex-end;
+      margin-bottom: 20px;
+    }
+    .language-selector {
+      padding: 5px 10px;
+      border-radius: 4px;
+      background-color: #f8f9fa;
+      border: 1px solid #ddd;
+    }
+    /* Modal & Overlay Styles */
+    #modalOverlay {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0,0,0,0.5);
+      z-index: 50;
+    }
+    #bookingModal, #payablesModal, #itineraryModal, #confirmationDialog {
+      display: none;
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: #fff;
+      padding: 30px;
+      border-radius: 8px;
+      z-index: 100;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+      max-width: 400px;
+      width: 90%;
+    }
+    #itineraryModal {
+      max-width: 600px;
+      max-height: 80vh;
+      overflow-y: auto;
+    }
+    .modal-title {
+      color: #104CBA;
+      margin-bottom: 20px;
+      font-size: 1.8rem;
+      text-align: center;
+      font-weight: 700;
+    }
+    #bookingModal h3, #payablesModal h3, #itineraryModal h3, #confirmationDialog h3 {
+      margin-top: 0;
+      text-align: center;
+    }
+    #bookingModal label, #payablesModal label {
+      display: block;
+      margin-top: 10px;
+    }
+    #bookingModal input, #payablesModal input {
+      width: 100%;
+      padding: 8px;
+      margin-top: 5px;
+      box-sizing: border-box;
+    }
+    #bookingModal button, #confirmationDialog button {
+      margin-top: 15px;
+      padding: 10px 20px;
+      border: none;
+      border-radius: 25px;
+      cursor: pointer;
+      font-size: 16px;
+      font-weight: 600;
+      transition: background-color 0.2s;
+    }
+    #bookingModal button:hover, #confirmationDialog button:hover {
+      background-color: #0d3d94;
+    }
+    #bookingModal button:disabled, #confirmationDialog button:disabled {
+      background-color: #cccccc;
+      cursor: not-allowed;
+    }
+    #confirmBookingBtn {
+      background: linear-gradient(45deg, #28a745, #218838);
+      color: #fff;
+    }
+    #closeModal, #closeItineraryModal, #noButton {
+      background-color: #dc3545;
+      color: #fff;
+      margin-left: 10px;
+    }
+    #yesButton {
+      background: linear-gradient(45deg, #28a745, #218838);
+      color: #fff;
+    }
+    /* Confirmation Message */
+    .confirm-message {
+      display: none;
+      text-align: center;
+      padding: 10px;
+      background-color: #d4edda;
+      color: #155724;
+      border: 1px solid #c3e6cb;
+      margin-top: 20px;
+      border-radius: 4px;
+    }
+    #slotWarning, #captchaError {
+      color: #fff;
+      background-color: #dc3545;
+      padding: 8px;
+      border-radius: 4px;
+      margin-top: 10px;
+      font-weight: bold;
+      text-align: center;
+      display: none;
+    }
+    #confirmBookingBtn:disabled {
+      background-color: #6c757d;
+      cursor: not-allowed;
+      opacity: 0.65;
+    }
+    .confirmation-details {
+      margin: 20px 0;
+      padding: 15px;
+      background-color: #f8f9fa;
+      border-radius: 8px;
+      border: 1px solid #e9ecef;
+    }
+    .confirmation-details p {
+      margin: 8px 0;
+    }
+    .view-itinerary-btn {
+      padding: 10px 15px;
+      background: linear-gradient(45deg, #fd7e14, #e67e22);
+      color: white;
+      border: none;
+      border-radius: 25px;
+      cursor: pointer;
+      font-size: 14px;
+      transition: all 0.3s ease;
+    }
+    .view-itinerary-btn:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+    }
+    .itinerary-day {
+      margin-bottom: 20px;
+      padding-bottom: 15px;
+      border-bottom: 1px solid #eee;
+    }
+    .itinerary-day h4 {
+      color: #104CBA;
+      margin-bottom: 10px;
+    }
+    .itinerary-day ul {
+      padding-left: 20px;
+    }
+    .itinerary-day li {
+      margin-bottom: 8px;
+    }
+    /* Enhance companion selection appearance */
+    .companion-selection {
+      max-height: 250px;
+      overflow-y: auto;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      padding: 15px;
+      margin-bottom: 15px;
+      background-color: #fff;
+      box-shadow: inset 0 1px 3px rgba(0,0,0,0.1);
+    }
+    
+    .companion-selection-header {
+      display: flex;
+      justify-content: flex-end;
+      margin-bottom: 5px;
+    }
+    
+    .refresh-btn {
+      padding: 5px 10px;
+      background: #f0f0f0;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      font-size: 12px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+    
+    .refresh-btn:hover {
+      background: #e0e0e0;
+    }
+    
+    .refresh-btn.loading {
+      background: #e8f4f8;
+      pointer-events: none;
+    }
+    
+    .refresh-btn i {
+      font-size: 12px;
+    }
+    
+    .refresh-btn.loading i {
+      animation: spin 1s linear infinite;
+    }
+    
+    @keyframes spin {
+      from { transform: rotate(0deg); }
+      to { transform: rotate(360deg); }
+    }
+    
+    .companion-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    
+    .companion-group-header {
+      font-weight: bold;
+      background-color: #f0f4f8;
+      padding: 8px 12px;
+      margin: 12px 0 8px;
+      border-radius: 6px;
+      color: #104CBA;
+      font-size: 14px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-left: 3px solid #104CBA;
+    }
+    
+    .companion-item {
+      display: flex;
+      align-items: center;
+      padding: 12px;
+      border-bottom: 1px solid #eee;
+      transition: all 0.2s ease;
+      cursor: pointer;
+      border-radius: 6px;
+      margin-bottom: 4px;
+    }
+    
+    .companion-item:hover {
+      background-color: #f0f8ff;
+    }
+    
+    .companion-item:last-child {
+      border-bottom: none;
+    }
+    
+    .companion-item.selected {
+      background-color: #e6f3ff;
+      border-left: 4px solid #104CBA;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+    }
+    
+    .companion-profile-pic {
+      width: 45px;
+      height: 45px;
+      border-radius: 50%;
+      object-fit: cover;
+      margin-right: 12px;
+      border: 2px solid #f0f0f0;
+      transition: border 0.2s ease;
+    }
+    
+    .companion-item.selected .companion-profile-pic {
+      border: 2px solid #104CBA;
+    }
+    
+    .companion-info {
+      flex: 1;
+    }
+    
+    .companion-name {
+      font-weight: bold;
+      display: block;
+      color: #333;
+    }
+    
+    .companion-item.selected .companion-name {
+      color: #104CBA;
+    }
+    
+    .age-badge {
+      background-color: #e9ecef;
+      padding: 3px 10px;
+      border-radius: 12px;
+      font-size: 0.8em;
+      margin-left: auto;
+      transition: background-color 0.2s ease;
+    }
+    
+    .companion-item.selected .age-badge {
+      background-color: #104CBA;
+      color: white;
+    }
+    
+    .selected-companions-list {
+      list-style-type: none;
+      padding: 0;
+      margin: 10px 0;
+      max-height: 200px;
+      overflow-y: auto;
+      background-color: #fff;
+      border-radius: 6px;
+      border: 1px solid #e9ecef;
+    }
+    
+    .selected-companions-list li {
+      padding: 10px 12px;
+      border-bottom: 1px solid #eee;
+      display: flex;
+      align-items: center;
+    }
+    
+    .selected-companions-list li:last-child {
+      border-bottom: none;
+    }
+    
+    .selected-companion-pic {
+      width: 30px;
+      height: 30px;
+      border-radius: 50%;
+      object-fit: cover;
+      margin-right: 10px;
+    }
+    
+    #companionLoading {
+      padding: 10px;
+      text-align: center;
+      color: #666;
+    }
+    
+    #noCompanions {
+      padding: 10px;
+      text-align: center;
+      color: #666;
+    }
+    
+    #noCompanions a {
+      color: #007bff;
+      text-decoration: none;
+    }
+    
+    #noCompanions a:hover {
+      text-decoration: underline;
+    }
+    
+    /* New companion summary styling */
+    .companion-summary {
+      background-color: #f8f9fa;
+      border: 1px solid #e9ecef;
+      border-radius: 6px;
+      padding: 12px;
+      margin-bottom: 15px;
+      text-align: center;
+    }
+    
+    .companion-counter {
+      font-size: 1.2em;
+      margin-bottom: 8px;
+      font-weight: 500;
+    }
+    
+    #selectedCompanionCount {
+      font-weight: bold;
+      color: #104CBA;
+    }
+    
+    .companion-note {
+      color: #6c757d;
+      font-size: 0.9em;
+    }
+    
+    /* Error message styling */
+    .error-message {
+      color: #721c24;
+      background-color: #f8d7da;
+      border: 1px solid #f5c6cb;
+      border-radius: 4px;
+      padding: 10px;
+      margin-top: 10px;
+      text-align: center;
+    }
+    
+    .btn-link {
+      background: none;
+      border: none;
+      color: #007bff;
+      text-decoration: underline;
+      cursor: pointer;
+      font-size: 14px;
+      padding: 0;
+      margin-left: 5px;
+    }
+    
+    .btn-link:hover {
+      color: #0056b3;
+      text-decoration: underline;
+    }
+    
+    .summary-info {
+      background-color: #e6f3ff;
+      padding: 10px 15px;
+      border-radius: 6px;
+      margin-top: 15px;
+      font-weight: 500;
+    }
+    .selection-instruction {
+      background-color: #fff8e6;
+      border-left: 4px solid #ffc107;
+      padding: 8px 12px;
+      margin-bottom: 12px;
+      border-radius: 4px;
+      font-size: 14px;
+      color: #856404;
+    }
+  </style>
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800&family=Dancing+Script:wght@700&display=swap" rel="stylesheet">
+</head>
+<body>
+  <!-- Hidden elements for language data -->
+  <div style="display: none;">
+    <div id="translations-data">{{ translations_json|default:'{}' }}</div>
+    <div id="current-language-data">{{ current_language|default:'en' }}</div>
+    {% csrf_token %}
+  </div>
+
+  <div class="container">
+    <!-- Tour Header -->
+    <div class="tour-header">
+      <h1 id="tour-name">{{ tour.tour_name }}</h1>
+      {% if tour.image %}
+        <img src="{{ tour.image.url }}" alt="{{ tour.tour_name }}">
+      {% else %}
+        <p>No image available.</p>
+      {% endif %}
+      <p id="tour-description">{{ tour.description }}</p>
+    </div>
+
+    <!-- Schedule Listings -->
+    {% for schedule in schedules %}
+      <div class="schedule" data-schedule-id="{{ schedule.sched_id }}">
+        <p><strong class="schedule-id-label">Schedule ID:</strong> {{ schedule.sched_id }}</p>
+        <p><strong class="start-time-label">Start Time:</strong> {{ schedule.start_time }}</p>
+        <p><strong class="end-time-label">End Time:</strong> {{ schedule.end_time }}</p>
+        <p><strong class="price-label">Price:</strong> ₱{{ schedule.price }} 
+          <i class="fas fa-info-circle price-info-icon" data-sched-id="{{ schedule.sched_id }}" data-tour-id="{{ tour.tour_id }}"></i>
+        </p>
+        <p><strong class="available-slots-label">Available Slots:</strong> <span class="available-slots" data-sched-id="{{ schedule.sched_id }}">{{ schedule.slots_available }}</span></p>
+        <p><strong class="booked-slots-label">Booked Slots:</strong> <span class="booked-slots" data-sched-id="{{ schedule.sched_id }}">{{ schedule.slots_booked }}</span></p>
+        
+        <div class="action-buttons">
+          {% if schedule.slots_available > 0 %}
+            <button class="book-btn" 
+                    data-sched-id="{{ schedule.sched_id }}"
+                    data-price="{{ schedule.price }}"
+                    data-slots="{{ schedule.slots_available }}">
+              <span class="book-btn-text">Book This Schedule</span>
+            </button>
+          {% else %}
+            <div class="no-slots-message" style="color: #dc3545; font-weight: bold; margin-top: 10px; padding: 10px; background-color: #f8d7da; border-radius: 4px; text-align: center;">
+              <span class="no-slots-text">No more available slots</span>
+            </div>
+          {% endif %}
+          
+          <button class="view-itinerary-btn" data-sched-id="{{ schedule.sched_id }}" data-tour-id="{{ tour.tour_id }}">
+            <i class="fas fa-calendar-alt"></i> View Itinerary
+          </button>
+        </div>
+      </div>
+    {% empty %}
+      <p class="no-schedules-message">No schedules available for this tour.</p>
+    {% endfor %}
+
+    <!-- Back Button at the Bottom -->
+    <a href="{% url 'main-page' %}" class="back-button">
+      <span class="back-button-text">Back to Main Page</span>
+    </a>
+
+    <!-- Confirmation Message -->
+    <div class="confirm-message" id="confirmMessage"></div>
+  </div>
+
+  <!-- Modal Overlay -->
+  <div id="modalOverlay"></div>
+
+  <!-- Booking Modal -->
+  <div id="bookingModal" class="modal">
+    <div class="modal-content">
+      <span id="closeModal" class="close">&times;</span>
+      <h2>Book Tour</h2>
+      <p>Please select who will be joining this tour:</p>
+      
+      <div class="form-row">
+        <label>
+          <input type="checkbox" id="includeMainUser" checked disabled>
+          <strong>You ({{ request.user.first_name }} {{ request.user.last_name }})</strong>
+          <span class="small-text">(always included)</span>
+        </label>
+      </div>
+      
+      <div class="selection-instruction">
+        <i class="fas fa-info-circle"></i> All companions are unselected by default. Click on a companion to include them in your booking.
+      </div>
+      
+      <div class="form-row">
+        <h4>Add companions:</h4>
+        <div class="companion-selection-header">
+          <button id="refreshCompanions" class="refresh-btn" title="Refresh companions list">
+            <i class="fas fa-sync-alt"></i> Refresh
+          </button>
+        </div>
+        <div class="companion-selection">
+          <div id="companionLoading">Loading your companions...</div>
+          <div id="noCompanions" style="display: none;">
+            <p>You don't have any companions added yet.</p>
+            <p><a href="/guest_app/companion/">Add companions</a> to include them in your booking.</p>
+          </div>
+          <div id="companionList" class="companion-list"></div>
+        </div>
+      </div>
+      
+      <div class="form-row">
+        <div class="companion-summary">
+          <div class="companion-counter">
+            <span id="selectedCompanionCount">0</span> companions selected
+          </div>
+          <div class="companion-note">
+            <small>Click on companions to select who will join this tour with you.</small>
+          </div>
+        </div>
+      </div>
+      
+      <div class="form-row">
+        <div class="col">
+          <label>Total Guests:</label>
+          <strong id="totalGuests">1</strong>
+        </div>
+        <div class="col">
+          <label>Total Payment ($):</label>
+          <strong id="totalPayment">0.00</strong>
+        </div>
+      </div>
+      
+      <div class="form-row">
+        <div class="col">
+          <label>Available Slots:</label>
+          <strong id="availableSlots">0</strong>
+        </div>
+        <div class="col">
+          <p id="slotWarning" class="warning" style="display: none;"></p>
+        </div>
+      </div>
+      
+      <div class="form-row btn-row">
+        <button id="confirmBookingBtn" class="btn confirm-btn">Confirm Booking</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Confirmation Dialog -->
+  <div id="confirmationDialog" class="modal" style="display: none;">
+    <div class="modal-content">
+      <h2>Confirm Booking</h2>
+      <p>Are you sure you want to book this tour with the following guests?</p>
+      
+      <div class="confirmation-details">
+        <h4>Selected companions:</h4>
+        <ul id="selectedCompanionsList" class="selected-companions-list">
+          <!-- Will be populated dynamically -->
+        </ul>
+        
+        <div class="summary-info">
+          <p><strong>Total Guests:</strong> <span id="confirmTotalGuests">0</span></p>
+          <p><strong>Total Payment ($):</strong> <span id="confirmTotalPayment">0.00</span></p>
+        </div>
+      </div>
+      
+      <div class="captcha-container">
+        <p>Please complete the CAPTCHA to continue:</p>
+        <div id="recaptcha-container"></div>
+        <p id="captchaError" class="warning" style="display: none;">Please complete the CAPTCHA first.</p>
+      </div>
+      
+      <div class="btn-row">
+        <button id="yesButton" class="btn confirm-btn" disabled>Yes, Book Now</button>
+        <button id="noButton" class="btn cancel-btn">No, Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Itinerary Modal -->
+  <div id="itineraryModal">
+    <h3>Tour Itinerary</h3>
+    <div id="itineraryContent">
+      <!-- Itinerary content will be dynamically loaded here -->
+      <p class="loading-message">Loading itinerary...</p>
+    </div>
+    <button id="closeItineraryModal" class="close-modal-btn">Close</button>
+  </div>
+
+  <script>
+    // Global variables to store current schedule data
+    var currentScheduleID = "";
+    var currentPrice = 0;
+    var currentAvailableSlots = 0;
+    var captchaCompleted = false;
+    var recaptchaWidgetId;
+    var selectedCompanions = []; // Array to track selected companions
+    var userCompanions = []; // Array to store all companions
+
+    // reCAPTCHA callback to render widget explicitly
+    var onloadCallback = function() {
+      console.log("reCAPTCHA callback triggered");
+      // Explicit render of reCAPTCHA
+      try {
+        recaptchaWidgetId = grecaptcha.render('recaptcha-container', {
+          'sitekey': '6LeyhAYrAAAAAFGtpGaYGmM1-FEw52YXcQ78XP8E',
+          'callback': onRecaptchaSuccess,
+          'expired-callback': onRecaptchaExpired,
+          'error-callback': onRecaptchaError,
+          'theme': 'light',
+          'type': 'image',  // Forces the puzzle challenge
+          'size': 'normal'
+        });
+        console.log("reCAPTCHA rendered with widget ID:", recaptchaWidgetId);
+      } catch (e) {
+        console.error("Error rendering reCAPTCHA:", e);
+      }
+    };
+
+    // reCAPTCHA callback functions
+    function onRecaptchaSuccess() {
+        console.log("reCAPTCHA success");
+        captchaCompleted = true;
+        $("#captchaError").hide();
+        $("#yesButton").prop('disabled', false);
+    }
+
+    function onRecaptchaExpired() {
+        console.log("reCAPTCHA expired");
+        captchaCompleted = false;
+        $("#captchaError").show();
+        $("#yesButton").prop('disabled', true);
+    }
+
+    function onRecaptchaError() {
+        console.log("reCAPTCHA error");
+        captchaCompleted = false;
+        $("#captchaError").text("CAPTCHA error occurred. Please try again.").show();
+        $("#yesButton").prop('disabled', true);
+    }
+
+    $(document).ready(function(){
+      console.log("Document ready");
+      
+      // Clear companion cache when opening modal
+      $("#modalOverlay").on("click", function(e) {
+        if (e.target === this) {
+          // Clear cached companion data from session storage
+          sessionStorage.removeItem('userCompanions');
+          sessionStorage.removeItem('userCompanionsTimestamp');
+        }
+      });
+      
+      // Function to load user's companions
+      function loadCompanions() {
+        // Show loading state
+        $("#companionLoading").show();
+        $("#noCompanions").hide();
+        $("#companionList").empty();
+        
+        // Reset selected companions
+        selectedCompanions = [];
+        
+        console.log("Loading companions...");
+        
+        // Try to get companions from session storage first for quicker loading
+        const cachedCompanions = sessionStorage.getItem('userCompanions');
+        const cacheTimestamp = sessionStorage.getItem('userCompanionsTimestamp');
+        const now = new Date().getTime();
+        
+        // Use cache if available and less than 5 minutes old
+        if (cachedCompanions && cacheTimestamp && (now - cacheTimestamp < 5 * 60 * 1000)) {
+          try {
+            userCompanions = JSON.parse(cachedCompanions);
+            console.log(`Using cached companions: ${userCompanions.length} found`);
+            renderCompanions(userCompanions);
+            
+            // Also refresh the cache in the background
+            fetchCompanionsFromServer(false);
+            return;
+          } catch (e) {
+            console.error("Error parsing cached companions:", e);
+          }
+        }
+        
+        // If no valid cache, fetch from server
+        fetchCompanionsFromServer(true);
+      }
+      
+      // Function to fetch companions from the server
+      function fetchCompanionsFromServer(updateUI = true) {
+        $.ajax({
+          url: "/guest_app/get_companions/",
+          type: "GET",
+          headers: {
+            'X-Requested-With': 'XMLHttpRequest'
+          },
+          success: function(response) {
+            if (response.success) {
+              userCompanions = response.companions;
+              console.log(`Received ${userCompanions.length} companions from server`);
+              
+              // Cache companions in session storage with timestamp
+              sessionStorage.setItem('userCompanions', JSON.stringify(userCompanions));
+              sessionStorage.setItem('userCompanionsTimestamp', new Date().getTime());
+              
+              // Update the UI if requested
+              if (updateUI) {
+                renderCompanions(userCompanions);
+              }
+            } else {
+              console.error("Error loading companions:", response.message);
+              if (updateUI) {
+                $("#companionLoading").html(`<div class="error-message">Error loading companions: ${response.message}</div>`);
+              }
+            }
+          },
+          error: function(xhr, status, error) {
+            console.error("AJAX error when loading companions:", status, error);
+            if (updateUI) {
+              $("#companionLoading").html(`<div class="error-message">
+                Server error loading companions. <button id="retryCompanionsBtn" class="btn-link">Retry</button>
+              </div>`);
+              
+              // Add retry button handler
+              $("#retryCompanionsBtn").on("click", function() {
+                loadCompanions();
+              });
+            }
+          }
+        });
+      }
+      
+      // Function to render companions in the selection list
+      function renderCompanions(companions) {
+        if (!companions || companions.length === 0) {
+          $("#companionLoading").hide();
+          $("#noCompanions").show();
+          console.log("No companions found to display");
+          return;
+        }
+        
+        console.log(`Rendering ${companions.length} companions`);
+        $("#companionLoading").hide();
+        let companionHtml = '';
+        
+        // Sort companions by group for better organization
+        const groupedCompanions = {};
+        companions.forEach(companion => {
+          const groupName = companion.group_name || "Other Companions";
+          if (!groupedCompanions[groupName]) {
+            groupedCompanions[groupName] = [];
+          }
+          groupedCompanions[groupName].push(companion);
+        });
+        
+        // Create HTML for each group
+        Object.keys(groupedCompanions).sort().forEach(groupName => {
+          // Add group header
+          companionHtml += `<div class="companion-group-header">${groupName} (${groupedCompanions[groupName].length})</div>`;
+          
+          // Add companions in this group - unselected by default
+          groupedCompanions[groupName].forEach(companion => {
+            // Determine the profile picture URL
+            const profilePic = companion.picture_url ? 
+              companion.picture_url : 
+              '/static/images/default-profile.png';
+            
+            companionHtml += `
+              <div class="companion-item" data-id="${companion.guest_id}" 
+                   data-name="${companion.first_name} ${companion.last_name}" 
+                   data-age="${companion.age_label || 'Adult'}" 
+                   data-pic="${profilePic}">
+                <img src="${profilePic}" alt="${companion.first_name}" class="companion-profile-pic">
+                <div class="companion-info">
+                  <span class="companion-name">${companion.first_name} ${companion.last_name}</span>
+                </div>
+                <span class="age-badge">${companion.age_label || 'Adult'}</span>
+              </div>
+            `;
+            
+            // Note: No longer adding companions to the selectedCompanions array by default
+          });
+        });
+        
+        // Append to the companion list and set up event handlers
+        $("#companionList").html(companionHtml);
+        setupCompanionSelection();
+        
+        // Reset companions count
+        selectedCompanions = [];
+        
+        // Update totals with zero companions
+        updateTotals();
+      }
+      
+      // Setup event handlers for companion selection
+      function setupCompanionSelection() {
+        $(".companion-item").on("click", function() {
+          const companionId = $(this).data("id");
+          const companionName = $(this).data("name");
+          const ageLabel = $(this).data("age");
+          const pictureSrc = $(this).data("pic");
+          
+          // Toggle selected class
+          $(this).toggleClass("selected");
+          
+          if ($(this).hasClass("selected")) {
+            // Add to selected companions
+            selectedCompanions.push({
+              id: companionId,
+              name: companionName,
+              age_label: ageLabel,
+              picture: pictureSrc
+            });
+          } else {
+            // Remove from selected companions
+            selectedCompanions = selectedCompanions.filter(c => c.id !== companionId);
+          }
+          
+          updateTotals();
+        });
+      }
+      
+      // Handle book button click
+      $(".book-btn").click(function() {
+        currentScheduleID = $(this).data("sched-id");
+        currentPrice = parseFloat($(this).data("price"));
+        currentAvailableSlots = parseInt($(this).data("slots"));
+        
+        // Reset the selected companions
+        selectedCompanions = [];
+        $(".companion-item").removeClass("selected");
+        
+        // Show available slots in the modal
+        $("#availableSlots").text(currentAvailableSlots);
+        $("#maxSlots").text(currentAvailableSlots);
+        
+        // Clear the companion list before loading
+        $("#companionList").empty();
+        $("#companionLoading").show();
+        $("#noCompanions").hide();
+        
+        // Load companions immediately
+        loadCompanions();
+        
+        // Show the modal
+        updateTotals();
+        $("#modalOverlay").show();
+        $("#bookingModal").show();
+      });
+      
+      // Function to update the totals for guests and payment
+      function updateTotals() {
+        // Count the main user (always included) + selected companions
+        var totalGuests = 1 + selectedCompanions.length;
+        var totalPayment = totalGuests * currentPrice;
+        
+        $("#totalGuests").text(totalGuests);
+        $("#totalPayment").text(totalPayment.toFixed(2));
+        $("#selectedCompanionCount").text(selectedCompanions.length);
+        
+        // Validate total guests against available slots
+        if (totalGuests > currentAvailableSlots) {
+          $("#slotWarning").text("Not enough available slots! Maximum allowed is " + currentAvailableSlots + ".").show();
+          $("#confirmBookingBtn").prop('disabled', true);
+        } else {
+          $("#slotWarning").hide();
+          $("#confirmBookingBtn").prop('disabled', false);
+        }
+      }
+
+      // When "Confirm Booking" is clicked, show confirmation dialog
+      $("#confirmBookingBtn").click(function(){
+        var totalGuests = 1 + selectedCompanions.length;
+        
+        // Double check there are enough slots
+        if (totalGuests > currentAvailableSlots) {
+          $("#slotWarning").text("Not enough available slots! Maximum allowed is " + currentAvailableSlots + ".").show();
+          return;
+        }
+
+        // Show custom confirmation dialog
+        $("#confirmTotalGuests").text(totalGuests);
+        $("#confirmTotalPayment").text((totalGuests * currentPrice).toFixed(2));
+        
+        // Get user's profile picture if available
+        const userPicture = "{{ request.user.picture.url|default:'/static/images/default-profile.png' }}";
+        
+        // Populate selected companions list with pictures
+        let companionsListHtml = `
+          <li>
+            <img src="${userPicture}" class="selected-companion-pic">
+            <span>You ({{ request.user.first_name }} {{ request.user.last_name }})</span>
+          </li>
+        `;
+        
+        selectedCompanions.forEach(companion => {
+          companionsListHtml += `
+            <li>
+              <img src="${companion.picture}" class="selected-companion-pic">
+              <span>${companion.name}</span>
+              <span class="age-badge">${companion.age_label}</span>
+            </li>
+          `;
+        });
+        
+        $("#selectedCompanionsList").html(companionsListHtml);
+        
+        // Reset CAPTCHA if it exists
+        if (typeof grecaptcha !== 'undefined') {
+          grecaptcha.reset(recaptchaWidgetId);
+        }
+        $("#captchaError").hide();
+        captchaCompleted = false;
+        $("#yesButton").prop('disabled', true);
+        
+        $("#bookingModal").hide();
+        $("#confirmationDialog").show();
+      });
+      
+      // Handle view itinerary button click
+      $(".view-itinerary-btn").click(function() {
+        var schedId = $(this).data("sched-id");
+        var tourId = $(this).data("tour-id");
+        
+        // Show loading message
+        $("#itineraryContent").html("<p class='loading-message'>Loading itinerary...</p>");
+        
+        // Show the itinerary modal
+        $("#modalOverlay").show();
+        $("#itineraryModal").show();
+        
+        // Fetch itinerary from the server
+        $.ajax({
+          url: "/guest_app/get_tour_itinerary/",
+          type: "GET",
+          data: {
+            tour_id: tourId,
+            sched_id: schedId
+          },
+          success: function(response) {
+            if (response.success) {
+              // Populate the itinerary modal with data
+              $("#itineraryContent").html(response.itinerary_html);
+            } else {
+              $("#itineraryContent").html("<p>No itinerary available for this tour.</p>");
+            }
+          },
+          error: function() {
+            $("#itineraryContent").html("<p>Error loading itinerary. Please try again later.</p>");
+          }
+        });
+      });
+
+      // Close the booking modal when "Close" is clicked
+      $("#closeModal").click(function(){
+        $("#bookingModal").hide();
+        $("#modalOverlay").hide();
+      });
+
+      // Close the itinerary modal when "Close" is clicked
+      $("#closeItineraryModal").click(function(){
+        $("#itineraryModal").hide();
+        $("#modalOverlay").hide();
+      });
+
+      // Close the confirmation dialog when "No" is clicked
+      $("#noButton").click(function(){
+        $("#confirmationDialog").hide();
+        $("#modalOverlay").hide();
+        // Show the booking modal again
+        $("#bookingModal").show();
+      });
+      
+      // Handle Yes button in confirmation dialog
+      $("#yesButton").click(function() {
+        console.log("Yes button clicked, captchaCompleted:", captchaCompleted);
+        // Check if CAPTCHA is completed
+        if (!captchaCompleted) {
+          $("#captchaError").show();
+          return;
+        }
+        
+        // Show processing status
+        $(this).prop('disabled', true).text('Processing...');
+        $("#noButton").prop('disabled', true);
+        
+        // Hide the confirmation dialog
+        $("#confirmationDialog").hide();
+        $("#modalOverlay").hide();
+        
+        // Display booking pending message with loading indicator
+        $("#confirmMessage").html("<strong>⏳ Processing your booking...</strong> Please wait.")
+          .css({
+            "display": "block",
+            "background-color": "#e2f3f5",
+            "color": "#0a3d62",
+            "border": "1px solid #c7ecee",
+            "border-radius": "4px",
+            "padding": "15px",
+            "margin-top": "20px",
+            "text-align": "center",
+            "font-size": "16px"
+          });
+        
+        // Get the reCAPTCHA response
+        var captchaResponse = "";
+        try {
+          captchaResponse = grecaptcha.getResponse(recaptchaWidgetId);
+          console.log("reCAPTCHA response length:", captchaResponse.length);
+        } catch (e) {
+          console.error("Error getting reCAPTCHA response:", e);
+        }
+        
+        // Prepare selected companions data
+        const selectedCompanionIds = selectedCompanions.map(c => c.id);
+        
+        // Get CSRF token from the page meta tag
+        const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]').value;
+        
+        // Process the booking with CAPTCHA token
+        $.ajax({
+          url: "/guest_app/book_tour/",
+          type: "POST",
+          data: {
+            guest_id: "{{ request.user.guest_id }}",
+            sched_id: currentScheduleID,
+            price: currentPrice,
+            selected_companions: JSON.stringify(selectedCompanionIds),
+            total_guests: 1 + selectedCompanions.length,
+            tour_name: "{{ tour.tour_name }}",
+            g_recaptcha_response: captchaResponse,
+            csrfmiddlewaretoken: csrfToken
+          },
+          success: function(response){
+            $("#confirmMessage").html("<strong>✅ Booking request submitted!</strong> Your booking is pending admin approval. Check your email for details.")
+              .css({
+                "display": "block",
+                "background-color": "#d4edda",
+                "color": "#155724",
+                "border": "1px solid #c3e6cb",
+                "border-radius": "4px",
+                "padding": "15px",
+                "margin-top": "20px",
+                "text-align": "center",
+                "font-size": "16px"
+              });
+            
+            // Reload after a short delay to show the success message
+            setTimeout(function() {
+              location.reload();
+            }, 3000);
+          },
+          error: function(response){
+            let errorMsg = "An error occurred.";
+            if (response.responseJSON && response.responseJSON.error) {
+              errorMsg = response.responseJSON.error;
+            }
+            $("#confirmMessage").html(`<strong>❌ Error:</strong> ${errorMsg}`)
+              .css({
+                "display": "block",
+                "background-color": "#f8d7da",
+                "color": "#721c24",
+                "border": "1px solid #f5c6cb",
+                "border-radius": "4px",
+                "padding": "15px",
+                "margin-top": "20px",
+                "text-align": "center",
+                "font-size": "16px"
+              });
+            
+            // Re-enable confirmation dialog buttons
+            $("#yesButton").prop('disabled', false).text('Yes, Book Now');
+            $("#noButton").prop('disabled', false);
+          }
+        });
+      });
+
+      // Add refresh button functionality
+      $("#refreshCompanions").on("click", function() {
+        // Show loading state
+        $(this).addClass("loading");
+        $(this).html('<i class="fas fa-sync-alt"></i> Refreshing...');
+        
+        // Force clear the cache
+        sessionStorage.removeItem('userCompanions');
+        sessionStorage.removeItem('userCompanionsTimestamp');
+        
+        // Reset selections
+        selectedCompanions = [];
+        $("#companionList").empty();
+        $("#companionLoading").show();
+        
+        // Load fresh data
+        loadCompanions();
+        
+        // Return button to normal after a delay
+        setTimeout(() => {
+          $(this).removeClass("loading");
+          $(this).html('<i class="fas fa-sync-alt"></i> Refresh');
+        }, 1500);
+      });
+    });
+
+    // Function to update interface with translations
+    function updateInterfaceWithTranslations(translations) {
+      // Update the tour name and description
+      document.getElementById('tour-name').textContent = 
+        translations[`tour_${getUrlParameter('tour_id')}_name`] || document.getElementById('tour-name').textContent;
+        
+      document.getElementById('tour-description').textContent = 
+        translations[`tour_${getUrlParameter('tour_id')}_description`] || document.getElementById('tour-description').textContent;
+      
+      // Update labels - using proper formatting without underscores
+      document.querySelectorAll('.schedule-id-label').forEach(el => {
+        el.textContent = translations['schedule_id'] || 'Schedule ID:';
+      });
+      
+      document.querySelectorAll('.start-time-label').forEach(el => {
+        el.textContent = translations['start_time'] || 'Start Time:';
+      });
+      
+      document.querySelectorAll('.end-time-label').forEach(el => {
+        el.textContent = translations['end_time'] || 'End Time:';
+      });
+      
+      document.querySelectorAll('.price-label').forEach(el => {
+        el.textContent = translations['price'] || 'Price:';
+      });
+      
+      document.querySelectorAll('.available-slots-label').forEach(el => {
+        el.textContent = translations['available_slots'] || 'Available Slots:';
+      });
+      
+      document.querySelectorAll('.booked-slots-label').forEach(el => {
+        el.textContent = translations['booked_slots'] || 'Booked Slots:';
+      });
+      
+      // Update book button text
+      document.querySelectorAll('.book-btn-text').forEach(el => {
+        el.textContent = translations['book_this_schedule'] || 'Book This Schedule';
+      });
+      
+      // Update no slots message
+      document.querySelectorAll('.no-slots-text').forEach(el => {
+        el.textContent = translations['no_more_slots'] || 'No more available slots';
+      });
+      
+      // Update no schedules message
+      document.querySelectorAll('.no-schedules-message').forEach(el => {
+        el.textContent = translations['no_schedules'] || 'No schedules available for this tour.';
+      });
+      
+      // Update back button text
+      document.querySelectorAll('.back-button-text').forEach(el => {
+        el.textContent = translations['back_to_main'] || 'Back to Main Page';
+      });
+      
+      // Update booking modal text
+      document.getElementById('book-tour-title').textContent = translations['book_tour'] || 'Book Tour';
+      document.querySelector('.total-guests-label').textContent = translations['total'] + ' ' + translations['guests'] || 'Total Guests:';
+      document.querySelector('.total-payment-label').textContent = translations['total'] + ' ' + translations['payment'] || 'Total Payment:';
+      document.querySelector('.confirm-booking-btn').textContent = translations['confirm_booking'] || 'Confirm Booking';
+      document.querySelector('.close-modal-btn').textContent = translations['close'] || 'Close';
+      
+      // Update new button texts
+      document.querySelectorAll('.view-itinerary-btn').forEach(el => {
+        el.innerHTML = '<i class="fas fa-calendar-alt"></i> ' + (translations['view_itinerary'] || 'View Itinerary');
+      });
+      
+      // Update warning messages
+      const slotWarning = document.getElementById('slotWarning');
+      if (slotWarning) {
+        slotWarning.textContent = translations['not_enough_slots'] || 'Not enough available slots! Maximum allowed is ' + 
+          document.getElementById('maxSlots').textContent + '.';
+      }
+      
+      // Update any other UI elements as needed
+      // Make sure all the labels end with a colon (:)
+      document.querySelectorAll('.schedule-id-label, .start-time-label, .end-time-label, .price-label, .available-slots-label, .booked-slots-label').forEach(el => {
+        if (!el.textContent.endsWith(':')) {
+          el.textContent += ':';
+        }
+      });
+    }
+    
+    // Helper function to get URL parameters
+    function getUrlParameter(name) {
+      name = name.replace(/[\[]/, '\\[').replace(/[\]]/, '\\]');
+      const regex = new RegExp('[\\?&]' + name + '=([^&#]*)');
+      const results = regex.exec(location.search);
+      return results === null ? '' : decodeURIComponent(results[1].replace(/\+/g, ' '));
+    }
+    
+    // Initialize translations on page load
+    document.addEventListener('DOMContentLoaded', function() {
+      try {
+        // Get translations from the hidden element
+        const translationsElement = document.getElementById('translations-data');
+        if (translationsElement && translationsElement.textContent) {
+          const initialTranslations = JSON.parse(translationsElement.textContent);
+          // Apply initial translations
+          updateInterfaceWithTranslations(initialTranslations);
+        }
+      } catch (e) {
+        console.error('Error initializing translations:', e);
+      }
+    });
+  </script>
+</body>
+</html>

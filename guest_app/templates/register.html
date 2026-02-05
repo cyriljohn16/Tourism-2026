@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Registration</title>
+    <style>
+        body {
+            font-family: 'Arial', sans-serif;
+            background-color: #f5f5f5;
+            margin: 0;
+            padding: 20px 0;
+        }
+        .container {
+            background-color: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 0 15px rgba(0, 0, 0, 0.1);
+            width: 90%;
+            max-width: 600px;
+            margin: 0 auto;
+        }
+        h2 {
+            text-align: center;
+            color: #333;
+            margin-bottom: 25px;
+        }
+        .messages {
+            background-color: #ffebee;
+            color: #d32f2f;
+            padding: 10px;
+            border-radius: 5px;
+            margin-bottom: 15px;
+        }
+        .messages ul {
+            margin: 0;
+            padding-left: 20px;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        input, select {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        input[type="submit"] {
+            background-color: #4CAF50;
+            color: white;
+            padding: 12px;
+            border: none;
+            cursor: pointer;
+            font-size: 16px;
+            transition: background-color 0.3s;
+        }
+        input[type="submit"]:hover {
+            background-color: #45a049;
+        }
+        .form-error {
+            color: #d32f2f;
+            font-size: 0.9em;
+            margin-top: 3px;
+        }
+        .required::after {
+            content: " *";
+            color: #d32f2f;
+        }
+        .password-strength {
+            margin-top: 5px;
+            font-size: 0.9em;
+        }
+        a {
+            color: #2196F3;
+            text-decoration: none;
+        }
+        a:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <h2>Registration Form</h2>
+
+        {% if messages %}
+            <div class="messages">
+                <ul>
+                    {% for message in messages %}
+                        <li>{{ message }}</li>
+                    {% endfor %}
+                </ul>
+            </div>
+        {% endif %}
+
+        <form method="POST" action="{% url 'register' %}" enctype="multipart/form-data" id="registration-form">
+            {% csrf_token %}
+
+            <div class="form-group">
+                <label for="first_name" class="required">First Name</label>
+                <input type="text" id="first_name" name="first_name" value="{{ request.POST.first_name }}" required>
+                {% if form.first_name.errors %}
+                    <div class="form-error">{{ form.first_name.errors.0 }}</div>
+                {% endif %}
+            </div>
+
+            <div class="form-group">
+                <label for="middle_initial">Middle Initial</label>
+                <input type="text" id="middle_initial" name="middle_initial" value="{{ request.POST.middle_initial }}" maxlength="1">
+                {% if form.middle_initial.errors %}
+                    <div class="form-error">{{ form.middle_initial.errors.0 }}</div>
+                {% endif %}
+            </div>
+
+            <div class="form-group">
+                <label for="last_name" class="required">Last Name</label>
+                <input type="text" id="last_name" name="last_name" value="{{ request.POST.last_name }}" required>
+                {% if form.last_name.errors %}
+                    <div class="form-error">{{ form.last_name.errors.0 }}</div>
+                {% endif %}
+            </div>
+
+            <div class="form-group">
+                <label for="username" class="required">Username</label>
+                <input type="text" id="username" name="username" value="{{ request.POST.username }}" required>
+                <div id="username-error" class="form-error"></div>
+                {% if form.username.errors %}
+                    <div class="form-error">{{ form.username.errors.0 }}</div>
+                {% endif %}
+            </div>
+
+            <div class="form-group">
+                <label for="age" class="required">Age</label>
+                <input type="number" id="age" name="age" value="{{ request.POST.age }}" min="18" required>
+                {% if form.age.errors %}
+                    <div class="form-error">{{ form.age.errors.0 }}</div>
+                {% endif %}
+            </div>
+
+            <div class="form-group">
+                <label for="country_of_origin" class="required">Country of Origin</label>
+                <input type="text" id="country_of_origin" name="country_of_origin" value="{{ request.POST.country_of_origin }}" required>
+                {% if form.country_of_origin.errors %}
+                    <div class="form-error">{{ form.country_of_origin.errors.0 }}</div>
+                {% endif %}
+            </div>
+
+            <div class="form-group">
+                <label for="city" class="required">City</label>
+                <input type="text" id="city" name="city" value="{{ request.POST.city }}" required>
+                {% if form.city.errors %}
+                    <div class="form-error">{{ form.city.errors.0 }}</div>
+                {% endif %}
+            </div>
+
+            <div class="form-group">
+                <label for="phone_number" class="required">Phone Number</label>
+                <input type="tel" id="phone_number" name="phone_number" value="{{ request.POST.phone_number }}" placeholder="e.g., +1-123-456-7890" required>
+                <div id="phone-error" class="form-error"></div>
+                {% if form.phone_number.errors %}
+                    <div class="form-error">{{ form.phone_number.errors.0 }}</div>
+                {% endif %}
+            </div>
+
+            <div class="form-group">
+                <label for="email" class="required">Email Address</label>
+                <input type="email" id="email" name="email" value="{{ request.POST.email }}" required>
+                <div id="email-error" class="form-error"></div>
+                {% if form.email.errors %}
+                    <div class="form-error">{{ form.email.errors.0 }}</div>
+                {% endif %}
+            </div>
+
+            <div class="form-group">
+                <label for="company_name">Company Name (Optional)</label>
+                <input type="text" id="company_name" name="company_name" value="{{ request.POST.company_name }}">
+                {% if form.company_name.errors %}
+                    <div class="form-error">{{ form.company_name.errors.0 }}</div>
+                {% endif %}
+            </div>
+
+            <div class="form-group">
+                <label for="sex" class="required">Sex</label>
+                <select id="sex" name="sex" required>
+                    <option value="">-- Select --</option>
+                    <option value="M" {% if request.POST.sex == 'M' %}selected{% endif %}>Male</option>
+                    <option value="F" {% if request.POST.sex == 'F' %}selected{% endif %}>Female</option>
+                </select>
+                {% if form.sex.errors %}
+                    <div class="form-error">{{ form.sex.errors.0 }}</div>
+                {% endif %}
+            </div>
+
+            <div class="form-group">
+                <label for="profile_picture" class="required">Profile Picture</label>
+                <input type="file" id="profile_picture" name="profile_picture" accept="image/*" required>
+                <div id="file-error" class="form-error"></div>
+                {% if form.profile_picture.errors %}
+                    <div class="form-error">{{ form.profile_picture.errors.0 }}</div>
+                {% endif %}
+            </div>
+
+            <div class="form-group">
+                <label for="password" class="required">Password</label>
+                <input type="password" id="password" name="password" required>
+                <div class="password-strength">
+                    Enter a password you'll remember.
+                </div>
+                <div id="password-error" class="form-error"></div>
+                {% if form.password.errors %}
+                    <div class="form-error">{{ form.password.errors.0 }}</div>
+                {% endif %}
+            </div>
+
+            <div class="form-group">
+                <label for="confirm_password" class="required">Confirm Password</label>
+                <input type="password" id="confirm_password" name="confirm_password" required>
+                <div id="confirm-password-error" class="form-error"></div>
+                {% if form.confirm_password.errors %}
+                    <div class="form-error">{{ form.confirm_password.errors.0 }}</div>
+                {% endif %}
+            </div>
+
+            <div class="form-group">
+                <input type="submit" value="Register">
+            </div>
+        </form>
+
+        <div class="form-group">
+            <p>Already have an account? <a href="{% url 'login' %}">Log in here</a></p>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const form = document.getElementById('registration-form');
+            
+            form.addEventListener('submit', function(event) {
+                let isValid = true;
+                
+                // Password validation (simplified)
+                const password = document.getElementById('password').value;
+                const confirmPassword = document.getElementById('confirm_password').value;
+                const passwordError = document.getElementById('password-error');
+                const confirmPasswordError = document.getElementById('confirm-password-error');
+                
+                // Check if password is empty
+                if (password.trim() === '') {
+                    passwordError.textContent = 'Please enter a password.';
+                    isValid = false;
+                } else {
+                    passwordError.textContent = '';
+                }
+                
+                // Check if passwords match
+                if (password !== confirmPassword) {
+                    confirmPasswordError.textContent = 'Passwords do not match.';
+                    isValid = false;
+                } else {
+                    confirmPasswordError.textContent = '';
+                }
+                
+                // Email validation
+                const email = document.getElementById('email').value;
+                const emailError = document.getElementById('email-error');
+                const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+                if (!emailRegex.test(email)) {
+                    emailError.textContent = 'Please enter a valid email address.';
+                    isValid = false;
+                } else {
+                    emailError.textContent = '';
+                }
+                
+                // Phone validation
+                const phone = document.getElementById('phone_number').value;
+                const phoneError = document.getElementById('phone-error');
+                const phoneRegex = /^[+]?[(]?[0-9]{1,4}[)]?[-\s.]?[0-9]{1,3}[-\s.]?[0-9]{1,4}[-\s.]?[0-9]{1,4}$/;
+                if (!phoneRegex.test(phone)) {
+                    phoneError.textContent = 'Please enter a valid phone number.';
+                    isValid = false;
+                } else {
+                    phoneError.textContent = '';
+                }
+                
+                // Profile picture validation
+                const profilePicture = document.getElementById('profile_picture');
+                const fileError = document.getElementById('file-error');
+                
+                if (profilePicture.files.length > 0) {
+                    const file = profilePicture.files[0];
+                    if (!file.type.startsWith('image/')) {
+                        fileError.textContent = 'Please upload an image file.';
+                        isValid = false;
+                    } else if (file.size > 5 * 1024 * 1024) { // 5MB limit
+                        fileError.textContent = 'File size should be less than 5MB.';
+                        isValid = false;
+                    } else {
+                        fileError.textContent = '';
+                    }
+                }
+                
+                if (!isValid) {
+                    event.preventDefault();
+                }
+            });
+        });
+    </script>
+</body>
+</html>

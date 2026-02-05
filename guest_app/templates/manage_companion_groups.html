@@ -1,0 +1,465 @@
+<!DOCTYPE html>
+{% load companion_filters %}
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Manage Companion Groups - IBAYAW Tours</title>
+    <link rel="stylesheet" href="/static/css/styles.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
+    <style>
+        .container {
+            max-width: 1200px;
+            margin: 100px auto 50px;
+            padding: 20px;
+            background-color: #fff;
+            border-radius: 8px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+        }
+        
+        h1, h2 {
+            color: #4a6741;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        
+        .instructions {
+            background-color: #f9f9f9;
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+        }
+        
+        .back-button {
+            display: inline-block;
+            margin-top: 20px;
+            padding: 10px 15px;
+            background-color: #4a6741;
+            color: white;
+            text-decoration: none;
+            border-radius: 5px;
+            transition: background-color 0.3s;
+        }
+        
+        .back-button:hover {
+            background-color: #3c5435;
+        }
+        
+        .group-panel {
+            display: flex;
+            margin-bottom: 30px;
+        }
+        
+        .group-list {
+            flex: 1;
+            padding-right: 20px;
+        }
+        
+        .group-form {
+            flex: 1;
+            background-color: #f9f9f9;
+            padding: 20px;
+            border-radius: 5px;
+        }
+        
+        .group-card {
+            border: 1px solid #e0e0e0;
+            border-radius: 5px;
+            padding: 15px;
+            margin-bottom: 15px;
+            background-color: #fcfcfc;
+            transition: transform 0.2s;
+        }
+        
+        .group-card:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+        }
+        
+        .group-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+        
+        .group-name {
+            font-size: 1.2rem;
+            font-weight: bold;
+            color: #4a6741;
+        }
+        
+        .group-count {
+            background-color: #4a6741;
+            color: white;
+            padding: 3px 8px;
+            border-radius: 12px;
+            font-size: 0.9rem;
+        }
+        
+        .group-description {
+            color: #666;
+            margin-bottom: 10px;
+        }
+        
+        .group-actions {
+            display: flex;
+            gap: 10px;
+            justify-content: flex-end;
+        }
+        
+        .action-button {
+            padding: 5px 10px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            transition: background-color 0.3s;
+        }
+        
+        .edit-button {
+            background-color: #4a6741;
+            color: white;
+        }
+        
+        .edit-button:hover {
+            background-color: #3c5435;
+        }
+        
+        .delete-button {
+            background-color: #e74c3c;
+            color: white;
+        }
+        
+        .delete-button:hover {
+            background-color: #c0392b;
+        }
+        
+        .form-group {
+            margin-bottom: 15px;
+        }
+        
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+            color: #333;
+        }
+        
+        .form-control {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 16px;
+        }
+        
+        .submit-button {
+            background-color: #4a6741;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: background-color 0.3s;
+            width: 100%;
+        }
+        
+        .submit-button:hover {
+            background-color: #3c5435;
+        }
+        
+        /* Messages styles */
+        .messages {
+            margin-bottom: 20px;
+            padding: 0;
+            list-style: none;
+        }
+        
+        .message {
+            padding: 10px 15px;
+            margin-bottom: 10px;
+            border-radius: 5px;
+        }
+        
+        .success {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        
+        .error {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        
+        .no-groups {
+            text-align: center;
+            padding: 40px;
+            background-color: #f9f9f9;
+            border-radius: 5px;
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+    <!-- Navigation Bar -->
+    <nav class="navbar">
+        <!-- Logo -->
+        <div class="logo">
+            <a href="{% url 'main-page' %}">
+                <img src="/static/images/logo-name.png" alt="IBAYAW Tours">
+            </a>
+        </div>
+        
+        <!-- Navigation links -->
+        <div class="nav-links">
+            <a href="{% url 'main-page' %}" class="nav-link">Home</a>
+            <a href="#about" class="nav-link">About</a>
+            <a href="{% url 'map' %}" class="nav-link">Map</a>
+            <a href="#contact" class="nav-link">Contact</a>
+        </div>
+        
+        <!-- User profile -->
+        {% if user.is_authenticated %}
+            <div class="user-profile-nav">
+                <div class="user-info" onclick="toggleUserMenu()">
+                    {% if user.picture %}
+                        <img src="{{ user.picture.url }}" alt="Profile" class="nav-profile-pic">
+                    {% else %}
+                        <img src="/static/images/default-profile.png" alt="Profile" class="nav-profile-pic">
+                    {% endif %}
+                    <span class="user-name">{{ user.first_name }}</span>
+                    <i class="fas fa-angle-down"></i>
+                </div>
+                <div class="user-dropdown" id="userDropdown">
+                    <a href="#" onclick="alert('Profile feature coming soon!'); return false;"><i class="fas fa-user"></i> My Profile</a>
+                    <div class="dropdown-divider"></div>
+                    <div class="settings-item">
+                        <a href="#" id="update-profile-link"><i class="fas fa-user-edit"></i> Update Profile</a>
+                    </div>
+                    <div class="dropdown-divider"></div>
+                    <a href="{% url 'companion' %}"><i class="fas fa-users"></i> Add Companion</a>
+                    <div class="dropdown-divider"></div>
+                    <a href="#" onclick="logoutUser()"><i class="fas fa-sign-out-alt"></i> Logout</a>
+                </div>
+            </div>
+        {% else %}
+            <button class="login-btn" onclick="loginUser()">
+                <span class="login-text">Login</span> <i class="fas fa-user-circle"></i>
+            </button>
+        {% endif %}
+    </nav>
+
+    <!-- Main Content -->
+    <div class="container">
+        <h1>Manage Companion Groups</h1>
+        
+        <div class="instructions">
+            <p>Create and manage groups to organize your companions. Groups make it easier to find and manage companions for different purposes or relationships.</p>
+        </div>
+        
+        <!-- Display Django messages -->
+        {% if messages %}
+        <ul class="messages">
+            {% for message in messages %}
+            <li class="message {% if message.tags %}{{ message.tags }}{% endif %}">{{ message }}</li>
+            {% endfor %}
+        </ul>
+        {% endif %}
+        
+        <!-- Group Management Panel -->
+        <div class="group-panel">
+            <!-- Group List Section -->
+            <div class="group-list">
+                <h2>Your Groups</h2>
+                
+                {% if groups %}
+                    {% for group in groups %}
+                        <div class="group-card" id="group-{{ group.id }}">
+                            <div class="group-header">
+                                <div class="group-name">{{ group.name }}</div>
+                                <div class="group-count">{{ companions_count|get_item:group.id }} companions</div>
+                            </div>
+                            <div class="group-description">{{ group.description|default:"No description" }}</div>
+                            <div class="group-actions">
+                                <button class="action-button edit-button" onclick="editGroup('{{ group.id }}', '{{ group.name }}', '{{ group.description|default:'' }}');"><i class="fas fa-edit"></i> Edit</button>
+                                <button class="action-button delete-button" onclick="confirmDeleteGroup('{{ group.id }}', '{{ group.name }}');"><i class="fas fa-trash-alt"></i> Delete</button>
+                            </div>
+                        </div>
+                    {% endfor %}
+                {% else %}
+                    <div class="no-groups">
+                        <i class="fas fa-layer-group fa-3x" style="color: #4a6741; margin-bottom: 20px;"></i>
+                        <h3>No groups created yet</h3>
+                        <p>Create your first group using the form on the right.</p>
+                    </div>
+                {% endif %}
+            </div>
+            
+            <!-- Group Form Section -->
+            <div class="group-form">
+                <h2 id="form-title">Create New Group</h2>
+                <form method="post" id="groupForm">
+                    {% csrf_token %}
+                    
+                    <input type="hidden" name="create_group" value="1" id="formAction">
+                    <input type="hidden" name="group_id" id="groupId">
+                    
+                    <div class="form-group">
+                        <label for="group_name">Group Name*</label>
+                        <input type="text" name="group_name" id="group_name" class="form-control" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="group_description">Description (Optional)</label>
+                        <textarea name="group_description" id="group_description" class="form-control" rows="3"></textarea>
+                    </div>
+                    
+                    <button type="submit" class="submit-button" id="submitButton">Create Group</button>
+                </form>
+            </div>
+        </div>
+        
+        <div style="text-align: center; margin-top: 20px;">
+            <a href="{% url 'companion' %}" class="back-button">
+                <i class="fas fa-arrow-left"></i> Back to Companions
+            </a>
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="footer-content">
+            <div class="footer-logo">
+                <img src="/static/images/logo.png" alt="IBAYAW Tours Logo">
+                <div class="footer-title">IBAYAW TOURS</div>
+            </div>
+            <div class="footer-links">
+                <h3>Quick Links</h3>
+                <a href="{% url 'main-page' %}">Home</a>
+                <a href="#about">About</a>
+                <a href="{% url 'map' %}">Map</a>
+                <a href="#contact">Contact</a>
+            </div>
+            <div class="footer-contact">
+                <h3>Contact Us</h3>
+                <p><i class="fas fa-map-marker-alt"></i> Bayawan City, Negros Oriental</p>
+                <p><i class="fas fa-phone"></i> +63 9123456789</p>
+                <p><i class="fas fa-envelope"></i> info@ibayawtours.com</p>
+            </div>
+        </div>
+        <div class="footer-bottom">
+            <p>&copy; 2023 IBAYAW Tours. All rights reserved.</p>
+        </div>
+    </footer>
+
+    <script>
+        // Function to toggle user dropdown menu
+        function toggleUserMenu() {
+            const dropdown = document.getElementById('userDropdown');
+            dropdown.style.display = dropdown.style.display === 'block' ? 'none' : 'block';
+        }
+        
+        // Function to handle logout
+        function logoutUser() {
+            if (confirm('Are you sure you want to logout?')) {
+                window.location.href = "{% url 'logout' %}";
+            }
+        }
+        
+        // Function to edit a group
+        function editGroup(id, name, description) {
+            document.getElementById('form-title').textContent = 'Edit Group';
+            document.getElementById('formAction').name = 'edit_group';
+            document.getElementById('groupId').value = id;
+            document.getElementById('group_name').value = name;
+            document.getElementById('group_description').value = description;
+            document.getElementById('submitButton').textContent = 'Update Group';
+            
+            // Show cancel button when editing
+            if (!document.querySelector('.cancel-button')) {
+                const cancelButton = document.createElement('button');
+                cancelButton.type = 'button';
+                cancelButton.className = 'back-button cancel-button';
+                cancelButton.style.marginTop = '10px';
+                cancelButton.style.width = '100%';
+                cancelButton.textContent = 'Cancel';
+                cancelButton.onclick = resetForm;
+                
+                const submitButton = document.getElementById('submitButton');
+                submitButton.parentNode.insertBefore(cancelButton, submitButton.nextSibling);
+            }
+            
+            // Scroll to form
+            document.querySelector('.group-form').scrollIntoView({ behavior: 'smooth' });
+        }
+        
+        // Function to reset the form to create mode
+        function resetForm() {
+            document.getElementById('form-title').textContent = 'Create New Group';
+            document.getElementById('formAction').name = 'create_group';
+            document.getElementById('formAction').value = '1';
+            document.getElementById('groupId').value = '';
+            document.getElementById('group_name').value = '';
+            document.getElementById('group_description').value = '';
+            document.getElementById('submitButton').textContent = 'Create Group';
+            
+            // Remove cancel button
+            const cancelButton = document.querySelector('.cancel-button');
+            if (cancelButton) {
+                cancelButton.remove();
+            }
+        }
+        
+        // Function to confirm group deletion
+        function confirmDeleteGroup(id, name) {
+            if (confirm(`Are you sure you want to delete the group "${name}"? This will NOT delete the companions in this group, but they will no longer be grouped together.`)) {
+                // Create and submit a form to delete the group
+                const form = document.createElement('form');
+                form.method = 'POST';
+                form.action = "{% url 'manage_companion_groups' %}";
+                form.style.display = 'none';
+                
+                const csrfInput = document.createElement('input');
+                csrfInput.type = 'hidden';
+                csrfInput.name = 'csrfmiddlewaretoken';
+                csrfInput.value = document.querySelector('[name=csrfmiddlewaretoken]').value;
+                form.appendChild(csrfInput);
+                
+                const actionInput = document.createElement('input');
+                actionInput.type = 'hidden';
+                actionInput.name = 'delete_group';
+                actionInput.value = '1';
+                form.appendChild(actionInput);
+                
+                const groupIdInput = document.createElement('input');
+                groupIdInput.type = 'hidden';
+                groupIdInput.name = 'group_id';
+                groupIdInput.value = id;
+                form.appendChild(groupIdInput);
+                
+                document.body.appendChild(form);
+                form.submit();
+            }
+        }
+        
+        // Initialize the form
+        document.addEventListener('DOMContentLoaded', function() {
+            // Add event listener for form submission
+            const groupForm = document.getElementById('groupForm');
+            groupForm.addEventListener('submit', function(e) {
+                const groupName = document.getElementById('group_name').value.trim();
+                if (!groupName) {
+                    e.preventDefault();
+                    alert('Please enter a group name');
+                    return false;
+                }
+                return true;
+            });
+        });
+    </script>
+</body>
+</html> 

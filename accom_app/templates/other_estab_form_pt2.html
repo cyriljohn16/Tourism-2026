@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Hotel Additional Information</title>
+    <style>
+        /* Basic Styles matching other_estab_form.html */
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f1f1f1;
+            margin: 0;
+            padding: 20px;
+        }
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+            background: #fff;
+            padding: 20px;
+            border-radius: 8px;
+        }
+        .entry {
+            margin-bottom: 15px;
+        }
+        .entry label {
+            display: block;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+        .entry input[type="text"],
+        .entry textarea {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+        .submit-btn {
+            display: block;
+            padding: 12px 20px;
+            font-size: 16px;
+            background: #4CAF50;
+            color: #fff;
+            border: none;
+            border-radius: 6px;
+            margin: 20px auto 0;
+            cursor: pointer;
+        }
+        .submit-btn:hover {
+            background: #45a049;
+        }
+        .summary {
+            margin-top: 40px;
+        }
+        .summary table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        .summary th, .summary td {
+            border: 1px solid #ccc;
+            padding: 8px;
+            text-align: center;
+        }
+        .summary th {
+            background: #f8f8f8;
+        }
+        .summary ul {
+            list-style: none;
+            padding: 0;
+        }
+        .summary li {
+            margin: 5px 0;
+        }
+        /* Simple styling for the filter form */
+        #summary_filter_form {
+            margin-bottom: 20px;
+        }
+        #summary_filter_form label {
+            font-weight: bold;
+            margin-right: 10px;
+        }
+        #summary_filter_form select {
+            padding: 5px;
+            border-radius: 4px;
+            border: 1px solid #ccc;
+        }
+        #summary_filter_form button {
+            padding: 5px 10px;
+            margin-left: 10px;
+            border: none;
+            border-radius: 4px;
+            background: #007BFF;
+            color: white;
+            cursor: pointer;
+        }
+        #summary_filter_form button:hover {
+            background: #0056b3;
+        }
+        .scrollable-table {
+            max-height: 300px;
+            overflow-y: auto;
+            border: 1px solid #ccc;
+            margin-top: 20px;
+        }
+        .scrollable-table table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        .scrollable-table th, .scrollable-table td {
+            padding: 8px;
+            text-align: center;
+            border: 1px solid #ccc;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Hotel Additional Information</h1>
+        <form action="{% url 'accom_app:other_estab_create' %}" method="post">
+            {% csrf_token %}
+            <!-- Hidden Month Field auto filled from other_estab_form.html -->
+            <input type="hidden" name="month" id="month_hidden" value="">
+            {% for entry in entries %}
+                {% if entry.is_hotel %}
+                    <div class="entry">
+                        <label for="entry-{{ entry.id }}">{{ entry.title }}</label>
+                        <input type="text" id="entry-{{ entry.id }}" name="entry_{{ entry.id }}" placeholder="Enter details for {{ entry.title }}">
+                    </div>
+                {% endif %}
+            {% endfor %}
+            <button type="button" class="submit-btn" onclick="window.location.href='/accom_app/other-estab/create/'">Back</button>
+            <button type="submit" class="submit-btn">Submit</button>
+        </form>
+
+        <!-- Room Guest Add Summary Section -->
+        {% if roomguestadds %}
+        <div class="summary">
+            <h2>Room Guest Summary for {{ selected_month }}</h2>
+            <div class="scrollable-table">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Room ID</th>
+                            <th>Room Name</th>
+                            <th>Checked In</th>
+                            <th>Checked Out</th>
+                            <th>No. of Nights</th>
+                            <th>No. of Guests</th>
+                            <th>Total Guest Nights</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for record in roomguestadds %}
+                        <tr>
+                            <td>{{ record.room_id.room_id }}</td>
+                            <td>{{ record.room_id.room_name }}</td>
+                            <td>{{ record.checked_in }}</td>
+                            <td>{{ record.checked_out }}</td>
+                            <td>{{ record.no_of_nights }}</td>
+                            <td>{{ record.num_guests }}</td>
+                            <td>
+                                {% widthratio record.no_of_nights 1 record.num_guests as guest_nights %}
+                                {{ guest_nights }}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+
+            <h3>Aggregated Guest Metrics</h3>
+            <div class="scrollable-table">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Total Bookings</th>
+                            <th>Total Nights</th>
+                            <th>Total Number of Guests</th>
+                            <th>Total Guest Nights</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>{{ roomguestadds|length }}</td>
+                            <td>{{ total_nights }}</td>
+                            <td>{{ total_checkin }}</td>
+                            <td>{{ total_guest_night }}</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <h3>Aggregated Results</h3>
+            <ul>
+                <li>Total Guest Nights: {{ total_guest_night }} </li>
+                <li>Total Check-ins: {{ total_checkin }} </li>
+                <li>Total Rooms Occupied: {{ total_rooms }} </li>
+            </ul>
+        </div>
+        {% else %}
+        <p>No room guest records found for {{ selected_month }}.</p>
+        {% endif %}
+
+        <!-- Accom App Summary Section with Month Filter -->
+        <div class="summary">
+            <h2>Accom App Summary for {{ filter_month }}</h2>
+            <form method="get" id="summary_filter_form" action="">
+                <label for="summary_filter_month">Filter by Month:</label>
+                <select id="summary_filter_month" name="filter_month">
+                    <option value="January" {% if filter_month == "January" %}selected{% endif %}>January</option>
+                    <option value="February" {% if filter_month == "February" %}selected{% endif %}>February</option>
+                    <option value="March" {% if filter_month == "March" %}selected{% endif %}>March</option>
+                    <option value="April" {% if filter_month == "April" %}selected{% endif %}>April</option>
+                    <option value="May" {% if filter_month == "May" %}selected{% endif %}>May</option>
+                    <option value="June" {% if filter_month == "June" %}selected{% endif %}>June</option>
+                    <option value="July" {% if filter_month == "July" %}selected{% endif %}>July</option>
+                    <option value="August" {% if filter_month == "August" %}selected{% endif %}>August</option>
+                    <option value="September" {% if filter_month == "September" %}selected{% endif %}>September</option>
+                    <option value="October" {% if filter_month == "October" %}selected{% endif %}>October</option>
+                    <option value="November" {% if filter_month == "November" %}selected{% endif %}>November</option>
+                    <option value="December" {% if filter_month == "December" %}selected{% endif %}>December</option>
+                </select>
+                <button type="submit">Filter</button>
+            </form>
+            {% if summary_data %}
+            <div class="scrollable-table">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Accom ID</th>
+                            <th>Month Submitted</th>
+                            <th>Month Actual</th>
+                            <th>Country</th>
+                            <th>Region</th>
+                            <th>Overall Total</th>
+                            <th>Guest Number</th>
+                            <th>Sub Total</th>
+                            <th>Entry</th>
+                            <th>Hotel</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for summary in summary_data %}
+                        <tr>
+                            <td>{{ summary.accom_id }}</td>
+                            <td>{{ summary.month_submitted }}</td>
+                            <td>{{ summary.month_actual }}</td>
+                            <td>{{ summary.country_id }}</td>
+                            <td>{{ summary.region_id }}</td>
+                            <td>{{ summary.overall_total }}</td>
+                            <td>{{ summary.guest_num }}</td>
+                            <td>{{ summary.sub_total }}</td>
+                            <td>{{ summary.entry_id }}</td>
+                            <td>{{ summary.hotel }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <p>No summary records found for the selected month {{ filter_month }}.</p>
+            {% endif %}
+        </div>
+
+        <!-- Aggregated Accom App Summary Data -->
+        <div class="summary">
+            <h2>Aggregated Accom App Summary Data for {{ filter_month }}</h2>
+            <div class="scrollable-table">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Total Overall Total</th>
+                            <th>Total Guest Number</th>
+                            <th>Total Sub Total</th>
+                            <th>Total Records</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>{{ total_overall_total }}</td>
+                            <td>{{ total_guest_num_summary }}</td>
+                            <td>{{ total_sub_total }}</td>
+                            <td>{{ summary_count }}</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            var monthField = document.getElementById('month_hidden');
+            // Retrieve the selected month from localStorage (ensure other_estab_form.html sets this value)
+            if (localStorage.getItem('selectedMonth')) {
+                monthField.value = localStorage.getItem('selectedMonth');
+            } else {
+                // Fallback default value (adjust if needed)
+                monthField.value = 'January';
+            }
+        });
+    </script>
+</body>
+</html>

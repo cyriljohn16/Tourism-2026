@@ -1,0 +1,634 @@
+<!DOCTYPE html>
+{% load static %}
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Establishment Summary Form Details</title>
+    <link rel="stylesheet" href="{% static 'css/navigation.css' %}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        :root {
+            /* Brand Colors */
+            --primary-color: #875a34;    /* Main brand color */
+            --primary-light: #e99c59;   /* Lighter version for accents */
+            --primary-dark: #6d4827;    /* Darker version for hover states */
+            --secondary-color: #8c6e5d; /* Secondary brand color */
+            
+            /* Status Colors */
+            --success-color: #34a853;   /* Green for success states */
+            --warning-color: #fbbc05;   /* Yellow for warnings */
+            --error-color: #ea4335;     /* Red for errors */
+            --info-color: #4285f4;      /* Blue for information */
+            
+            /* Neutral Colors */
+            --bg-color: #f4f7fc;        /* Light background */
+            --text-dark: #333;          /* Dark text */
+            --text-medium: #666;        /* Medium text */
+            --text-light: #9e9e9e;      /* Light text */
+            --white: #fff;              /* White */
+        }
+
+        /* Basic Styles */
+        body {
+            font-family: 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background-color: var(--bg-color);
+            margin: 0;
+            padding: 0;
+            color: var(--text-dark);
+            line-height: 1.5;
+        }
+        .dashboard-container {
+            display: flex;
+            min-height: 100vh;
+        }
+        .content {
+            flex: 1;
+            padding: 32px;
+            box-sizing: border-box;
+        }
+        .container {
+            max-width: 900px;
+            margin: 20px auto;
+            padding: 30px;
+            background-color: var(--white);
+            border: 1px solid #ddd;
+            border-radius: 10px;
+            box-shadow: 0px 4px 10px rgba(0, 0, 0, 0.1);
+        }
+        h1, h2 {
+            text-align: center;
+            color: var(--text-dark);
+            margin-bottom: 20px;
+        }
+        .box {
+            background-color: var(--white);
+            margin: 12px 0;
+            padding: 16px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+            border-left: 4px solid var(--primary-color);
+            transition: all 0.2s ease;
+        }
+        .box:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        }
+        .box strong {
+            font-size: 18px;
+            color: var(--text-dark);
+        }
+        .icon-btn {
+            background: none;
+            border: none;
+            cursor: pointer;
+            font-size: 18px;
+            width: 36px;
+            height: 36px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 50%;
+            transition: all 0.2s ease;
+            margin: 0 4px;
+        }
+        .edit-icon {
+            color: var(--warning-color);
+        }
+        .edit-icon:hover {
+            background-color: rgba(251, 188, 5, 0.1);
+        }
+        .delete-icon {
+            color: var(--error-color);
+        }
+        .delete-icon:hover {
+            background-color: rgba(234, 67, 53, 0.1);
+        }
+        .add-icon {
+            color: var(--success-color);
+        }
+        .add-icon:hover {
+            background-color: rgba(52, 168, 83, 0.1);
+        }
+        .action-area {
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            min-width: 120px;
+            margin-left: auto;
+        }
+        .add-btn {
+            background-color: var(--primary-color);
+            color: white;
+            border: none;
+            border-radius: 30px;
+            padding: 8px 16px;
+            font-size: 14px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+            margin: 16px auto;
+        }
+        .add-btn:hover {
+            background-color: var(--primary-dark);
+        }
+        ul {
+            list-style-type: none;
+            padding: 0;
+            width: 100%;
+        }
+        li {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px 12px;
+            margin: 6px 0;
+            background-color: var(--bg-color);
+            border-radius: 6px;
+        }
+        li span {
+            flex: 1;
+        }
+
+        /* Highlight when marked as Hotel */
+        .highlight-hotel {
+            background-color: rgba(52, 168, 83, 0.1);
+            border-left: 4px solid var(--success-color);
+        }
+        
+        .countries-container {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            flex-wrap: wrap;
+        }
+        .countries-list {
+            flex: 1;
+            margin-right: 16px;
+        }
+        .countries-container .add-btn {
+            align-self: flex-end;
+            margin: 8px 0;
+            margin-left: auto;
+        }
+        .hotel-toggle {
+            background-color: transparent;
+            border: 1px solid var(--success-color);
+            color: var(--success-color);
+            padding: 6px 12px;
+            border-radius: 30px;
+            font-size: 12px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        .hotel-toggle:hover {
+            background-color: rgba(52, 168, 83, 0.1);
+        }
+        .unhighlight-hotel {
+            background-color: transparent;
+            border: 1px solid var(--text-light);
+            color: var(--text-light);
+        }
+        .unhighlight-hotel:hover {
+            background-color: rgba(158, 158, 158, 0.1);
+        }
+    </style>
+    <!-- Include jQuery -->
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+</head>
+<body>
+    <div class="dashboard-container">
+        <!-- Change from navigation to sidebar for consistency with CSS -->
+        <div class="navigation">
+            {% if request.session.is_admin %}
+                {% include 'components/navigation.html' %}
+            {% else %}
+                {% include 'components/navigation.html' %}
+            {% endif %}
+        </div>
+        
+        <div class="content">
+            <div class="container">
+                <h1>Establishment Summary</h1>
+                
+                <!-- Regions and Countries Section -->
+                <div id="regions-section">
+                    <h2>Regions and Countries</h2>
+                    <div id="regions">
+                        {% for region in regions %}
+                        <div class="box" id="region-{{ region.id }}">
+                            <strong>{{ region.name }}</strong>
+                            <div class="action-area">
+                                <button type="button" class="icon-btn edit-icon" onclick="editRegion('{{ region.id }}')">
+                                    <i class="fas fa-edit"></i>
+                                </button>
+                                <button type="button" class="icon-btn delete-icon" onclick="deleteRegion('{{ region.id }}')">
+                                    <i class="fas fa-trash-alt"></i>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="box">
+                            <div class="countries-container">
+                                <div class="countries-list">
+                                    <span>Countries:</span>
+                                    <ul id="countries-{{ region.id }}">
+                                        {% for country in countries %}
+                                            {% if country.region.id == region.id %}
+                                            <li id="country-{{ country.id }}">
+                                                <span>{{ country.name }}</span>
+                                                <div class="action-area">
+                                                    <button type="button" class="icon-btn edit-icon" onclick="editCountry('{{ country.id }}')">
+                                                        <i class="fas fa-edit"></i>
+                                                    </button>
+                                                    <button type="button" class="icon-btn delete-icon" onclick="deleteCountry('{{ country.id }}')">
+                                                        <i class="fas fa-trash-alt"></i>
+                                                    </button>
+                                                </div>
+                                            </li>
+                                            {% endif %}
+                                        {% endfor %}
+                                    </ul>
+                                </div>
+                                <button type="button" class="add-btn" onclick="addCountry('{{ region.id }}')">
+                                    <i class="fas fa-plus"></i> Add Country
+                                </button>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    <button type="button" class="add-btn" onclick="addRegion()">
+                        <i class="fas fa-plus"></i> Add Region
+                    </button>
+                </div>
+                
+                <!-- Entries Section -->
+                <div id="entries-section">
+                    <h2>Entries</h2>
+                    <div id="entry-section">
+                        {% if entries %}
+                            {% for entry in entries %}
+                            <div class="box {% if entry.is_hotel %}highlight-hotel{% endif %}" id="entry-{{ entry.id }}" data-status="{{ entry.status }}">
+                                <div>
+                                    <p>{{ entry.title }} - {{ entry.description }}</p>
+                                </div>
+                                <div class="action-area">
+                                    <button type="button" class="icon-btn edit-icon" onclick="editEntry('{{ entry.id }}')">
+                                        <i class="fas fa-edit"></i>
+                                    </button>
+                                    <button type="button" class="icon-btn delete-icon" onclick="deleteEntry('{{ entry.id }}')">
+                                        <i class="fas fa-trash-alt"></i>
+                                    </button>
+                                    <!-- Hotel toggle button -->
+                                    <button type="button" class="hotel-toggle {% if not entry.is_hotel %}unhighlight-hotel{% endif %}" onclick="markAsHotel('{{ entry.id }}')">
+                                        {% if entry.is_hotel %}
+                                            <i class="fas fa-hotel"></i> Hotel
+                                        {% else %}
+                                            <i class="far fa-building"></i> Mark as Hotel
+                                        {% endif %}
+                                    </button>
+                                </div>
+                            </div>
+                            {% endfor %}
+                        {% else %}
+                            <p>No entries found.</p>
+                        {% endif %}
+                    </div>
+                    <button type="button" class="add-btn" onclick="addEntry()">
+                        <i class="fas fa-plus"></i> Add Entry
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // CSRF setup: Read csrftoken from cookie and attach it to all AJAX requests.
+        function getCookie(name) {
+            var cookieValue = null;
+            if (document.cookie && document.cookie !== "") {
+                var cookies = document.cookie.split(";");
+                for (var i = 0; i < cookies.length; i++) {
+                    var cookie = cookies[i].trim();
+                    if (cookie.substring(0, name.length + 1) === (name + "=")) {
+                        cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                        break;
+                    }
+                }
+            }
+            return cookieValue;
+        }
+        $.ajaxSetup({
+            beforeSend: function(xhr, settings) {
+                if (!(/^http:.*/.test(settings.url) || /^https:.*/.test(settings.url))) {
+                    xhr.setRequestHeader("X-CSRFToken", getCookie("csrftoken"));
+                }
+            }
+        });
+        
+        // ---------------------------
+        // REGION Functions (AJAX)
+        // ---------------------------
+        function addRegion() {
+            var regionName = prompt("Enter region name:");
+            if (!regionName) return;
+            $.ajax({
+                url: "{% url 'admin_app:ajax_add_region' %}",
+                type: "POST",
+                data: { name: regionName },
+                success: function(data) {
+                    if (data.status === "success") {
+                        var newId = data.region_id;
+                        var regionHtml = '<div class="box" id="region-' + newId + '">';
+                        regionHtml += '<strong>' + data.region_name + '</strong>';
+                        regionHtml += '<div class="action-area">';
+                        regionHtml += '<button type="button" class="icon-btn edit-icon" onclick="editRegion(\'' + newId + '\')">';
+                        regionHtml += '<i class="fas fa-edit"></i>';
+                        regionHtml += '</button>';
+                        regionHtml += '<button type="button" class="icon-btn delete-icon" onclick="deleteRegion(\'' + newId + '\')">';
+                        regionHtml += '<i class="fas fa-trash-alt"></i>';
+                        regionHtml += '</button>';
+                        regionHtml += '</div></div>';
+                        
+                        var countriesHtml = '<div class="box">';
+                        countriesHtml += '<div class="countries-container">';
+                        countriesHtml += '<div class="countries-list">';
+                        countriesHtml += '<span>Countries:</span>';
+                        countriesHtml += '<ul id="countries-' + newId + '"></ul>';
+                        countriesHtml += '</div>';
+                        countriesHtml += '<button type="button" class="add-btn" onclick="addCountry(\'' + newId + '\')">';
+                        countriesHtml += '<i class="fas fa-plus"></i> Add Country';
+                        countriesHtml += '</button>';
+                        countriesHtml += '</div></div>';
+                        
+                        $("#regions").append(regionHtml + countriesHtml);
+                    }
+                },
+                error: function(xhr, status, error) {
+                    alert("Error adding region: " + error);
+                }
+            });
+        }
+
+        function editRegion(regionId) {
+            var currentName = $("#region-" + regionId + " strong").text().trim();
+            var newName = prompt("Edit region name:", currentName);
+            if (!newName || newName === currentName) return;
+            $.ajax({
+                url: "{% url 'admin_app:ajax_edit_region' %}",
+                type: "POST",
+                data: { region_id: regionId, name: newName },
+                success: function(data) {
+                    if (data.status === "success") {
+                        $("#region-" + regionId + " strong").text(data.region_name);
+                    }
+                },
+                error: function(xhr, status, error) {
+                    alert("Error editing region: " + error);
+                }
+            });
+        }
+
+        function deleteRegion(regionId) {
+            if (!confirm("Are you sure you want to delete this region?")) return;
+            $.ajax({
+                url: "{% url 'admin_app:ajax_delete_region' %}",
+                type: "POST",
+                data: { region_id: regionId },
+                success: function(data) {
+                    if (data.status === "success") {
+                        // Remove the region box and the next container holding the countries.
+                        $("#region-" + regionId).next(".box").remove();
+                        $("#region-" + regionId).remove();
+                    }
+                },
+                error: function(xhr, status, error) {
+                    alert("Error deleting region: " + error);
+                }
+            });
+        }
+        
+        // ---------------------------
+        // COUNTRY Functions (AJAX)
+        // ---------------------------
+        function addCountry(regionId) {
+            var countryName = prompt("Enter country name:");
+            if (!countryName) return;
+            $.ajax({
+                url: "{% url 'admin_app:ajax_add_country' %}",
+                type: "POST",
+                data: { region_id: regionId, name: countryName },
+                success: function(data) {
+                    if (data.status === "success") {
+                        var newId = data.country_id;
+                        var liHtml = '<li id="country-' + newId + '">';
+                        liHtml += '<span>' + data.country_name + '</span>';
+                        liHtml += '<div class="action-area">';
+                        liHtml += '<button type="button" class="icon-btn edit-icon" onclick="editCountry(\'' + newId + '\')">';
+                        liHtml += '<i class="fas fa-edit"></i>';
+                        liHtml += '</button>';
+                        liHtml += '<button type="button" class="icon-btn delete-icon" onclick="deleteCountry(\'' + newId + '\')">';
+                        liHtml += '<i class="fas fa-trash-alt"></i>';
+                        liHtml += '</button>';
+                        liHtml += '</div></li>';
+                        $("#countries-" + regionId).append(liHtml);
+                    }
+                },
+                error: function(xhr, status, error) {
+                    alert("Error adding country: " + error);
+                }
+            });
+        }
+
+        function editCountry(countryId) {
+            var liElem = $("#country-" + countryId);
+            var currentName = liElem.find("span").text().trim();
+            var newName = prompt("Edit country name:", currentName);
+            if (!newName || newName === currentName) return;
+            $.ajax({
+                url: "{% url 'admin_app:ajax_edit_country' %}",
+                type: "POST",
+                data: { country_id: countryId, name: newName },
+                success: function(data) {
+                    if (data.status === "success") {
+                        liElem.find("span").text(data.country_name);
+                    }
+                },
+                error: function(xhr, status, error) {
+                    alert("Error editing country: " + error);
+                }
+            });
+        }
+
+        function deleteCountry(countryId) {
+            if (!confirm("Are you sure you want to delete this country?")) return;
+            $.ajax({
+                url: "{% url 'admin_app:ajax_delete_country' %}",
+                type: "POST",
+                data: { country_id: countryId },
+                success: function(data) {
+                    if (data.status === "success") {
+                        $("#country-" + countryId).remove();
+                    }
+                },
+                error: function(xhr, status, error) {
+                    alert("Error deleting country: " + error);
+                }
+            });
+        }
+
+        // ---------------------------
+        // ENTRY Functions (AJAX)
+        // ---------------------------
+        function addEntry() {
+            var entryTitle = prompt("Enter entry title:");
+            if (!entryTitle) return;
+            $.ajax({
+                url: "{% url 'admin_app:ajax_add_entry' %}",
+                type: "POST",
+                data: { title: entryTitle },
+                success: function(data) {
+                    if (data.status === "success") {
+                        var newId = data.entry_id;
+                        var entryHtml = '<div class="box" id="entry-' + newId + '">';
+                        entryHtml += '<div><p>' + data.entry_title + '</p></div>';
+                        entryHtml += '<div class="action-area">';
+                        entryHtml += '<button type="button" class="icon-btn edit-icon" onclick="editEntry(\'' + newId + '\')">';
+                        entryHtml += '<i class="fas fa-edit"></i>';
+                        entryHtml += '</button>';
+                        entryHtml += '<button type="button" class="icon-btn delete-icon" onclick="deleteEntry(\'' + newId + '\')">';
+                        entryHtml += '<i class="fas fa-trash-alt"></i>';
+                        entryHtml += '</button>';
+                        entryHtml += '<button type="button" class="hotel-toggle unhighlight-hotel" onclick="markAsHotel(\'' + newId + '\')">';
+                        entryHtml += '<i class="far fa-building"></i> Mark as Hotel';
+                        entryHtml += '</button>';
+                        entryHtml += '</div></div>';
+                        $("#entry-section").append(entryHtml);
+                    }
+                },
+                error: function(xhr, status, error) {
+                    alert("Error adding entry: " + error);
+                }
+            });
+        }
+
+        function editEntry(entryId) {
+            var entryDiv = $("#entry-" + entryId);
+            var currentTitle = entryDiv.find("p").text().split(" - ")[0].trim();
+            var newTitle = prompt("Edit entry title:", currentTitle);
+            if (!newTitle || newTitle === currentTitle) return;
+            $.ajax({
+                url: "{% url 'admin_app:ajax_edit_entry' %}",
+                type: "POST",
+                data: { entry_id: entryId, title: newTitle },
+                success: function(data) {
+                    if (data.status === "success") {
+                        var currentDescription = entryDiv.find("p").text().split(" - ")[1] || '';
+                        entryDiv.find("p").text(data.entry_title + " - " + currentDescription);
+                    }
+                },
+                error: function(xhr, status, error) {
+                    alert("Error editing entry: " + error);
+                }
+            });
+        }
+
+        function deleteEntry(entryId) {
+            if (!confirm("Are you sure you want to delete this entry?")) return;
+            $.ajax({
+                url: "{% url 'admin_app:ajax_delete_entry' %}",
+                type: "POST",
+                data: { entry_id: entryId },
+                success: function(data) {
+                    if (data.status === "success") {
+                        $("#entry-" + entryId).remove();
+                    }
+                },
+                error: function(xhr, status, error) {
+                    alert("Error deleting entry: " + error);
+                }
+            });
+        }
+        
+        // ---------------------------
+        // Hotel Marking Function (Toggle)
+        // ---------------------------
+        function markAsHotel(entryId) {
+            // Get the entry element
+            var entryItem = document.getElementById('entry-' + entryId);
+            var hotelToggle = $(entryItem).find('.hotel-toggle');
+            var newStatus;
+            
+            // Toggle the highlight and set the new status accordingly
+            if (entryItem.classList.contains('highlight-hotel')) {
+                entryItem.classList.remove('highlight-hotel');
+                hotelToggle.addClass('unhighlight-hotel');
+                hotelToggle.html('<i class="far fa-building"></i> Mark as Hotel');
+                newStatus = "no";  // indicates the hotel flag should be False
+            } else {
+                entryItem.classList.add('highlight-hotel');
+                hotelToggle.removeClass('unhighlight-hotel');
+                hotelToggle.html('<i class="fas fa-hotel"></i> Hotel');
+                newStatus = "yes"; // indicates the hotel flag should be True
+            }
+            
+            // Send an AJAX request to persist the change in the database
+            $.ajax({
+                url: "{% url 'admin_app:ajax_mark_as_hotel' %}",
+                type: "POST",
+                data: {
+                    entry_id: entryId,
+                    status: newStatus,
+                    csrfmiddlewaretoken: '{{ csrf_token }}'
+                },
+                success: function(data) {
+                    if (data.status === "success") {
+                        console.log("Entry updated successfully");
+                    } else {
+                        alert("Error updating entry: " + data.message);
+                    }
+                },
+                error: function(xhr, status, error) {
+                    alert("Error: " + error);
+                }
+            });
+        }
+    </script>
+    
+    <!-- Add navigation handling script -->
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // Function to handle responsive navigation
+            function handleResponsiveNavigation() {
+                // Check if screen is mobile
+                if (window.innerWidth <= 768) {
+                    document.body.classList.add('mobile-view');
+                    document.body.classList.remove('desktop-view');
+                } else {
+                    document.body.classList.add('desktop-view');
+                    document.body.classList.remove('mobile-view');
+                }
+            }
+            
+            // Initial check
+            handleResponsiveNavigation();
+            
+            // Add resize event listener
+            window.addEventListener('resize', handleResponsiveNavigation);
+            
+            // Add scroll class when scrolling
+            const navigation = document.querySelector('.navigation');
+            window.addEventListener('scroll', function() {
+                if (window.scrollY > 50) {
+                    navigation.classList.add('scrolled');
+                } else {
+                    navigation.classList.remove('scrolled');
+                }
+            });
+        });
+    </script>
+</body>
+</html>

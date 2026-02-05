@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      line-height: 1.6;
+      color: #333;
+      max-width: 600px;
+      margin: 0 auto;
+    }
+    .container {
+      padding: 20px;
+      border: 1px solid #ddd;
+      border-radius: 5px;
+    }
+    .header {
+      background-color: #dc3545;
+      color: white;
+      padding: 10px;
+      text-align: center;
+      border-radius: 5px 5px 0 0;
+    }
+    .content {
+      padding: 20px;
+    }
+    .details {
+      background-color: #f9f9f9;
+      padding: 15px;
+      border-radius: 5px;
+      margin-top: 20px;
+    }
+    .footer {
+      text-align: center;
+      margin-top: 30px;
+      color: #777;
+      font-size: 12px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>Booking Declined</h1>
+    </div>
+    <div class="content">
+      <p>Dear {{ name }},</p>
+      <p>We regret to inform you that your booking for <strong>{{ tour }}</strong> has been declined.</p>
+      
+      <div class="details">
+        <h3>Booking Details:</h3>
+        <p><strong>Tour:</strong> {{ tour }}</p>
+        <p><strong>Start Time:</strong> {{ start_time }}</p>
+        <p><strong>End Time:</strong> {{ end_time }}</p>
+        <p><strong>Number of Adults:</strong> {{ adults }}</p>
+        <p><strong>Number of Children:</strong> {{ children }}</p>
+        <p><strong>Total Guests:</strong> {{ total_guests }}</p>
+      </div>
+      
+      <p>If you have any questions or would like to book another tour, please don't hesitate to contact us.</p>
+      
+      <p>Best regards,<br>
+      The IBAYAW Tour Team</p>
+    </div>
+    <div class="footer">
+      <p>This is an automated message. Please do not reply to this email.</p>
+      <p>If you have any questions, please contact us at support@ibayawtours.com</p>
+    </div>
+  </div>
+</body>
+</html>

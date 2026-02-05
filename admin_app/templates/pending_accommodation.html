@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+{% load static %}
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Accommodations Management</title>
+  <link rel="stylesheet" href="{% static 'css/navigation.css' %}">
+  <style>
+    body {
+      font-family: 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      background-color: #f4f7fc;
+      margin: 0;
+      padding: 0;
+      color: #333;
+      line-height: 1.5;
+    }
+    .dashboard-container {
+      display: flex;
+      min-height: 100vh;
+    }
+    .content {
+      flex: 1;
+      padding: 32px;
+      box-sizing: border-box;
+    }
+    .container {
+      max-width: 1000px;
+      margin: 0 auto;
+      background: #fff;
+      padding: 20px;
+      border-radius: 8px;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+    }
+    h1, h2 {
+      text-align: center;
+    }
+    h2 {
+      margin-top: 40px;
+      border-bottom: 2px solid #007bff;
+      padding-bottom: 5px;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 20px;
+    }
+    table th, table td {
+      padding: 10px;
+      border: 1px solid #ccc;
+      text-align: left;
+    }
+    table th {
+      background-color: #007bff;
+      color: #fff;
+    }
+    .update-btn {
+      background-color: #28a745;
+      color: #fff;
+      border: none;
+      padding: 8px 12px;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    select {
+      padding: 5px;
+    }
+    form {
+      margin: 0;
+    }
+  </style>
+</head>
+<body>
+  <div class="dashboard-container">
+    <div class="navigation">
+      {% include 'components/navigation.html' %}
+    </div>
+    <div class="content">
+      <div class="container">
+        <h1>Accommodations Management</h1>
+
+        <!-- Pending Accommodations Table with Update Form -->
+        {% if pending_accommodations %}
+          <div class="pending-section">
+            <h2>Pending Accommodations</h2>
+            <table>
+              <thead>
+                <tr>
+                  <th>Company Name</th>
+                  <th>Email Address</th>
+                  <th>Location</th>
+                  <th>Company Type</th>
+                  <th>Phone Number</th>
+                  <th>Status</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for accom in pending_accommodations %}
+                <tr>
+                  <td>{{ accom.company_name }}</td>
+                  <td>{{ accom.email_address }}</td>
+                  <td>{{ accom.location }}</td>
+                  <td>{{ accom.company_type }}</td>
+                  <td>{{ accom.phone_number }}</td>
+                  <td>{{ accom.status }}</td>
+                  <td>
+                    <form method="post" action="{% url 'admin_app:accommodation_update' accom.accom_id %}">
+                      {% csrf_token %}
+                      <select name="status" required>
+                        <option value="accepted">accepted</option>
+                        <option value="declined">declined</option>
+                      </select>
+                      <button type="submit" class="update-btn">Update</button>
+                    </form>
+                  </td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        {% else %}
+          <p>No pending accommodations found.</p>
+        {% endif %}
+
+        <!-- Accepted Accommodations Table with Update Form -->
+        {% if accepted_accommodations %}
+          <div class="accepted-section">
+            <h2>Accepted Accommodations</h2>
+            <table>
+              <thead>
+                <tr>
+                  <th>Company Name</th>
+                  <th>Email Address</th>
+                  <th>Location</th>
+                  <th>Company Type</th>
+                  <th>Phone Number</th>
+                  <th>Status</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for accom in accepted_accommodations %}
+                <tr>
+                  <td>{{ accom.company_name }}</td>
+                  <td>{{ accom.email_address }}</td>
+                  <td>{{ accom.location }}</td>
+                  <td>{{ accom.company_type }}</td>
+                  <td>{{ accom.phone_number }}</td>
+                  <td>{{ accom.status }}</td>
+                  <td>
+                    <form method="post" action="{% url 'admin_app:accommodation_update' accom.accom_id %}">
+                      {% csrf_token %}
+                      <select name="status" required>
+                        <option value="accepted">accepted</option>
+                        <option value="declined">declined</option>
+                      </select>
+                      <button type="submit" class="update-btn">Update</button>
+                    </form>
+                  </td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        {% endif %}
+
+        <!-- Declined Accommodations Table with Update Form -->
+        {% if declined_accommodations %}
+          <div class="declined-section">
+            <h2>Declined Accommodations</h2>
+            <table>
+              <thead>
+                <tr>
+                  <th>Company Name</th>
+                  <th>Email Address</th>
+                  <th>Location</th>
+                  <th>Company Type</th>
+                  <th>Phone Number</th>
+                  <th>Status</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for accom in declined_accommodations %}
+                <tr>
+                  <td>{{ accom.company_name }}</td>
+                  <td>{{ accom.email_address }}</td>
+                  <td>{{ accom.location }}</td>
+                  <td>{{ accom.company_type }}</td>
+                  <td>{{ accom.phone_number }}</td>
+                  <td>{{ accom.status }}</td>
+                  <td>
+                    <form method="post" action="{% url 'admin_app:accommodation_update' accom.accom_id %}">
+                      {% csrf_token %}
+                      <select name="status" required>
+                        <option value="accepted">accepted</option>
+                        <option value="declined">declined</option>
+                      </select>
+                      <button type="submit" class="update-btn">Update</button>
+                    </form>
+                  </td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+  
+  <!-- Add navigation handling script -->
+  <script>
+    document.addEventListener('DOMContentLoaded', function() {
+      // Function to handle responsive navigation
+      function handleResponsiveNavigation() {
+        // Check if screen is mobile
+        if (window.innerWidth <= 768) {
+          document.body.classList.add('mobile-view');
+          document.body.classList.remove('desktop-view');
+        } else {
+          document.body.classList.add('desktop-view');
+          document.body.classList.remove('mobile-view');
+        }
+      }
+      
+      // Initial check
+      handleResponsiveNavigation();
+      
+      // Add resize event listener
+      window.addEventListener('resize', handleResponsiveNavigation);
+      
+      // Add scroll class when scrolling
+      const navigation = document.querySelector('.navigation');
+      window.addEventListener('scroll', function() {
+        if (window.scrollY > 50) {
+          navigation.classList.add('scrolled');
+        } else {
+          navigation.classList.remove('scrolled');
+        }
+      });
+    });
+  </script>
+</body>
+</html>

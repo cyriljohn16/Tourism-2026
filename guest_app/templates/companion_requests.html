@@ -1,0 +1,677 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Companion Requests - IBAYAW Tours</title>
+    <link rel="stylesheet" href="/static/css/styles.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
+    <style>
+        .container {
+            max-width: 1200px;
+            margin: 100px auto 50px;
+            padding: 20px;
+            background-color: #fff;
+            border-radius: 8px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+        }
+        
+        h1, h2 {
+            color: #4a6741;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        
+        .instructions {
+            background-color: #f9f9f9;
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+        }
+        
+        .requests-panel {
+            display: flex;
+            margin-bottom: 30px;
+            gap: 20px;
+        }
+        
+        .requests-section {
+            flex: 1;
+            background-color: #f9f9f9;
+            padding: 20px;
+            border-radius: 5px;
+        }
+        
+        .request-card {
+            background-color: #fff;
+            border-radius: 5px;
+            padding: 15px;
+            margin-bottom: 15px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+        
+        .request-card img {
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            object-fit: cover;
+        }
+        
+        .request-header {
+            display: flex;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+        
+        .request-info {
+            margin-left: 15px;
+            flex: 1;
+        }
+        
+        .request-name {
+            font-weight: bold;
+            font-size: 1.1rem;
+            margin: 0;
+        }
+        
+        .request-email {
+            color: #666;
+            margin: 0;
+            font-size: 0.9rem;
+        }
+        
+        .request-time {
+            color: #999;
+            font-size: 0.8rem;
+            margin-top: 5px;
+        }
+        
+        .request-message {
+            background-color: #f5f5f5;
+            padding: 10px;
+            border-radius: 5px;
+            margin: 10px 0;
+            font-style: italic;
+        }
+        
+        .request-actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+            margin-top: 10px;
+        }
+        
+        .accept-btn {
+            background-color: #4a6741;
+            color: white;
+            border: none;
+            padding: 8px 15px;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+        
+        .accept-btn:hover {
+            background-color: #3c5435;
+        }
+        
+        .decline-btn {
+            background-color: #e74c3c;
+            color: white;
+            border: none;
+            padding: 8px 15px;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+        
+        .decline-btn:hover {
+            background-color: #c0392b;
+        }
+        
+        .no-requests {
+            text-align: center;
+            padding: 20px;
+            color: #777;
+        }
+        
+        .back-button {
+            display: inline-block;
+            margin-top: 20px;
+            padding: 10px 15px;
+            background-color: #4a6741;
+            color: white;
+            text-decoration: none;
+            border-radius: 5px;
+            transition: background-color 0.3s;
+        }
+        
+        .back-button:hover {
+            background-color: #3c5435;
+        }
+        
+        .group-tag {
+            display: inline-block;
+            padding: 2px 8px;
+            background-color: #4a6741;
+            color: white;
+            border-radius: 12px;
+            font-size: 0.8rem;
+            margin-top: 5px;
+        }
+        
+        .request-group {
+            margin: 5px 0 0 0;
+        }
+        
+        .status-pending {
+            color: #f39c12;
+            font-weight: bold;
+        }
+        
+        .status-accepted {
+            color: #2ecc71;
+            font-weight: bold;
+        }
+        
+        .status-declined {
+            color: #e74c3c;
+            font-weight: bold;
+        }
+        
+        .error {
+            color: #e74c3c;
+        }
+        
+        .request-section {
+            margin: 10px 0;
+            padding: 10px;
+            background-color: #f5f5f5;
+            border-radius: 5px;
+        }
+        
+        .request-section ul {
+            padding-left: 20px;
+        }
+        
+        .companion-info {
+            margin: 10px 0;
+            padding: 10px;
+            background-color: #e8f4f8;
+            border-radius: 5px;
+        }
+        
+        .request-section li {
+            cursor: pointer;
+            padding: 5px;
+            border-radius: 3px;
+            transition: background-color 0.2s;
+        }
+        
+        .request-section li:hover {
+            background-color: #f0f0f0;
+        }
+        
+        .request-section li.selected {
+            background-color: #e3f2fd;
+            border-left: 3px solid #4a6741;
+        }
+    </style>
+</head>
+<body>
+    <!-- Navigation Bar -->
+    <nav class="navbar">
+        <!-- Logo -->
+        <div class="logo">
+            <a href="{% url 'main-page' %}">
+                <img src="/static/images/logo-name.png" alt="IBAYAW Tours">
+            </a>
+        </div>
+        
+        <!-- Navigation links -->
+        <div class="nav-links">
+            <a href="{% url 'main-page' %}" class="nav-link">Home</a>
+            <a href="#about" class="nav-link">About</a>
+            <a href="{% url 'map' %}" class="nav-link">Map</a>
+            <a href="#contact" class="nav-link">Contact</a>
+        </div>
+        
+        <!-- User profile -->
+        {% if user.is_authenticated %}
+            <div class="user-profile-nav">
+                <div class="user-info" onclick="toggleUserMenu()">
+                    {% if user.picture %}
+                        <img src="{{ user.picture.url }}" alt="Profile" class="nav-profile-pic">
+                    {% else %}
+                        <img src="/static/images/default-profile.png" alt="Profile" class="nav-profile-pic">
+                    {% endif %}
+                    <span class="user-name">{{ user.first_name }}</span>
+                    <i class="fas fa-angle-down"></i>
+                </div>
+                <div class="user-dropdown" id="userDropdown">
+                    <a href="#" onclick="alert('Profile feature coming soon!'); return false;"><i class="fas fa-user"></i> My Profile</a>
+                    <div class="dropdown-divider"></div>
+                    <div class="settings-item">
+                        <a href="#" id="update-profile-link"><i class="fas fa-user-edit"></i> Update Profile</a>
+                    </div>
+                    <div class="dropdown-divider"></div>
+                    <a href="{% url 'companion' %}"><i class="fas fa-users"></i> Add Companion</a>
+                    <div class="dropdown-divider"></div>
+                    <a href="#" onclick="logoutUser()"><i class="fas fa-sign-out-alt"></i> Logout</a>
+                </div>
+            </div>
+        {% else %}
+            <button class="login-btn" onclick="loginUser()">
+                <span class="login-text">Login</span> <i class="fas fa-user-circle"></i>
+            </button>
+        {% endif %}
+    </nav>
+
+    <!-- Main Content -->
+    <div class="container">
+        <h1>Companion Requests</h1>
+        
+        {% if user.is_staff %}
+        <div class="admin-tools" style="background-color: #f8f9fa; padding: 15px; border-radius: 5px; margin-bottom: 20px; border-left: 4px solid #4a6741;">
+            <h3 style="margin-top: 0;"><i class="fas fa-tools"></i> Admin Tools</h3>
+            <p>Use these tools to diagnose and fix companion request issues.</p>
+            
+            <div class="admin-form">
+                <div style="display: flex; gap: 10px; margin-bottom: 10px;">
+                    <input type="email" id="debug-email" placeholder="User Email" class="form-control" style="flex: 1;">
+                    <button onclick="debugCompanionRequests()" class="submit-button">Debug Requests</button>
+                </div>
+                <div id="debug-results" style="display: none; background-color: #fff; padding: 15px; border-radius: 5px; margin-top: 10px; max-height: 300px; overflow-y: auto;">
+                    <!-- Debug results will be shown here -->
+                </div>
+            </div>
+            
+            <div class="fix-tools" style="margin-top: 15px; display: none;" id="fix-tools">
+                <h4>Fix Options</h4>
+                <div style="display: flex; gap: 10px;">
+                    <button onclick="fixCompanionRequest('delete')" class="delete-button">Delete Request</button>
+                    <button onclick="fixCompanionRequest('reset')" class="back-button">Reset Status</button>
+                    <button onclick="fixCompanionRequest('create-companion')" class="accept-btn">Create Companion</button>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+        
+        <div class="instructions">
+            <p>Manage your pending companion requests. Accept requests to add users as companions, or decline to reject them.</p>
+        </div>
+        
+        <!-- Display Django messages -->
+        {% if messages %}
+        <ul class="messages">
+            {% for message in messages %}
+            <li class="message {% if message.tags %}{{ message.tags }}{% endif %}">{{ message }}</li>
+            {% endfor %}
+        </ul>
+        {% endif %}
+        
+        <div class="requests-panel">
+            <!-- Received Requests Section -->
+            <div class="requests-section">
+                <h2>Received Requests</h2>
+                
+                {% if received_requests %}
+                    {% for request in received_requests %}
+                        <div class="request-card" id="request-{{ request.id }}">
+                            <div class="request-header">
+                                {% if request.sender.picture %}
+                                    <img src="{{ request.sender.picture.url }}" alt="{{ request.sender.first_name }}">
+                                {% else %}
+                                    <img src="/static/images/default-profile.png" alt="{{ request.sender.first_name }}">
+                                {% endif %}
+                                <div class="request-info">
+                                    <p class="request-name">{{ request.sender.first_name }} {{ request.sender.last_name }}</p>
+                                    <p class="request-email">{{ request.sender.email }}</p>
+                                    <p class="request-time">{{ request.created_at|timesince }} ago</p>
+                                    {% if request.group %}
+                                        <p class="request-group"><span class="group-tag"><i class="fas fa-layer-group"></i> {{ request.group.name }}</span></p>
+                                    {% endif %}
+                                </div>
+                            </div>
+                            
+                            {% if request.message %}
+                                <div class="request-message">
+                                    "{{ request.message }}"
+                                </div>
+                            {% endif %}
+                            
+                            <div class="request-actions">
+                                <button class="decline-btn" onclick="handleRequest('decline', '{{ request.id }}')">Decline</button>
+                                <button class="accept-btn" onclick="handleRequest('accept', '{{ request.id }}')">Accept</button>
+                            </div>
+                        </div>
+                    {% endfor %}
+                {% else %}
+                    <div class="no-requests">
+                        <i class="fas fa-inbox fa-3x" style="color: #4a6741; margin-bottom: 15px;"></i>
+                        <p>No pending requests received.</p>
+                    </div>
+                {% endif %}
+            </div>
+            
+            <!-- Sent Requests Section -->
+            <div class="requests-section">
+                <h2>Sent Requests</h2>
+                
+                {% if sent_requests %}
+                    {% for request in sent_requests %}
+                        <div class="request-card">
+                            <div class="request-header">
+                                {% if request.recipient.picture %}
+                                    <img src="{{ request.recipient.picture.url }}" alt="{{ request.recipient.first_name }}">
+                                {% else %}
+                                    <img src="/static/images/default-profile.png" alt="{{ request.recipient.first_name }}">
+                                {% endif %}
+                                <div class="request-info">
+                                    <p class="request-name">{{ request.recipient.first_name }} {{ request.recipient.last_name }}</p>
+                                    <p class="request-email">{{ request.recipient.email }}</p>
+                                    <p class="request-time">Sent {{ request.created_at|timesince }} ago</p>
+                                </div>
+                            </div>
+                            
+                            {% if request.message %}
+                                <div class="request-message">
+                                    "{{ request.message }}"
+                                </div>
+                            {% endif %}
+                            
+                            <div class="request-status">
+                                <p>Status: <span class="status-pending">Pending</span></p>
+                            </div>
+                        </div>
+                    {% endfor %}
+                {% else %}
+                    <div class="no-requests">
+                        <i class="fas fa-paper-plane fa-3x" style="color: #4a6741; margin-bottom: 15px;"></i>
+                        <p>No pending requests sent.</p>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+        
+        <div style="text-align: center;">
+            <a href="{% url 'companion' %}" class="back-button">
+                <i class="fas fa-arrow-left"></i> Back to Companions
+            </a>
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="footer-content">
+            <div class="footer-logo">
+                <img src="/static/images/logo.png" alt="IBAYAW Tours Logo">
+                <div class="footer-title">IBAYAW TOURS</div>
+            </div>
+            <div class="footer-links">
+                <h3>Quick Links</h3>
+                <a href="{% url 'main-page' %}">Home</a>
+                <a href="#about">About</a>
+                <a href="{% url 'map' %}">Map</a>
+                <a href="#contact">Contact</a>
+            </div>
+            <div class="footer-contact">
+                <h3>Contact Us</h3>
+                <p><i class="fas fa-map-marker-alt"></i> Bayawan City, Negros Oriental</p>
+                <p><i class="fas fa-phone"></i> +63 9123456789</p>
+                <p><i class="fas fa-envelope"></i> info@ibayawtours.com</p>
+            </div>
+        </div>
+        <div class="footer-bottom">
+            <p>&copy; 2023 IBAYAW Tours. All rights reserved.</p>
+        </div>
+    </footer>
+
+    <script>
+        // Function to toggle user dropdown menu
+        function toggleUserMenu() {
+            const dropdown = document.getElementById('userDropdown');
+            dropdown.style.display = dropdown.style.display === 'block' ? 'none' : 'block';
+        }
+        
+        // Function to handle logout
+        function logoutUser() {
+            if (confirm('Are you sure you want to logout?')) {
+                window.location.href = "{% url 'logout' %}";
+            }
+        }
+        
+        // Function to handle request acceptance/decline
+        function handleRequest(action, requestId) {
+            const csrfToken = "{{ csrf_token }}";
+            const requestCard = document.getElementById('request-' + requestId);
+            
+            // Disable buttons to prevent multiple clicks
+            const buttons = requestCard.querySelectorAll('button');
+            buttons.forEach(btn => btn.disabled = true);
+            
+            // Add loading indicator
+            const actionBtn = action === 'accept' ? 
+                requestCard.querySelector('.accept-btn') : 
+                requestCard.querySelector('.decline-btn');
+            const originalText = actionBtn.textContent;
+            actionBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> ' + originalText;
+            
+            // UPDATED URL FORMAT - matches Django URL pattern
+            const url = '/guest_app/companion/requests/' + action + '/' + requestId + '/';
+            console.log('Making request to:', url);
+            
+            fetch(url, {
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': csrfToken,
+                    'X-Requested-With': 'XMLHttpRequest'
+                }
+            })
+            .then(response => {
+                console.log('Response status:', response.status);
+                if (!response.ok) {
+                    throw new Error('Server returned ' + response.status);
+                }
+                return response.json();
+            })
+            .then(data => {
+                console.log('Parsed data:', data);
+                
+                if (data.success) {
+                    // Show success message
+                    alert(data.message || 'Request processed successfully');
+                    
+                    // Refresh the page
+                    window.location.reload();
+                } else {
+                    // Show error message
+                    alert('Error: ' + (data.message || 'Unknown error'));
+                    
+                    // Restore button state
+                    actionBtn.textContent = originalText;
+                    buttons.forEach(btn => btn.disabled = false);
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('An error occurred while processing your request. Please try again.');
+                
+                // Restore button state
+                actionBtn.textContent = originalText;
+                buttons.forEach(btn => btn.disabled = false);
+            });
+        }
+        
+        // Debug companion requests function
+        function debugCompanionRequests() {
+            const email = document.getElementById('debug-email').value.trim();
+            if (!email) {
+                alert('Please enter an email address.');
+                return;
+            }
+            
+            const resultsDiv = document.getElementById('debug-results');
+            resultsDiv.innerHTML = '<p><i class="fas fa-spinner fa-spin"></i> Loading results...</p>';
+            resultsDiv.style.display = 'block';
+            
+            fetch('/guest_app/companion/requests/debug/?email=' + encodeURIComponent(email), {
+                method: 'GET',
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest'
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                let resultsHtml = '<h4>Debug Results</h4>';
+                
+                if (data.error) {
+                    resultsHtml += `<p class="error"><i class="fas fa-exclamation-circle"></i> Error: ${data.error}</p>`;
+                } else if (!data.user_found) {
+                    resultsHtml += '<p><i class="fas fa-user-slash"></i> No user found with this email.</p>';
+                } else {
+                    const user = data.user_found;
+                    resultsHtml += `
+                        <div class="user-info">
+                            <p><strong>User:</strong> ${user.name} (${user.email})</p>
+                            <p><strong>Guest ID:</strong> ${user.guest_id}</p>
+                            <p><strong>Is a companion account:</strong> ${user.is_companion ? 'Yes' : 'No'}</p>
+                        </div>
+                    `;
+                    
+                    // Show sent requests
+                    if (data.sent_requests && data.sent_requests.length > 0) {
+                        resultsHtml += '<div class="request-section"><h5>Sent Requests</h5><ul>';
+                        data.sent_requests.forEach(req => {
+                            resultsHtml += `
+                                <li data-id="${req.id}">
+                                    <strong>ID:</strong> ${req.id} | 
+                                    <strong>Status:</strong> <span class="status-${req.status}">${req.status}</span> | 
+                                    <strong>Created:</strong> ${req.created_at}
+                                </li>
+                            `;
+                        });
+                        resultsHtml += '</ul></div>';
+                    } else {
+                        resultsHtml += '<p>No sent requests found.</p>';
+                    }
+                    
+                    // Show received requests
+                    if (data.received_requests && data.received_requests.length > 0) {
+                        resultsHtml += '<div class="request-section"><h5>Received Requests</h5><ul>';
+                        data.received_requests.forEach(req => {
+                            resultsHtml += `
+                                <li data-id="${req.id}">
+                                    <strong>ID:</strong> ${req.id} | 
+                                    <strong>Status:</strong> <span class="status-${req.status}">${req.status}</span> | 
+                                    <strong>Created:</strong> ${req.created_at}
+                                </li>
+                            `;
+                        });
+                        resultsHtml += '</ul></div>';
+                    } else {
+                        resultsHtml += '<p>No received requests found.</p>';
+                    }
+                    
+                    // Show companion info
+                    if (data.is_companion) {
+                        const companion = data.is_companion;
+                        resultsHtml += `
+                            <div class="companion-info">
+                                <h5>Companion Record</h5>
+                                <p><strong>Name:</strong> ${companion.name}</p>
+                                <p><strong>Guest ID:</strong> ${companion.guest_id}</p>
+                                <p><strong>Email:</strong> ${companion.email}</p>
+                            </div>
+                        `;
+                    } else {
+                        resultsHtml += '<p>No companion record found.</p>';
+                    }
+                    
+                    // Show fix tools if there are issues
+                    if ((data.sent_requests && data.sent_requests.length > 0) || 
+                        (data.received_requests && data.received_requests.length > 0)) {
+                        document.getElementById('fix-tools').style.display = 'block';
+                    } else {
+                        document.getElementById('fix-tools').style.display = 'none';
+                    }
+                }
+                
+                resultsDiv.innerHTML = resultsHtml;
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                resultsDiv.innerHTML = '<p class="error"><i class="fas fa-exclamation-circle"></i> An error occurred while fetching debug information.</p>';
+            });
+        }
+        
+        // Fix companion request function
+        function fixCompanionRequest(action) {
+            const email = document.getElementById('debug-email').value.trim();
+            if (!email) {
+                alert('Please enter an email address.');
+                return;
+            }
+            
+            // Get selected request ID if any
+            let requestId = '';
+            const selectedRequests = document.querySelectorAll('.request-section li.selected');
+            if (selectedRequests.length > 0) {
+                requestId = selectedRequests[0].getAttribute('data-id');
+            }
+            
+            if (confirm(`Are you sure you want to ${action} companion request(s) for ${email}?`)) {
+                // Get CSRF token
+                const csrfToken = "{{ csrf_token }}";
+                
+                // Prepare form data
+                const formData = new FormData();
+                formData.append('email', email);
+                formData.append('action', action);
+                if (requestId) {
+                    formData.append('request_id', requestId);
+                }
+                
+                // Make API request
+                fetch('/guest_app/companion/requests/fix/', {
+                    method: 'POST',
+                    headers: {
+                        'X-Requested-With': 'XMLHttpRequest',
+                        'X-CSRFToken': csrfToken
+                    },
+                    body: formData
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        alert(data.message);
+                        // Refresh debug results
+                        debugCompanionRequests();
+                    } else {
+                        alert(`Error: ${data.message}`);
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    alert('An error occurred while fixing the companion request.');
+                });
+            }
+        }
+        
+        // Add click handler to make requests selectable
+        document.addEventListener('click', function(e) {
+            if (e.target.closest('.request-section li')) {
+                const li = e.target.closest('.request-section li');
+                
+                // Remove selected class from all items
+                document.querySelectorAll('.request-section li').forEach(item => {
+                    item.classList.remove('selected');
+                });
+                
+                // Add selected class to clicked item
+                li.classList.add('selected');
+            }
+        });
+    </script>
+</body>
+</html> 

@@ -1,0 +1,13 @@
+{% load static %}
+{% if request.session.user_type == 'employee' and not request.session.is_admin %}
+<div style="background-color: #2c3e50; color: white; height: 100vh; padding: 20px;">
+    <h2 style="margin-bottom: 20px;">Employee Panel</h2>
+    <a href="{% url 'tour_app:home' %}" style="display: block; color: white; padding: 10px 5px; text-decoration: none;">Create Tour</a>
+    <a href="{% url 'admin_app:admin_create_form' %}" style="display: block; color: white; padding: 10px 5px; text-decoration: none;">Create Accommodation Summary Form</a>
+    <a href="{% url 'admin_app:admin_logout' %}" style="display: block; color: white; padding: 10px 5px; text-decoration: none;">Logout</a>
+</div>
+{% else %}
+<div style="background-color: #f8f9fa; padding: 20px; text-align: center;">
+    <p>Access Denied. Please <a href="{% url 'admin_app:login' %}">login</a> with an employee account to access this panel.</p>
+</div>
+{% endif %} 

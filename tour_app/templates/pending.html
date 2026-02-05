@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+{% load static %}
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Check Pending Tours</title>
+  <link rel="stylesheet" href="{% static 'css/navigation.css' %}">
+  <style>
+    :root {
+      /* Brand Colors */
+      --primary-color: #875a34;    /* Main brand color */
+      --primary-light: #e99c59;   /* Lighter version for accents */
+      --primary-dark: #6d4827;    /* Darker version for hover states */
+      --secondary-color: #8c6e5d; /* Secondary brand color */
+      
+      /* Status Colors */
+      --success-color: #34a853;   /* Green for success states */
+      --warning-color: #fbbc05;   /* Yellow for warnings */
+      --error-color: #ea4335;     /* Red for errors */
+      --info-color: #4285f4;      /* Blue for information */
+      
+      /* Neutral Colors */
+      --bg-color: #f4f7fc;        /* Light background */
+      --text-dark: #333;          /* Dark text */
+      --text-medium: #666;        /* Medium text */
+      --text-light: #9e9e9e;      /* Light text */
+      --white: #fff;              /* White */
+    }
+
+    body {
+      font-family: 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      background-color: var(--bg-color);
+      margin: 0;
+      padding: 0;
+    }
+    
+    .dashboard-container {
+      display: flex;
+      min-height: 100vh;
+    }
+    
+    .content {
+      flex: 1;
+      padding: 32px;
+      box-sizing: border-box;
+    }
+    
+    .container {
+      max-width: 1100px;
+      margin: 0 auto;
+      background: #fff;
+      padding: 20px;
+      border-radius: 8px;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 20px;
+    }
+    
+    table th, table td {
+      padding: 12px;
+      border: 1px solid #ddd;
+      text-align: left;
+    }
+    
+    table th {
+      background-color: var(--primary-color);
+      color: #fff;
+    }
+    
+    .update-btn {
+      background-color: var(--info-color);
+      color: #fff;
+      border: none;
+      padding: 8px 12px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-weight: 500;
+      transition: background-color 0.3s;
+    }
+    
+    .update-btn:hover {
+      background-color: #1a73e8;
+    }
+    
+    select {
+      padding: 8px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      background-color: #fff;
+    }
+    
+    select:focus {
+      outline: none;
+      border-color: var(--primary-color);
+    }
+    
+    .button-group {
+      margin-top: 20px;
+      display: flex;
+      gap: 10px;
+    }
+    
+    .button {
+      display: inline-block;
+      padding: 10px 20px;
+      background-color: var(--primary-color);
+      color: #fff;
+      text-decoration: none;
+      border-radius: 4px;
+      font-weight: 500;
+      transition: background-color 0.3s;
+    }
+    
+    .button:hover {
+      background-color: var(--primary-dark);
+    }
+    
+    .button.danger {
+      background-color: var(--error-color);
+    }
+    
+    .button.danger:hover {
+      background-color: #d32f2f;
+    }
+    
+    .pending-section {
+      background-color: #fff8e1; /* Light Yellow for Pending */
+      padding: 15px;
+      border-radius: 8px;
+      margin-bottom: 20px;
+    }
+    
+    .accepted-section {
+      background-color: #e8f5e9; /* Light Green for Accepted */
+      padding: 15px;
+      border-radius: 8px;
+      margin-bottom: 20px;
+    }
+    
+    .declined-section {
+      background-color: #ffebee; /* Light Red for Declined */
+      padding: 15px;
+      border-radius: 8px;
+      margin-bottom: 20px;
+    }
+    
+    .pending-section h2 {
+      border-bottom-color: var(--warning-color);
+    }
+    
+    .accepted-section h2 {
+      border-bottom-color: var(--success-color);
+    }
+    
+    .declined-section h2 {
+      border-bottom-color: var(--error-color);
+    }
+  </style>
+</head>
+<body>
+  <div class="dashboard-container">
+    <div class="navigation">
+        {% if request.session.user_type == 'employee' %}
+            {% if request.session.is_admin %}
+                {% include 'components/navigation.html' %}
+            {% else %}
+                {% include 'components/employee_navigation.html' %}
+            {% endif %}
+        {% else %}
+            {% include 'components/navigation.html' %}
+        {% endif %}
+    </div>
+    <div class="content">
+      <div class="container">
+        <h1>Booking Management</h1>
+
+    <!-- Pending Bookings -->
+    {% if pending_bookings %}
+    <div class="pending-section">
+      <h2>Pending Bookings</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Guest Name</th>
+            <th>Tour Name</th>
+            <th>Schedule</th>
+            <th>Total Guests</th>
+            <th>Status</th>
+            <th>Action</th>
+            <th>Phone</th>
+            <th>Adults</th>
+            <th>Children</th>
+            <th>Email</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for booking in pending_bookings %}
+          <tr>
+            <form method="POST" action="{% url 'tour_app:status_update' booking.pk %}">
+              {% csrf_token %}
+              <input type="hidden" name="guest_id" value="{{ booking.guest_id.guest_id }}">
+              <input type="hidden" name="sched_id" value="{{ booking.sched_id.sched_id }}">
+              <input type="hidden" name="tour_id" value="{{ booking.tour_id.tour_id }}">
+              <input type="hidden" name="guest_email" value="{{ booking.your_email }}">
+              <input type="hidden" name="guest_name" value="{{ booking.your_name }}">
+              <td>{{ booking.guest_id.first_name }} {{ booking.guest_id.last_name }}</td>
+              <td>{{ booking.tour_id.tour_name }}</td>
+              <td>{{ booking.sched_id.start_time }} to {{ booking.sched_id.end_time }}</td>
+              <td>{{ booking.total_guests }}</td>
+              <td>
+                <select name="status">
+                  <option value="Accepted">Accepted</option>
+                  <option value="Declined">Declined</option>
+                  <option value="Pending" selected>Pending</option>
+                </select>
+              </td>
+              <td><button type="submit" class="update-btn">Update</button></td>
+              <td>{{ booking.your_phone }}</td>
+              <td>{{ booking.num_adults }}</td>
+              <td>{{ booking.num_children }}</td>
+              <td>{{ booking.your_email }}</td>
+            </form>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% endif %}
+
+    <!-- Accepted Bookings -->
+    {% if accepted_bookings %}
+    <div class="accepted-section">
+      <h2>Accepted Bookings</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Guest Name</th>
+            <th>Tour Name</th>
+            <th>Schedule</th>
+            <th>Total Guests</th>
+            <th>Phone</th>
+            <th>Adults</th>
+            <th>Children</th>
+            <th>Email</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for booking in accepted_bookings %}
+          <tr>
+            <td>{{ booking.guest_id.first_name }} {{ booking.guest_id.last_name }}</td>
+            <td>{{ booking.tour_id.tour_name }}</td>
+            <td>{{ booking.sched_id.start_time }} to {{ booking.sched_id.end_time }}</td>
+            <td>{{ booking.total_guests }}</td>
+            <td>{{ booking.your_phone }}</td>
+            <td>{{ booking.num_adults }}</td>
+            <td>{{ booking.num_children }}</td>
+            <td>{{ booking.your_email }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% endif %}
+
+    <!-- Declined Bookings -->
+    {% if declined_bookings %}
+    <div class="declined-section">
+      <h2>Declined Bookings</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Guest Name</th>
+            <th>Tour Name</th>
+            <th>Schedule</th>
+            <th>Total Guests</th>
+            <th>Phone</th>
+            <th>Adults</th>
+            <th>Children</th>
+            <th>Email</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for booking in declined_bookings %}
+          <tr>
+            <td>{{ booking.guest_id.first_name }} {{ booking.guest_id.last_name }}</td>
+            <td>{{ booking.tour_id.tour_name }}</td>
+            <td>{{ booking.sched_id.start_time }} to {{ booking.sched_id.end_time }}</td>
+            <td>{{ booking.total_guests }}</td>
+            <td>{{ booking.your_phone }}</td>
+            <td>{{ booking.num_adults }}</td>
+            <td>{{ booking.num_children }}</td>
+            <td>{{ booking.your_email }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% endif %}
+
+        <div class="button-group">
+          <a href="{% url 'tour_app:home' %}" class="button">Back to Home</a>
+          <a href="{% url 'tour_app:cancel_tour' %}" class="button danger">Cancel Tours</a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    $(document).ready(function() {
+      $.ajaxSetup({
+        headers: {
+          'X-CSRFToken': '{{ csrf_token }}'
+        }
+      });
+    });
+  </script>
+</body>
+</html>

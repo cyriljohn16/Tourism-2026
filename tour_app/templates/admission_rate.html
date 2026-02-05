@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+{% load static %}
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tour Check Payables</title>
+    <link rel="stylesheet" href="{% static 'css/navigation.css' %}">
+    <style>
+        :root {
+            /* Brand Colors */
+            --primary-color: #875a34;    /* Main brand color */
+            --primary-light: #e99c59;   /* Lighter version for accents */
+            --primary-dark: #6d4827;    /* Darker version for hover states */
+            --secondary-color: #8c6e5d; /* Secondary brand color */
+            
+            /* Status Colors */
+            --success-color: #34a853;   /* Green for success states */
+            --warning-color: #fbbc05;   /* Yellow for warnings */
+            --error-color: #ea4335;     /* Red for errors */
+            --info-color: #4285f4;      /* Blue for information */
+            
+            /* Neutral Colors */
+            --bg-color: #f4f7fc;        /* Light background */
+            --text-dark: #333;          /* Dark text */
+            --text-medium: #666;        /* Medium text */
+            --text-light: #9e9e9e;      /* Light text */
+            --white: #fff;              /* White */
+        }
+
+        body {
+            font-family: 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background-color: var(--bg-color);
+            margin: 0;
+            padding: 0;
+        }
+        
+        .dashboard-container {
+            display: flex;
+            min-height: 100vh;
+        }
+        
+        .content {
+            flex: 1;
+            padding: 32px;
+            box-sizing: border-box;
+        }
+        
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+            background: #fff;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+        }
+        
+        h1, h2 {
+            color: var(--text-dark);
+            margin-top: 20px;
+            margin-bottom: 20px;
+        }
+        
+        h2 {
+            border-bottom: 2px solid var(--primary-color);
+            padding-bottom: 10px;
+        }
+        
+        form {
+            max-width: 600px;
+            margin: 20px auto;
+            padding: 20px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            background-color: #fff;
+        }
+        
+        label, input, select {
+            display: block;
+            width: 100%;
+            margin-bottom: 15px;
+            padding: 10px;
+            box-sizing: border-box;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        
+        input:focus, select:focus {
+            border-color: var(--primary-color);
+            outline: none;
+        }
+        
+        button {
+            background-color: var(--primary-color);
+            color: white;
+            padding: 10px 15px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: 500;
+        }
+        
+        button:hover {
+            background-color: var(--primary-dark);
+        }
+        
+        table {
+            width: 100%;
+            margin: 20px 0;
+            border-collapse: collapse;
+            background: #fff;
+            border-radius: 4px;
+            overflow: hidden;
+        }
+        
+        th, td {
+            border: 1px solid #ddd;
+            padding: 12px;
+            text-align: left;
+        }
+        
+        th {
+            background-color: var(--primary-color);
+            color: white;
+            font-weight: 500;
+        }
+        
+        tr:nth-child(even) {
+            background-color: #f9f9f9;
+        }
+        
+        /* Style for action buttons */
+        .action-column {
+            width: 150px;
+            white-space: nowrap;
+        }
+
+        .action-container {
+            display: flex;
+            justify-content: space-between;
+            gap: 8px;
+        }
+
+        td button {
+            min-width: 80px;
+            padding: 8px;
+            font-size: 13px;
+        }
+        
+        /* Delete button */
+        button[value="delete"] {
+            background-color: var(--error-color);
+        }
+        
+        button[value="delete"]:hover {
+            background-color: #d32f2f;
+        }
+        
+        /* Update button */
+        .update-btn {
+            background-color: var(--info-color);
+        }
+        
+        .update-btn:hover {
+            background-color: #1a73e8;
+        }
+    </style>
+</head>
+<body>
+<div class="dashboard-container">
+    <div class="navigation">
+        {% if request.session.user_type == 'employee' %}
+            {% if request.session.is_admin %}
+                {% include 'components/navigation.html' %}
+            {% else %}
+                {% include 'components/employee_navigation.html' %}
+            {% endif %}
+        {% else %}
+            {% include 'components/navigation.html' %}
+        {% endif %}
+    </div>
+    <div class="content">
+        <div class="container">
+            <h1>Tour Check Payables</h1>
+            
+            <form method="POST" action="{% url 'tour_app:admission_rate' %}">
+                {% csrf_token %}
+                <input type="hidden" id="rate_id" name="rate_id">
+                <h2>Add/Edit Admission Rate</h2>
+                <label for="tour_id">Tour Name:</label>
+                <select id="tour_id" name="tour_id" required>
+                    <option value="">Select a Tour</option>
+                    {% for tour in tours %}
+                    <option value="{{ tour.tour_id }}">{{ tour.tour_name }}</option>
+                    {% endfor %}
+                </select>
+
+                <label for="payables">Payables:</label>
+                <input type="text" id="payables" name="payables" required>
+
+                <label for="price">Price:</label>
+                <input type="number" id="price" name="price" step="0.01" required>
+
+                <button type="submit" name="action" value="add">Submit</button>
+            </form>
+
+            <h2>Current Admission Rates</h2>
+            <table id="admissionRatesTable">
+                <thead>
+                    <tr>
+                        <th>Rate ID</th>
+                        <th>Tour Name</th>
+                        <th>Payables</th>
+                        <th>Price</th>
+                        <th class="action-column">Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for rate in admission_rates %}
+                    <tr data-id="{{ rate.rate_id }}">
+                        <td>{{ rate.rate_id }}</td>
+                        <td>{{ rate.tour_id.tour_name|default:"N/A" }}</td>
+                        <td>{{ rate.payables }}</td>
+                        <td>${{ rate.price }}</td>
+                        <td class="action-column">
+                            <div class="action-container">
+                                <button class="update-btn" onclick="populateUpdateForm('{{ rate.rate_id }}', '{% if rate.tour_id %}{{ rate.tour_id.tour_id }}{% else %}{% endif %}', '{{ rate.payables }}', '{{ rate.price }}')">Update</button>
+                                <form method="POST" action="{% url 'tour_app:admission_rate' %}" style="display:inline; padding:0; margin:0; border:none; background:none;">
+                                    {% csrf_token %}
+                                    <input type="hidden" name="rate_id" value="{{ rate.rate_id }}">
+                                    <button type="submit" name="action" value="delete">Delete</button>
+                                </form>
+                            </div>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="5">No admission rates available.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<script>
+    // Populate the form with the existing rate data for updating
+    function populateUpdateForm(rateId, tourId, payables, price) {
+        document.getElementById("rate_id").value = rateId;
+        document.getElementById("tour_id").value = tourId;
+        document.getElementById("payables").value = payables;
+        document.getElementById("price").value = price;
+        // Change button text to "Update" when updating
+        const submitButton = document.querySelector("form button");
+        submitButton.textContent = "Update";
+        submitButton.value = "update";
+        
+        // Scroll to form
+        document.querySelector("form").scrollIntoView({ behavior: 'smooth' });
+    }
+</script>
+
+</body>
+</html>
