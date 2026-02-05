@@ -1,0 +1,577 @@
+<!-- Register Guest Modal -->
+  <div id="registerGuestModal" class="guest-modal">
+      <div class="guest-modal-content">
+          <span class="close" id="closeRegisterModalBtn">&times;</span>
+          <h2>Register Guest for Room</h2>
+          <div id="entriesCounter" style="margin-bottom: 15px; color: #28a745; display: none;"></div>
+          <form id="registerGuestForm" method="post">
+              {% csrf_token %}
+              <!-- Hidden field for room id -->
+              <input type="hidden" id="regRoomId" name="room_id">
+              
+              <!-- Guest Information Fields -->
+              <label for="guestFirstName">Guest First Name:</label>
+              <input type="text" id="guestFirstName" name="guest_first_name" required>
+              
+              <label for="guestLastName">Guest Last Name:</label>
+              <input type="text" id="guestLastName" name="guest_last_name" required>
+              
+              <label for="checkedIn">Checked In:</label>
+              <input type="date" id="checkedIn" name="checked_in" required>
+              <div id="checkedInError" class="error-message">Please select a check-in date</div>
+              
+              <label for="checkedOut">Checked Out:</label>
+              <input type="date" id="checkedOut" name="checked_out" required>
+              <div id="checkedOutError" class="error-message">Please select a check-out date</div>
+              
+              <label for="numGuests">Number of Guests:</label>
+              <input type="number" id="numGuests" name="num_guests" min="1" value="1" placeholder="Enter number of guests" required>
+              
+              <div style="display: flex; justify-content: space-between; margin-top: 15px;">
+                  <button type="submit" class="add-room-btn">Submit Registration</button>
+              </div>
+          </form>
+      </div>
+  </div>
+
+<!-- Add Room Modal -->
+<div id="addRoomModal" class="guest-modal">
+    <div class="guest-modal-content">
+        <span class="close" id="closeAddRoomModalBtn">&times;</span>
+        <h2>Add New Room</h2>
+        <form id="addRoomForm">
+            {% csrf_token %}
+            <label for="roomName">Room Name/Number:</label>
+            <input type="text" id="roomName" name="room_name" placeholder="e.g. Room 101" required>
+            
+            <label for="personLimit">Person Limit:</label>
+            <input type="number" id="personLimit" name="person_limit" min="1" value="1" placeholder="Maximum capacity" required>
+            
+            <button type="submit" class="add-room-btn">Add Room</button>
+        </form>
+    </div>
+</div>
+
+<!-- Add Room Button -->
+<div class="add-room-button">
+    <button id="manualAddRoomBtn" class="btn" style="background-color: #4CAF50; color: white;">
+        <i class="fas fa-plus"></i> Add Room
+    </button>
+    <button id="createSampleRoomsBtn" class="btn" style="background-color: #2196F3; color: white; margin-left: 10px;">
+        <i class="fas fa-magic"></i> Create Sample Rooms
+    </button>
+</div>
+
+<!-- Room list container -->
+<div id="roomListContainer" style="margin: 20px 0;">
+    <!-- Room list will be loaded here dynamically -->
+    <div class="empty-state">
+        <p>Loading rooms...</p>
+    </div>
+</div>
+
+<!-- Room Status Display Section -->
+<div class="room-status-section" style="margin: 30px 0;">
+    <div style="display: flex; justify-content: space-between; background-color: #f4f4f4; padding: 10px 15px; border-radius: 8px 8px 0 0; font-weight: bold; color: #333;">
+        <div>AVAILABLE ROOMS</div>
+        <div>AVAILABILITY</div>
+    </div>
+    
+    <div class="room-status-grid" id="roomStatusGrid" style="display: flex; flex-direction: column; border-radius: 0 0 8px 8px; overflow: hidden;">
+        <p style="color: #666; font-style: italic; text-align: center; padding: 20px;">Loading room status...</p>
+    </div>
+</div>
+
+<!-- Room Selection Modal -->
+<div id="roomSelectionModal" class="guest-modal">
+    <div class="guest-modal-content">
+        <span class="close" id="closeRoomSelectModalBtn">&times;</span>
+        <h2>Select a Room</h2>
+        <div id="roomOptionsContainer">
+            <!-- Room options will be loaded here dynamically -->
+            <p class="empty-state">Loading rooms...</p>
+        </div>
+    </div>
+</div>
+
+<script>
+// Global variables for room selection
+var currentRoomId = null;
+var currentRoom = null;
+var selectedGuests = [];
+var currentGroupFilter = 'ALL';
+
+// Function to select a room
+function selectRoom(roomId, roomName) {
+    currentRoomId = roomId;
+    currentRoom = roomName;
+    
+    // Update UI to show selected room
+    $('.selected-room').text(roomName);
+    
+    // Load guests for the selected room
+    loadGuestsForRoom(roomId);
+}
+
+// Function to set up guest registration handlers
+function setupGuestRegistrationHandlers() {
+    // Reset form values and errors
+    $("#registerGuestForm")[0].reset();
+    $(".error-message").hide();
+    $("input").removeClass("date-error");
+    
+    // Handle date calculations
+    $("#checkedIn, #checkedOut").off("change").on("change", function() {
+        var checkedIn = $("#checkedIn").val();
+        var checkedOut = $("#checkedOut").val();
+        
+        if (checkedIn && checkedOut) {
+            var checkInDate = new Date(checkedIn);
+            var checkOutDate = new Date(checkedOut);
+            
+            if (checkOutDate > checkInDate) {
+                // Calculate nights
+                var timeDiff = checkOutDate.getTime() - checkInDate.getTime();
+                var nights = Math.ceil(timeDiff / (1000 * 3600 * 24));
+                
+                // Set nights
+                $("#nights").val(nights);
+            }
+        }
+    });
+    
+    // Handle form submission
+    $("#registerGuestForm").off("submit").on("submit", function(e) {
+        e.preventDefault();
+        
+        // Validate check-in/check-out dates
+        var checkedIn = $("#checkedIn").val();
+        var checkedOut = $("#checkedOut").val();
+        
+        if (!checkedIn) {
+            $("#checkedInError").show();
+            $("#checkedIn").addClass("date-error");
+            return false;
+        } else {
+            $("#checkedInError").hide();
+            $("#checkedIn").removeClass("date-error");
+        }
+        
+        if (!checkedOut) {
+            $("#checkedOutError").show();
+            $("#checkedOut").addClass("date-error");
+            return false;
+        } else {
+            $("#checkedOutError").hide();
+            $("#checkedOut").removeClass("date-error");
+        }
+        
+        // Check if check-out is after check-in
+        var checkInDate = new Date(checkedIn);
+        var checkOutDate = new Date(checkedOut);
+        
+        if (checkOutDate <= checkInDate) {
+            $("#checkedOutError").text("Check-out date must be after check-in date");
+            $("#checkedOutError").show();
+            $("#checkedOut").addClass("date-error");
+            return false;
+        }
+        
+        // Get form data
+        var formData = $(this).serialize();
+        
+        // Submit the form
+        $.ajax({
+            type: "POST",
+            url: "{% url 'accom_app:register_guest_to_room' %}",
+            data: formData,
+            success: function(response) {
+                if (response.status === "success") {
+                    alert("Guest registered successfully!");
+                    registerGuestModal.style.display = "none";
+                    
+                    // Reload room data to reflect the change
+                    loadRooms();
+                    loadRoomDataForAdmin();
+                } else {
+                    alert("Error: " + response.message);
+                }
+            },
+            error: function(xhr, status, error) {
+                alert("An error occurred: " + error);
+            }
+        });
+    });
+}
+
+$(document).on("click", ".register-btn", function() {
+    var roomId = $(this).data("room-id");
+    $('#regRoomId').val(roomId);
+    
+    // Set default dates
+    var today = new Date();
+    var tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    
+    // Format dates for input field (YYYY-MM-DD)
+    var formatDate = function(date) {
+        var day = ('0' + date.getDate()).slice(-2);
+        var month = ('0' + (date.getMonth() + 1)).slice(-2);
+        var year = date.getFullYear();
+        return year + '-' + month + '-' + day;
+    };
+    
+    $('#checkedIn').val(formatDate(today));
+    $('#checkedOut').val(formatDate(tomorrow));
+    
+    // Calculate nights
+    var timeDiff = tomorrow.getTime() - today.getTime();
+    var nights = Math.ceil(timeDiff / (1000 * 3600 * 24));
+    
+    // Auto-set the month field to current month
+    var monthNames = ["January", "February", "March", "April", "May", "June", 
+        "July", "August", "September", "October", "November", "December"];
+    
+    $('#numGuests').val(1); // Default to 1 guest
+    
+    // Reset entriesCounter
+    entriesAdded = 0;
+    $("#entriesCounter").hide();
+    
+    // Reapply guest registration handlers
+    setupGuestRegistrationHandlers();
+    
+    registerGuestModal.style.display = "block";
+});
+
+// Initialize the dashboard
+$(document).ready(function() {
+    loadRooms();
+    
+    // Set default room
+    currentRoomId = 1; // Assuming room 101 has ID 1
+    currentRoom = "ROOM 101";
+    loadGuestsForRoom(currentRoomId);
+    
+    // Set up guest registration handlers
+    setupGuestRegistrationHandlers();
+    
+    // Set up jQuery AJAX to include the CSRF token in the header
+    $.ajaxSetup({
+        beforeSend: function(xhr, settings) {
+            if (!(/^http:.*/.test(settings.url) || /^https:.*/.test(settings.url))) {
+                // Get CSRF token directly from the form or cookie
+                var csrftoken = $("[name=csrfmiddlewaretoken]").val();
+                if (!csrftoken) {
+                    // If not found in form, try to get from cookie
+                    csrftoken = document.cookie.match(/csrftoken=([^;]*)/)[1];
+                }
+                xhr.setRequestHeader("X-CSRFToken", csrftoken);
+            }
+        }
+    });
+
+    // Handle the form submission for adding a room
+    $('#addRoomForm').on('submit', function(e) {
+        e.preventDefault();
+        
+        var formData = {
+            'room_name': $('#roomName').val(),
+            'person_limit': $('#personLimit').val(),
+            'csrfmiddlewaretoken': $('input[name=csrfmiddlewaretoken]').val()
+        };
+        
+        // Store the submit button reference for proper manipulation
+        var submitBtn = $(this).find('button[type="submit"]');
+        
+        $.ajax({
+            url: '{% url "accom_app:add_room_ajax" %}',
+            type: 'POST',
+            data: formData,
+            beforeSend: function() {
+                // Show loading or disable button using the correct reference
+                submitBtn.prop('disabled', true).text('Adding...');
+            },
+            success: function(response) {
+                // Close modal only on success
+                if(response.status === "success") {
+                    $("#addRoomModal").css("display", "none");
+                    
+                    // Reset form
+                    $("#roomName").val("");
+                    $("#personLimit").val("1");
+                    
+                    // Alert success message
+                    alert('Room added successfully!');
+                    
+                    // Update room lists via AJAX instead of page reload
+                    loadRooms();
+                } else {
+                    // Keep modal open and show error message
+                    alert("Error: " + response.message);
+                }
+            },
+            error: function(xhr, status, error) {
+                // Parse the error response if it's in JSON format
+                try {
+                    var errorResponse = JSON.parse(xhr.responseText);
+                    if (errorResponse && errorResponse.message) {
+                        alert('Error: ' + errorResponse.message);
+                    } else {
+                        alert('Error adding room: ' + error);
+                    }
+                } catch (e) {
+                    alert('Error adding room: ' + error);
+                }
+                console.log(xhr.responseText);
+            },
+            complete: function() {
+                // Re-enable button using the correct reference
+                submitBtn.prop('disabled', false).text('Add Room');
+            }
+        });
+    });
+
+    // Manual add room button
+    $("#manualAddRoomBtn").on("click", function() {
+        // Reset form values
+        $("#roomName").val("");
+        $("#personLimit").val("1");
+        
+        // Show the modal
+        $("#addRoomModal").css("display", "block");
+    });
+
+    // Add close button functionality for the add room modal
+    $("#closeAddRoomModalBtn").on("click", function() {
+        $("#addRoomModal").css("display", "none");
+    });
+
+    // Close modal when clicking outside of it
+    $(window).on("click", function(event) {
+        if (event.target == document.getElementById("addRoomModal")) {
+            $("#addRoomModal").css("display", "none");
+        }
+    });
+
+    // Add event listener for the create sample rooms button
+    $("#createSampleRoomsBtn").click(function() {
+        createSampleRooms();
+    });
+});
+
+// Load rooms for the dashboard
+function loadRooms() {
+    $("#roomStatusGrid").html('<div class="loading-message">Loading rooms...</div>');
+    
+    $.ajax({
+        url: '/accom_app/get-rooms-json/',
+        type: 'GET',
+        dataType: 'json',
+        success: function(response) {
+            console.log("Room data received:", response);
+            
+            if (response.rooms && response.rooms.length > 0) {
+                updateRoomUI(response.rooms);
+                updateRoomStatusDisplay(response.rooms);
+            } else {
+                // No rooms found - display message and offer to create sample rooms
+                $("#roomStatusGrid").html(`
+                    <div class="no-rooms-message">
+                        <p>No rooms have been registered yet.</p>
+                        <button id="quickCreateSampleRoomsBtn" class="btn btn-primary">Create Sample Rooms</button>
+                    </div>
+                `);
+                
+                // Add event listener for the quick create button
+                $("#quickCreateSampleRoomsBtn").click(function() {
+                    createSampleRooms();
+                });
+            }
+        },
+        error: function(xhr, status, error) {
+            console.error("Error loading rooms:", error);
+            $("#roomStatusGrid").html(`
+                <div class="error-message">
+                    <p>Error loading rooms: ${error}</p>
+                    <p>Status: ${status}</p>
+                    <p>Response: ${xhr.responseText}</p>
+                </div>
+            `);
+        }
+    });
+}
+
+function createSampleRooms() {
+    $("#roomStatusGrid").html('<div class="loading-message">Creating sample rooms...</div>');
+    
+    $.ajax({
+        url: '/accom_app/create_sample_rooms/',
+        type: 'GET',
+        dataType: 'json',
+        success: function(response) {
+            console.log("Sample rooms creation response:", response);
+            if (response.status === 'success') {
+                // Reload rooms to show the newly created ones
+                loadRooms();
+            } else {
+                $("#roomStatusGrid").html(`
+                    <div class="error-message">
+                        <p>Error creating sample rooms: ${response.message}</p>
+                    </div>
+                `);
+            }
+        },
+        error: function(xhr, status, error) {
+            console.error("Error creating sample rooms:", error);
+            $("#roomStatusGrid").html(`
+                <div class="error-message">
+                    <p>Error creating sample rooms: ${error}</p>
+                    <p>Status: ${status}</p>
+                    <p>Response: ${xhr.responseText}</p>
+                </div>
+            `);
+        }
+    });
+}
+
+// Update room status display section
+function updateRoomStatusDisplay(rooms) {
+    // Filter only available rooms
+    var availableRooms = rooms.filter(function(room) {
+        return room.status === 'AVAILABLE';
+    });
+    
+    if (availableRooms.length > 0) {
+        var html = '';
+        availableRooms.forEach(function(room) {
+            html += '<div style="display: flex; justify-content: space-between; margin-bottom: 5px;">';
+            html += '<div style="background-color: #FFBE98; padding: 8px 15px; border-radius: 8px; width: 48%; font-weight: bold;">' + room.name + '</div>';
+            html += '<div style="background-color: #FFBE98; padding: 8px 15px; border-radius: 8px; width: 48%; font-weight: bold; text-align: center;">' + room.availability + '</div>';
+            html += '</div>';
+        });
+        $('#roomStatusGrid').html(html);
+    } else {
+        $('#roomStatusGrid').html('<div style="text-align: center; padding: 30px; background: white;"><p>No rooms have been registered yet.</p><p>Use the "Add New Room" button to add rooms.</p></div>');
+    }
+}
+
+// Update room UI based on data
+function updateRoomUI(roomsData) {
+    if (roomsData.length === 0) {
+        // No rooms - show empty state
+        $('#roomListContainer').html('<div class="empty-state">' +
+            '<p>No rooms have been registered yet.</p>' +
+            '<p>Use the "Add New Room" button to add rooms.</p>' +
+            '</div>');
+            
+        // Also update the room options container for selection modal
+        $('#roomOptionsContainer').html('<p class="empty-state">No rooms available. Please add rooms first.</p>');
+        
+        return;
+    }
+    
+    // Populate room list
+    var roomListHtml = '<div class="room-list">';
+    roomsData.forEach(function(room) {
+        var statusClass = room.status === 'AVAILABLE' ? 'status-available' : 
+                         (room.status === 'OCCUPIED' ? 'status-occupied' : 'status-unavailable');
+        var statusText = room.status === 'AVAILABLE' ? 'Available' : 
+                        (room.status === 'OCCUPIED' ? 'Occupied' : 'Unavailable');
+        
+        roomListHtml += '<div class="room-item" data-room-id="' + room.id + '" data-room-name="' + room.name + '">';
+        roomListHtml += '<span class="room-name">' + room.name + '</span>';
+        roomListHtml += '<span class="room-status ' + statusClass + '">' + statusText + '</span>';
+        roomListHtml += '<span class="room-capacity">Capacity: ' + room.capacity + '</span>';
+        roomListHtml += '<span class="room-availability">Available: ' + room.availability + '</span>';
+        roomListHtml += '</div>';
+    });
+    roomListHtml += '</div>';
+    
+    $('#roomListContainer').html(roomListHtml);
+    
+    // Populate room options for selection modal
+    var roomOptionsHtml = '';
+    roomsData.forEach(function(room) {
+        var statusIndicator = room.status === 'OCCUPIED' ? 
+            '<span style="color: var(--warning-color); margin-left: 5px;"><i class="fas fa-lock"></i> Occupied</span>' : '';
+            
+        roomOptionsHtml += `
+            <button class="room-option-btn" data-room-id="${room.id}" data-room-name="${room.name}">
+                ${room.name} (Available: ${room.availability}/${room.capacity}) ${statusIndicator}
+            </button>
+        `;
+    });
+    
+    $('#roomOptionsContainer').html(roomOptionsHtml);
+    
+    // Add click handlers for room option buttons
+    $('.room-option-btn').on('click', function() {
+        var roomId = $(this).data('room-id');
+        var roomName = $(this).data('room-name');
+        selectRoom(roomId, roomName);
+        roomSelectionModal.style.display = "none";
+    });
+    
+    // If there's at least one room but no current room selected, select the first one
+    if (!currentRoomId && roomsData.length > 0) {
+        selectRoom(roomsData[0].id, roomsData[0].name);
+    }
+}
+
+// Load room data for admin modal - keeping for backward compatibility
+function loadRoomDataForAdmin() {
+    // Just call the regular loadRooms function
+    loadRooms();
+}
+
+// Load guests for a specific room
+function loadGuestsForRoom(roomId) {
+    if (!roomId) {
+        // No room selected, show empty state
+        $('#guestGrid').html('<div class="empty-state">No room selected. Please select a room to view guests.</div>');
+        return;
+    }
+    
+    // Reset selected guests when loading new room data
+    selectedGuests = [];
+    
+    // AJAX call to get guests for the selected room
+    $.ajax({
+        url: "{% url 'accom_app:get_room_guests' %}",
+        type: "GET",
+        data: { room_id: roomId, group: currentGroupFilter },
+        success: function(response) {
+            if (response.guests && response.guests.length > 0) {
+                displayGuests(response.guests);
+            } else {
+                // No guests found for this room
+                $('#guestGrid').html('<div class="empty-state">No guests assigned to this room yet.</div>');
+            }
+        },
+        error: function(xhr, status, error) {
+            console.error("Error loading guests:", error);
+            $('#guestGrid').html('<div class="empty-state">Error loading guests. Please try again.</div>');
+        }
+    });
+}
+
+// Placeholder function for displaying guests (implement as needed)
+function displayGuests(guests) {
+    if (!$('#guestGrid').length) {
+        // Create guest grid container if it doesn't exist
+        $('<div id="guestGrid"></div>').insertAfter('#roomListContainer');
+    }
+    
+    var html = '<div class="guest-list">';
+    guests.forEach(function(guest) {
+        html += '<div class="guest-item">';
+        html += '<span class="guest-name">' + guest.first_name + ' ' + guest.last_name + '</span>';
+        html += '<span class="guest-status">' + guest.status + '</span>';
+        html += '</div>';
+    });
+    html += '</div>';
+    
+    $('#guestGrid').html(html);
+}
+</script> 
