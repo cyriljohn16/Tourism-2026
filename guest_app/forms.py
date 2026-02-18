@@ -45,18 +45,14 @@ class BookingForm(forms.ModelForm):
 
 class GuestRegistrationForm(forms.ModelForm):
     confirm_password = forms.CharField(widget=forms.PasswordInput, required=True, label="Confirm Password")
-    picture = forms.ImageField(required=False)
-    birthday = forms.DateField(required=True, widget=forms.DateInput(attrs={'type': 'date'}))
-    credentials = MultipleFileField(required=False)
-    disability_documents = MultipleFileField(required=False)
+    picture = forms.ImageField(required=True)
     company_name = forms.CharField(max_length=100, required=False, label="Company Name (Optional)")
 
     class Meta:
         model = Guest
-        fields = ['first_name', 'middle_initial', 'last_name', 'birthday', 
-                 'age', 'age_label', 'country_of_origin', 'city', 'phone_number', 
-                 'email', 'company_name', 'sex', 'password', 'picture', 
-                 'has_disability', 'disability_type']
+        fields = ['first_name', 'middle_initial', 'last_name', 'username',
+                 'age', 'country_of_origin', 'city', 'phone_number',
+                 'email', 'company_name', 'sex', 'password', 'picture']
 
     def clean(self):
         cleaned_data = super().clean()
@@ -65,30 +61,6 @@ class GuestRegistrationForm(forms.ModelForm):
 
         if password != confirm_password:
             raise ValidationError("Passwords do not match.")
-            
-        # Calculate age from birthday if provided
-        birthday = cleaned_data.get("birthday")
-        if birthday:
-            from datetime import date
-            today = date.today()
-            age = today.year - birthday.year - ((today.month, today.day) < (birthday.month, birthday.day))
-            cleaned_data['age'] = age
-            
-            # Set age_label based on age
-            if age <= 1:
-                cleaned_data['age_label'] = 'Infant'
-            elif 2 <= age <= 4:
-                cleaned_data['age_label'] = 'Toddler'
-            elif 5 <= age <= 12:
-                cleaned_data['age_label'] = 'Child'
-            elif 13 <= age <= 19:
-                cleaned_data['age_label'] = 'Teen'
-            elif 20 <= age <= 39:
-                cleaned_data['age_label'] = 'Adult'
-            elif 40 <= age <= 59:
-                cleaned_data['age_label'] = 'Middle Adult'
-            elif age >= 60:
-                cleaned_data['age_label'] = 'Senior'
 
         return cleaned_data
 

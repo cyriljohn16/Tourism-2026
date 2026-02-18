@@ -8,6 +8,7 @@ django-mathfilters==1.0.0
 idna==3.11
 mysqlclient==2.2.7
 pillow==12.1.0
+openai==2.21.0
 python-dotenv==1.2.1
 pytz==2025.2
 qrcode==8.2

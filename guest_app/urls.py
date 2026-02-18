@@ -53,6 +53,12 @@ urlpatterns = [
     # Booking cancellation endpoint
     path('cancel_booking/', views.cancel_booking, name='cancel_booking'),
 
+    # Accommodation recommendation and booking
+    path('accommodations/', views.accommodation_page, name='accommodation_page'),
+    path('accommodations/recommend/', views.accommodation_recommend, name='accommodation_recommend'),
+    path('accommodations/billing/', views.accommodation_billing, name='accommodation_billing'),
+    path('accommodations/book/', views.accommodation_book, name='accommodation_book'),
+
     # Companion request endpoints
     path('companion/search/', views.search_users, name='search_users'),
     path('companion/requests/', views.list_companion_requests, name='list_companion_requests'),

@@ -93,7 +93,8 @@ class Guest(AbstractUser):
         # Username is no longer needed, so we remove this method
         # We keep the email as the primary identifier for login
             
-        if self.password:
+        # Only hash password if it's not already hashed
+        if self.password and not self.password.startswith(('pbkdf2_sha256$', 'bcrypt$', 'argon2$', 'md5$', 'sha1$')):
             self.password = make_password(self.password)
         
         # Calculate age and age_label if birthday is provided
@@ -258,6 +259,53 @@ class TourBooking(models.Model):
             'cancelled_tours': cancelled,
             'total_revenue': total_revenue,
         }
+
+class AccommodationBooking(models.Model):
+    """
+    Guest-facing accommodation booking with pending/confirmed flow.
+    """
+    BOOKING_STATUS_CHOICES = [
+        ('pending', 'Pending'),
+        ('confirmed', 'Confirmed'),
+        ('declined', 'Declined'),
+        ('cancelled', 'Cancelled'),
+    ]
+
+    PAYMENT_STATUS_CHOICES = [
+        ('unpaid', 'Unpaid'),
+        ('partial', 'Partially Paid'),
+        ('paid', 'Paid'),
+    ]
+
+    booking_id = models.AutoField(primary_key=True)
+    guest = models.ForeignKey('guest_app.Guest', on_delete=models.CASCADE, related_name='accommodation_bookings')
+    accommodation = models.ForeignKey('admin_app.Accomodation', on_delete=models.CASCADE, related_name='guest_bookings')
+    room = models.ForeignKey('admin_app.Room', on_delete=models.SET_NULL, null=True, blank=True, related_name='guest_bookings')
+
+    check_in = models.DateField()
+    check_out = models.DateField()
+    num_guests = models.IntegerField(default=1)
+
+    status = models.CharField(max_length=20, choices=BOOKING_STATUS_CHOICES, default='pending')
+    booking_date = models.DateTimeField(auto_now_add=True)
+    last_updated = models.DateTimeField(auto_now=True)
+
+    total_amount = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    payment_status = models.CharField(max_length=20, choices=PAYMENT_STATUS_CHOICES, default='unpaid')
+    amount_paid = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+
+    cancellation_reason = models.TextField(blank=True, null=True)
+    cancellation_date = models.DateTimeField(blank=True, null=True)
+
+    def __str__(self):
+        return f"Accommodation Booking #{self.booking_id}: {self.guest} - {self.accommodation}"
+
+    def nights(self):
+        delta = (self.check_out - self.check_in).days
+        return max(delta, 1)
+
+    def get_balance_due(self):
+        return self.total_amount - self.amount_paid
 
 class MapBookmark(TranslatableModel):
     CATEGORY_CHOICES = [

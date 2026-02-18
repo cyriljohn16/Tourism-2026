@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+{% load static %}
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Accommodation Bookings</title>
+  <link rel="stylesheet" href="{% static 'css/navigation.css' %}">
+  <style>
+    body {
+      font-family: 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      background-color: #f4f7fc;
+      margin: 0;
+      padding: 0;
+      color: #333;
+      line-height: 1.5;
+    }
+    .dashboard-container {
+      display: flex;
+      min-height: 100vh;
+    }
+    .content {
+      flex: 1;
+      padding: 32px;
+      box-sizing: border-box;
+    }
+    .container {
+      max-width: 1100px;
+      margin: 0 auto;
+      background: #fff;
+      padding: 20px;
+      border-radius: 8px;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+    }
+    h1, h2 {
+      text-align: center;
+    }
+    h2 {
+      margin-top: 40px;
+      border-bottom: 2px solid #007bff;
+      padding-bottom: 5px;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 20px;
+    }
+    table th, table td {
+      padding: 10px;
+      border: 1px solid #ccc;
+      text-align: left;
+    }
+    table th {
+      background-color: #007bff;
+      color: #fff;
+    }
+    .update-btn {
+      background-color: #28a745;
+      color: #fff;
+      border: none;
+      padding: 8px 12px;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    .decline-btn {
+      background-color: #dc3545;
+      color: #fff;
+      border: none;
+      padding: 8px 12px;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    form {
+      display: inline-block;
+      margin: 0 4px 0 0;
+    }
+  </style>
+</head>
+<body>
+  <div class="dashboard-container">
+    <div class="navigation">
+      {% include 'components/navigation.html' %}
+    </div>
+    <div class="content">
+      <div class="container">
+        <h1>Accommodation Bookings</h1>
+
+        {% if pending_bookings %}
+          <h2>Pending</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>Booking ID</th>
+                <th>Guest</th>
+                <th>Accommodation</th>
+                <th>Room</th>
+                <th>Dates</th>
+                <th>Guests</th>
+                <th>Total</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for booking in pending_bookings %}
+              <tr>
+                <td>{{ booking.booking_id }}</td>
+                <td>{{ booking.guest.first_name }} {{ booking.guest.last_name }}</td>
+                <td>{{ booking.accommodation.company_name }}</td>
+                <td>{% if booking.room %}{{ booking.room.room_name }}{% else %}N/A{% endif %}</td>
+                <td>{{ booking.check_in }} to {{ booking.check_out }}</td>
+                <td>{{ booking.num_guests }}</td>
+                <td>PHP {{ booking.total_amount }}</td>
+                <td>
+                  <form method="post" action="{% url 'admin_app:accommodation_booking_update' booking.booking_id %}">
+                    {% csrf_token %}
+                    <input type="hidden" name="action" value="confirm">
+                    <button class="update-btn" type="submit">Confirm</button>
+                  </form>
+                  <form method="post" action="{% url 'admin_app:accommodation_booking_update' booking.booking_id %}">
+                    {% csrf_token %}
+                    <input type="hidden" name="action" value="decline">
+                    <button class="decline-btn" type="submit">Decline</button>
+                  </form>
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        {% else %}
+          <p>No pending accommodation bookings.</p>
+        {% endif %}
+
+        {% if confirmed_bookings %}
+          <h2>Confirmed</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>Booking ID</th>
+                <th>Guest</th>
+                <th>Accommodation</th>
+                <th>Room</th>
+                <th>Dates</th>
+                <th>Guests</th>
+                <th>Total</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for booking in confirmed_bookings %}
+              <tr>
+                <td>{{ booking.booking_id }}</td>
+                <td>{{ booking.guest.first_name }} {{ booking.guest.last_name }}</td>
+                <td>{{ booking.accommodation.company_name }}</td>
+                <td>{% if booking.room %}{{ booking.room.room_name }}{% else %}N/A{% endif %}</td>
+                <td>{{ booking.check_in }} to {{ booking.check_out }}</td>
+                <td>{{ booking.num_guests }}</td>
+                <td>PHP {{ booking.total_amount }}</td>
+                <td>{{ booking.status }}</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        {% endif %}
+
+        {% if declined_bookings %}
+          <h2>Declined</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>Booking ID</th>
+                <th>Guest</th>
+                <th>Accommodation</th>
+                <th>Room</th>
+                <th>Dates</th>
+                <th>Guests</th>
+                <th>Total</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for booking in declined_bookings %}
+              <tr>
+                <td>{{ booking.booking_id }}</td>
+                <td>{{ booking.guest.first_name }} {{ booking.guest.last_name }}</td>
+                <td>{{ booking.accommodation.company_name }}</td>
+                <td>{% if booking.room %}{{ booking.room.room_name }}{% else %}N/A{% endif %}</td>
+                <td>{{ booking.check_in }} to {{ booking.check_out }}</td>
+                <td>{{ booking.num_guests }}</td>
+                <td>PHP {{ booking.total_amount }}</td>
+                <td>{{ booking.status }}</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        {% endif %}
+
+        {% if cancelled_bookings %}
+          <h2>Cancelled</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>Booking ID</th>
+                <th>Guest</th>
+                <th>Accommodation</th>
+                <th>Room</th>
+                <th>Dates</th>
+                <th>Guests</th>
+                <th>Total</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for booking in cancelled_bookings %}
+              <tr>
+                <td>{{ booking.booking_id }}</td>
+                <td>{{ booking.guest.first_name }} {{ booking.guest.last_name }}</td>
+                <td>{{ booking.accommodation.company_name }}</td>
+                <td>{% if booking.room %}{{ booking.room.room_name }}{% else %}N/A{% endif %}</td>
+                <td>{{ booking.check_in }} to {{ booking.check_out }}</td>
+                <td>{{ booking.num_guests }}</td>
+                <td>PHP {{ booking.total_amount }}</td>
+                <td>{{ booking.status }}</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</body>
+</html>

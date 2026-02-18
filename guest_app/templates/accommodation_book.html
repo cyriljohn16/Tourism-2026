@@ -1,0 +1,197 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Hotel & Inn Recommendations</title>
+  <style>
+    body { font-family: "Segoe UI", Tahoma, Arial, sans-serif; margin: 0; background: #f7f7f5; color: #1c1c1c; }
+    header { background: #0b2c3d; color: #fff; padding: 24px 16px; }
+    .container { max-width: 1100px; margin: 0 auto; padding: 16px; }
+    .card { background: #fff; border-radius: 12px; padding: 16px; box-shadow: 0 6px 18px rgba(0,0,0,0.08); margin-bottom: 16px; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
+    label { display: block; font-weight: 600; margin-bottom: 6px; }
+    input, select { width: 100%; padding: 10px; border: 1px solid #d2d2d2; border-radius: 8px; }
+    button { background: #0b2c3d; color: #fff; border: none; padding: 10px 14px; border-radius: 8px; cursor: pointer; }
+    button.secondary { background: #4a6a78; }
+    .results { margin-top: 12px; }
+    .result { padding: 10px 0; border-bottom: 1px solid #e7e7e7; }
+    .muted { color: #6b6b6b; font-size: 0.95rem; }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="container">
+      <h1>Hotel & Inn Recommendations</h1>
+      <p class="muted">CNN + Decision Tree recommendations and guest booking flow</p>
+    </div>
+  </header>
+
+  <div class="container">
+    <div class="card">
+      <h2>Find a Hotel or Inn</h2>
+      <div class="grid">
+        <div>
+          <label for="location">Preferred Location</label>
+          <input id="location" type="text" placeholder="e.g., Bayawan City" />
+        </div>
+        <div>
+          <label for="budget">Budget per Night (PHP)</label>
+          <input id="budget" type="number" min="0" step="1" placeholder="1500" />
+        </div>
+        <div>
+          <label for="guests">Guests</label>
+          <input id="guests" type="number" min="1" step="1" value="1" />
+        </div>
+        <div>
+          <label for="company_type">Type</label>
+          <select id="company_type">
+            <option value="">Hotel or Inn</option>
+            <option value="hotel">Hotel</option>
+            <option value="inn">Inn</option>
+          </select>
+        </div>
+      </div>
+      <div style="margin-top: 12px;">
+        <button id="recommendBtn">Get Recommendations</button>
+      </div>
+      <div id="recommendations" class="results"></div>
+    </div>
+
+    <div class="card">
+      <h2>Book a Room</h2>
+      <form id="bookingForm">
+        {% csrf_token %}
+        <div class="grid">
+          <div>
+            <label for="room_id">Room</label>
+            <select id="room_id" name="room_id" required>
+              <option value="">Select a room</option>
+              {% for room in rooms %}
+                <option value="{{ room.room_id }}">
+                  {{ room.accommodation.company_name }} - {{ room.room_name }} (PHP {{ room.price_per_night }})
+                </option>
+              {% endfor %}
+            </select>
+          </div>
+          <div>
+            <label for="check_in">Check-in</label>
+            <input id="check_in" name="check_in" type="date" required />
+          </div>
+          <div>
+            <label for="check_out">Check-out</label>
+            <input id="check_out" name="check_out" type="date" required />
+          </div>
+          <div>
+            <label for="num_guests">Guests</label>
+            <input id="num_guests" name="num_guests" type="number" min="1" step="1" value="1" required />
+          </div>
+        </div>
+        <div style="margin-top: 12px;">
+          <button type="button" class="secondary" id="billingBtn">Calculate Billing</button>
+          <button type="submit">Submit Booking (Pending)</button>
+        </div>
+        <div id="billingResult" class="results"></div>
+      </form>
+    </div>
+  </div>
+
+  <script>
+    function getCookie(name) {
+      let cookieValue = null;
+      if (document.cookie && document.cookie !== "") {
+        const cookies = document.cookie.split(";");
+        for (let i = 0; i < cookies.length; i++) {
+          const cookie = cookies[i].trim();
+          if (cookie.substring(0, name.length + 1) === (name + "=")) {
+            cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+            break;
+          }
+        }
+      }
+      return cookieValue;
+    }
+
+    const recommendBtn = document.getElementById("recommendBtn");
+    const recommendations = document.getElementById("recommendations");
+    const billingBtn = document.getElementById("billingBtn");
+    const billingResult = document.getElementById("billingResult");
+    const bookingForm = document.getElementById("bookingForm");
+
+    recommendBtn.addEventListener("click", async () => {
+      recommendations.innerHTML = "Loading recommendations...";
+      const payload = {
+        location: document.getElementById("location").value,
+        budget: document.getElementById("budget").value,
+        guests: document.getElementById("guests").value,
+        company_type: document.getElementById("company_type").value
+      };
+
+      const res = await fetch("{% url 'accommodation_recommend' %}", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-CSRFToken": getCookie("csrftoken")
+        },
+        body: JSON.stringify(payload)
+      });
+      const data = await res.json();
+      if (!data.success) {
+        recommendations.innerHTML = "Unable to fetch recommendations.";
+        return;
+      }
+      recommendations.innerHTML = data.results.map(item =>
+        `<div class="result"><strong>${item.title}</strong><div class="muted">${item.subtitle}</div></div>`
+      ).join("");
+    });
+
+    billingBtn.addEventListener("click", async () => {
+      billingResult.innerHTML = "Calculating billing...";
+      const payload = {
+        room_id: document.getElementById("room_id").value,
+        check_in: document.getElementById("check_in").value,
+        check_out: document.getElementById("check_out").value
+      };
+      const res = await fetch("{% url 'accommodation_billing' %}", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-CSRFToken": getCookie("csrftoken")
+        },
+        body: JSON.stringify(payload)
+      });
+      const data = await res.json();
+      if (!data.success) {
+        billingResult.innerHTML = data.message || "Billing failed.";
+        return;
+      }
+      billingResult.innerHTML = `
+        <div class="result">
+          <strong>${data.accommodation} - ${data.room_name}</strong>
+          <div class="muted">Nights: ${data.nights} | Rate: PHP ${data.rate}</div>
+          <div>Total: PHP ${data.total}</div>
+        </div>
+      `;
+    });
+
+    bookingForm.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const formData = new FormData(bookingForm);
+      const res = await fetch("{% url 'accommodation_book' %}", {
+        method: "POST",
+        headers: {
+          "X-CSRFToken": getCookie("csrftoken")
+        },
+        body: formData
+      });
+      const data = await res.json();
+      if (!data.success) {
+        billingResult.innerHTML = data.message || "Booking failed.";
+        return;
+      }
+      billingResult.innerHTML = `Booking submitted! ID: ${data.booking_id} | Total: PHP ${data.total_amount}`;
+    });
+  </script>
+</body>
+</html>

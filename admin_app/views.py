@@ -24,7 +24,7 @@ from django.core.paginator import Paginator, EmptyPage, PageNotAnInteger
 from django.utils import timezone
 import datetime as dt
 from tour_app.models import Tour_Add, Tour_Schedule, Tour_Event
-from guest_app.models import Guest, Pending
+from guest_app.models import Guest, Pending, AccommodationBooking
 from .models import TourAssignment
 
 def log_activity(request, employee, activity_type, description=None, page=None):
@@ -59,6 +59,19 @@ def accomodation_required(view_func):
     @wraps(view_func)
     def wrapped_view(request, *args, **kwargs):
         if request.session.get('user_type') != 'accomodation' or not request.session.get('accom_id'):
+            return redirect('admin_app:login')
+        return view_func(request, *args, **kwargs)
+    return wrapped_view
+
+# Admin-only decorator to restrict access to admin users
+def admin_required(view_func):
+    """
+    Decorator that checks whether the user is logged in as an admin.
+    If not, the user is redirected to the login page.
+    """
+    @wraps(view_func)
+    def wrapped_view(request, *args, **kwargs):
+        if request.session.get('user_type') != 'employee' or not request.session.get('is_admin'):
             return redirect('admin_app:login')
         return view_func(request, *args, **kwargs)
     return wrapped_view
@@ -256,6 +269,58 @@ def pending_accommodation(request):
         'declined_accommodations': declined_accommodations,
     }
     return render(request, 'pending_accommodation.html', context)
+
+
+@admin_required
+def accommodation_bookings(request):
+    pending_bookings = AccommodationBooking.objects.select_related(
+        "guest", "accommodation", "room"
+    ).filter(status="pending").order_by("-booking_date")
+
+    confirmed_bookings = AccommodationBooking.objects.select_related(
+        "guest", "accommodation", "room"
+    ).filter(status="confirmed").order_by("-booking_date")
+
+    declined_bookings = AccommodationBooking.objects.select_related(
+        "guest", "accommodation", "room"
+    ).filter(status="declined").order_by("-booking_date")
+
+    cancelled_bookings = AccommodationBooking.objects.select_related(
+        "guest", "accommodation", "room"
+    ).filter(status="cancelled").order_by("-booking_date")
+
+    context = {
+        "pending_bookings": pending_bookings,
+        "confirmed_bookings": confirmed_bookings,
+        "declined_bookings": declined_bookings,
+        "cancelled_bookings": cancelled_bookings,
+    }
+    return render(request, "pending_accommodation_bookings.html", context)
+
+
+@admin_required
+@require_POST
+def accommodation_booking_update(request, booking_id):
+    booking = get_object_or_404(AccommodationBooking, booking_id=booking_id)
+    action = request.POST.get("action")
+
+    if action == "confirm":
+        booking.status = "confirmed"
+        messages.success(request, "Booking confirmed.")
+    elif action == "decline":
+        booking.status = "declined"
+        messages.success(request, "Booking declined.")
+    elif action == "cancel":
+        booking.status = "cancelled"
+        booking.cancellation_reason = request.POST.get("reason") or "Cancelled by admin."
+        booking.cancellation_date = timezone.now()
+        messages.success(request, "Booking cancelled.")
+    else:
+        messages.error(request, "Invalid action.")
+        return redirect('admin_app:accommodation_bookings')
+
+    booking.save()
+    return redirect('admin_app:accommodation_bookings')
 
 def accommodation_update(request, pk):
     try:
@@ -771,19 +836,6 @@ def tour_calendar(request):
     
     return render(request, 'tour_calendar.html', context)
 
-# Admin-only decorator to restrict access to admin users
-def admin_required(view_func):
-    """
-    Decorator that checks whether the user is logged in as an admin.
-    If not, the user is redirected to the login page.
-    """
-    @wraps(view_func)
-    def wrapped_view(request, *args, **kwargs):
-        if request.session.get('user_type') != 'employee' or not request.session.get('is_admin'):
-            return redirect('admin_app:login')
-        return view_func(request, *args, **kwargs)
-    return wrapped_view
-
 @admin_required
 def activity_tracker(request):
     """
@@ -884,3 +936,65 @@ def activity_tracker(request):
         pass
     
     return render(request, 'activity_tracker.html', context)
+
+
+@admin_required
+def assign_employee_direct(request):
+    """
+    View for directly assigning an employee to a tour.
+    Handles POST requests from the admin dashboard modal.
+    """
+    if request.method == 'POST':
+        tour_id = request.POST.get('tour_id')
+        employee_id = request.POST.get('employee_id')
+
+        if not tour_id or not employee_id:
+            messages.error(request, "Tour ID and Employee ID are required.")
+            return redirect('admin_app:admin_dashboard')
+
+        try:
+            # Get the tour schedule
+            tour_schedule = Tour_Schedule.objects.get(sched_id=tour_id)
+        except Tour_Schedule.DoesNotExist:
+            messages.error(request, "Tour schedule not found.")
+            return redirect('admin_app:admin_dashboard')
+
+        try:
+            # Get the employee
+            employee = Employee.objects.get(emp_id=employee_id)
+        except Employee.DoesNotExist:
+            messages.error(request, "Employee not found.")
+            return redirect('admin_app:admin_dashboard')
+
+        # Check if this employee is already assigned to this tour
+        existing_assignment = TourAssignment.objects.filter(
+            employee=employee,
+            schedule=tour_schedule
+        ).exists()
+
+        if existing_assignment:
+            messages.warning(request, f"{employee.first_name} {employee.last_name} is already assigned to this tour.")
+        else:
+            # Create the assignment
+            TourAssignment.objects.create(
+                employee=employee,
+                schedule=tour_schedule
+            )
+            messages.success(request, f"Successfully assigned {employee.first_name} {employee.last_name} to {tour_schedule.tour_id.tour_name}.")
+
+            # Log the activity
+            try:
+                admin_employee = Employee.objects.get(emp_id=request.session.get('employee_id'))
+                log_activity(
+                    request,
+                    admin_employee,
+                    'create',
+                    description=f'Assigned employee {employee.first_name} {employee.last_name} to tour {tour_schedule.tour_id.tour_name}'
+                )
+            except Employee.DoesNotExist:
+                pass
+
+        return redirect('admin_app:admin_dashboard')
+
+    # If not POST, redirect to dashboard
+    return redirect('admin_app:admin_dashboard')

@@ -3,7 +3,7 @@ from django.db import IntegrityError
 from tour_app.models import Tour_Event
 from .forms import GuestRegistrationForm
 import calendar
-from datetime import datetime
+from datetime import datetime, timedelta
 from django.contrib import messages
 from tour_app.models import Tour_Schedule, Tour_Add, Tour_Admission, Admission_Rates, Tour_Event
 from django.http import JsonResponse
@@ -17,7 +17,7 @@ from tour_app.models import Tour_Schedule, Tour_Add
 from .models import MapBookmark, BookmarkImage
 import json
 from django.http import HttpResponse
-from django.views.decorators.csrf import csrf_exempt
+from django.views.decorators.csrf import csrf_exempt, ensure_csrf_cookie
 from django.utils.decorators import method_decorator
 import base64
 from django.core.files.base import ContentFile
@@ -39,7 +39,11 @@ import qrcode
 from io import BytesIO
 from django.core.files.uploadedfile import InMemoryUploadedFile
 from PIL import Image
+from admin_app.models import Accomodation, Room as AdminRoom
+from .models import AccommodationBooking
+from ai_chatbot.recommenders import recommend_accommodations, calculate_accommodation_billing
 
+@ensure_csrf_cookie
 def main_page(request):
     """Main page view with language support"""
     # Helper function to ensure datetime objects are properly converted
@@ -250,50 +254,19 @@ def register(request):
         if form.is_valid():
             try:
                 guest = form.save(commit=False)
-                guest.city = form.cleaned_data.get('city')
-                
-                # Save birthday and calculate age and age_label
-                guest.birthday = form.cleaned_data.get('birthday')
-                
-                # Handle disability fields
-                guest.has_disability = form.cleaned_data.get('has_disability', False)
-                if guest.has_disability:
-                    guest.disability_type = form.cleaned_data.get('disability_type', '')
-                
+
                 # Handle optional company_name field
                 company_name = form.cleaned_data.get('company_name')
                 if company_name:
                     guest.company_name = company_name
                 else:
                     guest.company_name = None
-                
+
                 # Save the guest to create the instance with an ID
                 guest.save()
-                
-                # Process and save credentials (multiple files)
-                credentials = request.FILES.getlist('credentials')
-                for credential_file in credentials:
-                    GuestCredential.objects.create(
-                        guest=guest,
-                        document=credential_file
-                    )
-                
-                # Process and save disability documents if has_disability is checked
-                if guest.has_disability:
-                    disability_documents = form.cleaned_data.get('disability_documents')
-                    if disability_documents:
-                        # Handle both single file and list of files
-                        if not isinstance(disability_documents, list):
-                            disability_documents = [disability_documents]
-                        
-                        for doc_file in disability_documents:
-                            DisabilityDocument.objects.create(
-                                guest=guest,
-                                document=doc_file
-                            )
-                
+
                 messages.success(request, 'Registration successful! You can now log in.')
-                
+
                 # For AJAX requests, return JSON response
                 if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
                     return JsonResponse({
@@ -365,9 +338,10 @@ def login_view(request):
                     'message': 'Invalid email or password'
                 })
         
-        return redirect('login')
+        return redirect('main-page')
 
-    return render(request, 'log-in.html')
+    # Keep this URL for login POST handling, but use main-page as the UI entry point.
+    return redirect('main-page')
 
 
 def logout_view(request):
@@ -2891,10 +2865,133 @@ def debug_guest_model(request):
         error_traceback = traceback.format_exc()
         print(f"Error in debug_guest_model: {str(e)}")
         print(error_traceback)
-        return JsonResponse({
-            'success': False,
-            'error': str(e),
-            'traceback': error_traceback
-        }, status=500)
+    return JsonResponse({
+        'success': False,
+        'error': str(e),
+        'traceback': error_traceback
+    }, status=500)
 
 # Add to urls.py: path('debug/guest_model/', views.debug_guest_model, name='debug_guest_model'),
+
+
+@login_required
+def accommodation_page(request):
+    rooms = (
+        AdminRoom.objects.select_related("accommodation")
+        .filter(status="AVAILABLE")
+        .order_by("accommodation__company_name", "room_name")
+    )
+    return render(request, "accommodation_book.html", {
+        "rooms": rooms,
+    })
+
+
+@login_required
+@require_http_methods(["POST"])
+def accommodation_recommend(request):
+    try:
+        payload = json.loads(request.body or "{}")
+    except json.JSONDecodeError:
+        payload = request.POST
+
+    params = {
+        "guests": payload.get("guests"),
+        "budget": payload.get("budget"),
+        "location": payload.get("location"),
+        "company_type": payload.get("company_type"),
+    }
+
+    results = recommend_accommodations(params, limit=5)
+    data = [
+        {
+            "title": item.title,
+            "subtitle": item.subtitle,
+            "score": item.score,
+            "meta": item.meta,
+        }
+        for item in results
+    ]
+    return JsonResponse({"success": True, "results": data})
+
+
+@login_required
+@require_http_methods(["POST"])
+def accommodation_billing(request):
+    try:
+        payload = json.loads(request.body or "{}")
+    except json.JSONDecodeError:
+        payload = request.POST
+
+    room_id = payload.get("room_id")
+    check_in = payload.get("check_in")
+    check_out = payload.get("check_out")
+    nights = payload.get("nights")
+
+    room = AdminRoom.objects.select_related("accommodation").filter(room_id=room_id).first()
+    if room is None:
+        return JsonResponse({"success": False, "message": "Room not found."}, status=404)
+
+    try:
+        if check_in and check_out:
+            check_in_dt = datetime.strptime(check_in, "%Y-%m-%d").date()
+            check_out_dt = datetime.strptime(check_out, "%Y-%m-%d").date()
+            total = calculate_accommodation_billing(room, check_in_dt, check_out_dt)
+            nights = max((check_out_dt - check_in_dt).days, 1)
+        else:
+            nights = max(int(nights or 1), 1)
+            total = calculate_accommodation_billing(room, timezone.now().date(), timezone.now().date() + timedelta(days=nights))
+    except Exception:
+        return JsonResponse({"success": False, "message": "Invalid dates. Use YYYY-MM-DD."}, status=400)
+
+    return JsonResponse({
+        "success": True,
+        "total": f"{total:.2f}",
+        "nights": nights,
+        "rate": f"{room.price_per_night:.2f}",
+        "room_name": room.room_name,
+        "accommodation": room.accommodation.company_name,
+    })
+
+
+@login_required
+@require_http_methods(["POST"])
+def accommodation_book(request):
+    room_id = request.POST.get("room_id")
+    check_in = request.POST.get("check_in")
+    check_out = request.POST.get("check_out")
+    num_guests = int(request.POST.get("num_guests", "1"))
+
+    room = AdminRoom.objects.select_related("accommodation").filter(room_id=room_id).first()
+    if room is None:
+        return JsonResponse({"success": False, "message": "Room not found."}, status=404)
+
+    if room.person_limit and num_guests > room.person_limit:
+        return JsonResponse({"success": False, "message": "Guest count exceeds room capacity."}, status=400)
+
+    try:
+        check_in_dt = datetime.strptime(check_in, "%Y-%m-%d").date()
+        check_out_dt = datetime.strptime(check_out, "%Y-%m-%d").date()
+        if check_out_dt <= check_in_dt:
+            return JsonResponse({"success": False, "message": "Check-out must be after check-in."}, status=400)
+    except Exception:
+        return JsonResponse({"success": False, "message": "Invalid dates. Use YYYY-MM-DD."}, status=400)
+
+    total = calculate_accommodation_billing(room, check_in_dt, check_out_dt)
+
+    booking = AccommodationBooking.objects.create(
+        guest=request.user,
+        accommodation=room.accommodation,
+        room=room,
+        check_in=check_in_dt,
+        check_out=check_out_dt,
+        num_guests=num_guests,
+        status="pending",
+        total_amount=total,
+    )
+
+    return JsonResponse({
+        "success": True,
+        "message": "Accommodation booking submitted and pending confirmation.",
+        "booking_id": booking.booking_id,
+        "total_amount": f"{booking.total_amount:.2f}",
+    })

@@ -68,7 +68,7 @@ class Tour_Schedule(models.Model):
             elif now >= self.start_time and now <= self.end_time:
                 self.status = 'active'
 
-        print(f"📝 Generating sched_id: {self.sched_id}")  # Debugging
+        print(f"Generating sched_id: {self.sched_id}")  # Debugging
         super().save(*args, **kwargs)
 
     def slots_remaining(self):
@@ -179,7 +179,7 @@ class Tour_Event(models.Model):
         if self.sched_id and self.day_number > self.sched_id.duration_days:
             self.day_number = self.sched_id.duration_days
             
-        print(f"📝 Generating event_ID: {self.event_ID}")  # Debugging
+        print(f"Generating event_ID: {self.event_ID}")  # Debugging
         super().save(*args, **kwargs)
 
     def __str__(self):

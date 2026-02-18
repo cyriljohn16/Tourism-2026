@@ -13,6 +13,11 @@
             font-family: 'Poppins', sans-serif;
         }
         
+        html {
+            scroll-padding-top: 60px;
+            scroll-behavior: smooth;
+        }
+
         body {
             background-color: #f8f9fa;
             color: #333;
@@ -501,8 +506,9 @@
         
         .chat-button {
             position: fixed;
-            bottom: 30px;
-            right: 30px;
+            right: 20px;
+            top: 96px;
+            bottom: auto;
             background: linear-gradient(45deg, #104CBA, #1A67D2);
             color: white;
             width: 65px;
@@ -519,7 +525,7 @@
         }
         
         .chat-button:hover {
-            transform: scale(1.1);
+            transform: scale(1.08);
             box-shadow: 0 8px 25px rgba(0, 0, 0, 0.25);
         }
         
@@ -574,6 +580,16 @@
             .next-button {
                 display: none;
             }
+
+            .chat-button {
+                width: 58px;
+                height: 58px;
+                font-size: 1.5rem;
+                right: 16px;
+                top: calc(84px + env(safe-area-inset-top, 0px));
+                bottom: auto;
+            }
+
         }
         
         /* Add specific styling for the images to show their lower portions */
@@ -1224,7 +1240,7 @@
         .request-notification {
             position: relative;
         }
-        
+
         .request-badge {
             position: absolute;
             top: -5px;
@@ -1239,6 +1255,143 @@
             align-items: center;
             justify-content: center;
             font-weight: bold;
+        }
+
+        /* Chat Modal Styles */
+        .chat-modal {
+            display: none;
+            position: fixed;
+            z-index: 2000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+        }
+
+        .chat-modal-content {
+            position: fixed;
+            top: 96px;
+            right: 95px;
+            bottom: auto;
+            transform: none;
+            width: 350px;
+            height: 500px;
+            background-color: white;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .chat-header {
+            background: linear-gradient(45deg, #104CBA, #1A67D2);
+            color: white;
+            padding: 15px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .chat-header h3 {
+            margin: 0;
+            font-size: 1.1rem;
+        }
+
+        .chat-close {
+            background: none;
+            border: none;
+            color: white;
+            font-size: 1.2rem;
+            cursor: pointer;
+            padding: 0;
+        }
+
+        .chat-messages {
+            flex: 1;
+            padding: 15px;
+            overflow-y: auto;
+            background-color: #f8f9fa;
+        }
+
+        .message {
+            margin-bottom: 15px;
+            padding: 10px 15px;
+            border-radius: 18px;
+            max-width: 80%;
+            word-wrap: break-word;
+        }
+
+        .message.user {
+            background-color: #104CBA;
+            color: white;
+            margin-left: auto;
+            text-align: right;
+        }
+
+        .message.bot {
+            background-color: white;
+            color: #333;
+            border: 1px solid #e9ecef;
+        }
+
+        .chat-input-area {
+            padding: 15px;
+            background-color: white;
+            border-top: 1px solid #e9ecef;
+            display: flex;
+            gap: 10px;
+        }
+
+        .chat-input {
+            flex: 1;
+            padding: 10px 15px;
+            border: 1px solid #ddd;
+            border-radius: 25px;
+            outline: none;
+            font-size: 0.9rem;
+        }
+
+        .chat-input:focus {
+            border-color: #104CBA;
+        }
+
+        .chat-send {
+            background: linear-gradient(45deg, #104CBA, #1A67D2);
+            color: white;
+            border: none;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .chat-send:hover {
+            transform: scale(1.1);
+        }
+
+        .typing-indicator {
+            display: none;
+            padding: 10px 15px;
+            color: #666;
+            font-style: italic;
+        }
+
+        @media (max-width: 768px) {
+            .chat-modal-content {
+                top: calc(84px + env(safe-area-inset-top, 0px));
+                right: 12px;
+                bottom: auto;
+                transform: none;
+                width: calc(100vw - 24px);
+                max-width: 360px;
+                height: 70vh;
+                max-height: 500px;
+            }
         }
     </style>
     <!-- Google Fonts -->
@@ -1260,11 +1413,11 @@
             <h1>Ibayaw Tour</h1>
         </div>
         <div class="nav-links">
-            <a href="#">Tour Packs</a>
-            <a href="#">Programs</a>
+            <a href="#tour-packages">Tour Packs</a>
+            <a href="#programs">Programs</a>
             <a href="{% url 'map' %}">City Map</a>
-            <a href="#">About Us</a>
-            <a href="#">Contact</a>
+            <a href="#about-us">About Us</a>
+            <a href="#contact">Contact</a>
         </div>
         
         <!-- Add a more prominent language selector in the navbar -->
@@ -1353,7 +1506,7 @@
     </section>
 
     <!-- Tour Packages Section -->
-    <section class="tour-packages">
+    <section class="tour-packages" id="tour-packages">
         <div class="tour-packages-container">
         <div class="packages-header">
                 <div>
@@ -1526,6 +1679,51 @@
             </div>
             {% endfor %}
         </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- About Us Section -->
+    <section class="about-section" id="about-us" style="padding: 60px 0; background-color: white; text-align: center;">
+        <div class="container">
+            <h2 style="color: #333; margin-bottom: 30px; font-size: 2rem;">About Ibayaw Tour</h2>
+            <p style="color: #666; font-size: 1.1rem; max-width: 800px; margin: 0 auto; line-height: 1.6;">
+                Ibayaw Tour is dedicated to promoting tourism in Bayawan City, Negros Oriental, Philippines.
+                We exist to improve the quality of life for Bayawanons by maximizing the city's tourism potential
+                through innovative web solutions and exceptional tour experiences.
+            </p>
+            <div style="margin-top: 40px; display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 30px; max-width: 1000px; margin-left: auto; margin-right: auto;">
+                <div style="padding: 20px; background: #f8f9fa; border-radius: 10px;">
+                    <i class="fas fa-leaf" style="font-size: 2rem; color: #28a745; margin-bottom: 15px;"></i>
+                    <h3 style="color: #333; margin-bottom: 10px;">Nature & Adventure</h3>
+                    <p style="color: #666;">Experience the natural beauty and adventure opportunities in Bayawan City.</p>
+                </div>
+                <div style="padding: 20px; background: #f8f9fa; border-radius: 10px;">
+                    <i class="fas fa-users" style="font-size: 2rem; color: #104CBA; margin-bottom: 15px;"></i>
+                    <h3 style="color: #333; margin-bottom: 10px;">Community Focus</h3>
+                    <p style="color: #666;">Supporting local communities and promoting sustainable tourism practices.</p>
+                </div>
+                <div style="padding: 20px; background: #f8f9fa; border-radius: 10px;">
+                    <i class="fas fa-globe" style="font-size: 2rem; color: #ff6b35; margin-bottom: 15px;"></i>
+                    <h3 style="color: #333; margin-bottom: 10px;">Cultural Heritage</h3>
+                    <p style="color: #666;">Preserving and showcasing the rich cultural heritage of Bayawan City.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Programs Section -->
+    <section class="programs-section" id="programs" style="padding: 60px 0; background-color: #f9f9f9; text-align: center;">
+        <div class="container">
+            <h2 style="color: #333; margin-bottom: 30px; font-size: 2rem;">Our Programs</h2>
+            <p style="color: #666; font-size: 1.1rem; max-width: 800px; margin: 0 auto; line-height: 1.6;">
+                Discover our comprehensive tourism programs designed to showcase the best of Bayawan City.
+                From cultural experiences to adventure activities, we have something for everyone.
+            </p>
+            <div style="margin-top: 40px;">
+                <a href="#tour-packages" style="background: linear-gradient(45deg, #104CBA, #1A67D2); color: white; padding: 12px 25px; text-decoration: none; border-radius: 25px; font-weight: 600; transition: all 0.3s;">
+                    Explore Our Tours
+                </a>
             </div>
         </div>
     </section>
@@ -1861,10 +2059,184 @@
     </div>
     {% endif %}
 
+    <!-- Contact Section -->
+    <section class="contact-section" id="contact" style="padding: 60px 0; background-color: #f9f9f9; text-align: center;">
+        <div class="container">
+            <h2 style="color: #333; margin-bottom: 30px; font-size: 2rem;">Contact Us</h2>
+            <p style="color: #666; font-size: 1.1rem; max-width: 600px; margin: 0 auto 40px; line-height: 1.6;">
+                Get in touch with us for inquiries, bookings, or any questions about your Bayawan City experience.
+            </p>
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 30px; max-width: 800px; margin: 0 auto;">
+                <div style="text-align: center;">
+                    <i class="fas fa-map-marker-alt" style="font-size: 2rem; color: #104CBA; margin-bottom: 15px;"></i>
+                    <h3 style="color: #333; margin-bottom: 10px;">Location</h3>
+                    <p style="color: #666;">Bayawan City, Negros Oriental<br>Philippines</p>
+                </div>
+                <div style="text-align: center;">
+                    <i class="fas fa-envelope" style="font-size: 2rem; color: #104CBA; margin-bottom: 15px;"></i>
+                    <h3 style="color: #333; margin-bottom: 10px;">Email</h3>
+                    <p style="color: #666;">info@ibayawtour.com</p>
+                </div>
+                <div style="text-align: center;">
+                    <i class="fas fa-phone" style="font-size: 2rem; color: #104CBA; margin-bottom: 15px;"></i>
+                    <h3 style="color: #333; margin-bottom: 10px;">Phone</h3>
+                    <p style="color: #666;">+63 (35) 123-4567</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Chat Modal -->
+    <div id="chatModal" class="chat-modal">
+        <div class="chat-modal-content">
+            <div class="chat-header">
+                <h3>Ibayaw Tour Assistant</h3>
+                <button class="chat-close">&times;</button>
+            </div>
+            <div class="chat-messages" id="chatMessages">
+                <div class="message bot">
+                    Hello! I'm your Ibayaw Tour assistant. How can I help you today?
+                </div>
+            </div>
+            <div class="chat-input-area">
+                <input type="text" id="chatInput" class="chat-input" placeholder="Type your message...">
+                <button id="chatSend" class="chat-send">
+                    <i class="fas fa-paper-plane"></i>
+                </button>
+            </div>
+        </div>
+    </div>
+
     <!-- Chat Button -->
-    <div class="chat-button">
+    <div class="chat-button" id="chatButton">
         <i class="fas fa-comment"></i>
     </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // Chat functionality
+            const chatButton = document.getElementById('chatButton');
+            const chatModal = document.getElementById('chatModal');
+            const chatClose = document.querySelector('.chat-close');
+            const chatInput = document.getElementById('chatInput');
+            const chatSend = document.getElementById('chatSend');
+            const chatMessages = document.getElementById('chatMessages');
+
+            if (!chatButton || !chatModal || !chatClose || !chatInput || !chatSend || !chatMessages) {
+                return;
+            }
+
+            // Show chat modal when button is clicked
+            chatButton.addEventListener('click', function() {
+                chatModal.style.display = 'block';
+                if (chatInput && typeof chatInput.focus === 'function') {
+                    try {
+                        chatInput.focus({ preventScroll: true });
+                    } catch (e) {
+                        // Do not focus if browser does not support preventScroll to avoid page jump.
+                    }
+                }
+            });
+
+            // Close chat modal when X is clicked
+            chatClose.addEventListener('click', function() {
+                chatModal.style.display = 'none';
+            });
+
+            // Close chat modal when clicking outside
+            window.addEventListener('click', function(event) {
+                if (event.target === chatModal) {
+                    chatModal.style.display = 'none';
+                }
+            });
+
+            // Send message functionality
+            async function sendMessage() {
+                const message = chatInput.value.trim();
+                if (message) {
+                    // Add user message
+                    addMessage(message, 'user');
+                    chatInput.value = '';
+                    chatSend.disabled = true;
+                    addMessage('Thinking...', 'bot', true);
+
+                    try {
+                        const response = await fetch('/api/chat/', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify({ message: message })
+                        });
+
+                        const contentType = response.headers.get('content-type') || '';
+                        let data = null;
+                        let rawText = '';
+
+                        if (contentType.includes('application/json')) {
+                            data = await response.json();
+                        } else {
+                            rawText = await response.text();
+                        }
+
+                        removeTypingMessage();
+
+                        if (!response.ok) {
+                            const fallbackMsg = data?.fulfillmentText || data?.message || rawText || 'Server error.';
+                            addMessage(`Chatbot error (${response.status}). ${fallbackMsg}`, 'bot');
+                        } else if (data) {
+                            addMessage(data.fulfillmentText || 'No response from assistant.', 'bot');
+                        } else {
+                            addMessage('Chatbot returned a non-JSON response. Check server logs.', 'bot');
+                        }
+                    } catch (error) {
+                        removeTypingMessage();
+                        addMessage('Sorry, I could not connect to the chatbot right now.', 'bot');
+                        console.error('Chatbot error:', error);
+                    } finally {
+                        chatSend.disabled = false;
+                        if (chatInput && typeof chatInput.focus === 'function') {
+                            try {
+                                chatInput.focus({ preventScroll: true });
+                            } catch (e) {
+                                // Ignore unsupported focus options.
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Add message to chat
+            function addMessage(text, sender, isTyping = false) {
+                const messageDiv = document.createElement('div');
+                messageDiv.className = `message ${sender}`;
+                if (isTyping) {
+                    messageDiv.setAttribute('data-typing', 'true');
+                }
+                messageDiv.textContent = text;
+                messageDiv.style.whiteSpace = 'pre-line';
+                chatMessages.appendChild(messageDiv);
+                chatMessages.scrollTop = chatMessages.scrollHeight;
+            }
+
+            function removeTypingMessage() {
+                const typingMessage = chatMessages.querySelector('[data-typing="true"]');
+                if (typingMessage) {
+                    typingMessage.remove();
+                }
+            }
+
+            // Send message on button click
+            chatSend.addEventListener('click', sendMessage);
+
+            // Send message on Enter key
+            chatInput.addEventListener('keypress', function(e) {
+                if (e.key === 'Enter') {
+                    sendMessage();
+                }
+            });
+        });
+    </script>
 
     <!-- Add modals before the closing body tag -->
     <!-- Sign Up Modal -->
@@ -2519,13 +2891,15 @@
                 const formData = new FormData(this);
                 
                 // Send AJAX request for login
+                const csrfToken = getCookie('csrftoken');
                 fetch('{% url "login" %}', {
                     method: 'POST',
                     body: formData,
                     headers: {
                         'X-Requested-With': 'XMLHttpRequest',
-                        'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
-                    }
+                        'X-CSRFToken': csrfToken
+                    },
+                    credentials: 'same-origin'
                 })
                 .then(response => {
                     if (!response.ok) {

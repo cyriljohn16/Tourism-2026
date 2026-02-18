@@ -13,7 +13,7 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        migrations.AddField(
+        migrations.AlterField(
             model_name='room',
             name='status',
             field=models.CharField(choices=[('AVAILABLE', 'Available'), ('OCCUPIED', 'Occupied'), ('UNAVAILABLE', 'Unavailable')], default='AVAILABLE', max_length=15),

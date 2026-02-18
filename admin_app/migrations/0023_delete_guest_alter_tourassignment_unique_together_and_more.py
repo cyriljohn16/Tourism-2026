@@ -19,16 +19,7 @@ class Migration(migrations.Migration):
             name='tourassignment',
             unique_together={('employee', 'schedule')},
         ),
-        migrations.AddField(
-            model_name='tourassignment',
-            name='assignment_id',
-            field=models.AutoField(primary_key=True, serialize=False),
-        ),
         migrations.DeleteModel(
             name='ItineraryChecklistItem',
-        ),
-        migrations.RemoveField(
-            model_name='tourassignment',
-            name='id',
         ),
     ]

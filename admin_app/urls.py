@@ -32,6 +32,8 @@ urlpatterns = [
     path('accommodation/create/', views.create_accommodation, name='create_accommodation'),
     path('accommodation/update/<int:pk>/', views.accommodation_update, name='accommodation_update'),
     path('accommodation/pending/', views.pending_accommodation, name='pending_accommodation'),
+    path('accommodation/bookings/', views.accommodation_bookings, name='accommodation_bookings'),
+    path('accommodation/bookings/<int:booking_id>/update/', views.accommodation_booking_update, name='accommodation_booking_update'),
 
     # Establishment management route
     path('add_establishment/', views.admin_create_form, name='admin_create_form'),
@@ -60,6 +62,6 @@ urlpatterns = [
     # path('employee/get-itinerary/<str:tour_id>/', views.get_employee_itinerary, name='get_employee_itinerary'),
     # path('employee/update-event-status/', views.update_event_status, name='update_event_status'),
     # path('assign-employee-to-tour/', views.assign_employee_to_tour, name='assign_employee_to_tour'),
-    # path('assign-employee-direct/', views.assign_employee_direct, name='assign_employee_direct'),
+    path('assign-employee-direct/', views.assign_employee_direct, name='assign_employee_direct'),
     # path('admin/get-employee-progress/', views.get_employee_progress, name='get_employee_progress'),
 ]

@@ -35,7 +35,11 @@ SECRET_KEY = os.environ.get('SECRET_KEY', 'django-insecure-your-secret-key-here'
 DEBUG = True
 
 #'192.168.101.12'
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = [
+    "unetymological-earnestine-aneurysmally.ngrok-free.dev",
+    "127.0.0.1"
+]
+
 
 
 # Application definition
@@ -57,6 +61,7 @@ INSTALLED_APPS = [
     'guest_app',
     'accom_app',
     'request_app',
+    'ai_chatbot',
 ]
 
 MIDDLEWARE = [
@@ -101,9 +106,9 @@ DATABASES = {
         'ENGINE': 'django.db.backends.mysql',
         'NAME': 'project_db',            # Your DB name
         'USER': 'root',           # MySQL username
-        'PASSWORD': '',     # MySQL password
+        'PASSWORD': 'september242023',     # MySQL password
         'HOST': '127.0.0.1',             # Localhost
-        'PORT': '4306',                  # Default MySQL port
+        'PORT': '3307',                  # Default MySQL port
     }
 }
 

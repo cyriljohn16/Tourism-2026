@@ -194,6 +194,7 @@ class Room(models.Model):
     room_name = models.CharField(max_length=100)
     person_limit = models.IntegerField(default=0)
     current_availability = models.IntegerField(null=True, blank=True)
+    price_per_night = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     status = models.CharField(max_length=15, choices=ROOM_STATUS_CHOICES, default='AVAILABLE')
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
