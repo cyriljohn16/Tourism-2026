@@ -3141,9 +3141,8 @@
             font-weight: 700;
             font-style: normal;
             font-display: swap;
-            /* Place local file at: /static/fonts/BaraBara.woff2
-               Then use:
-               src: local("Bara Bara"), url("{% static 'fonts/BaraBara.woff2' %}") format("woff2"); */
+            /* Optional local file (if licensed and included):
+               /static/fonts/BaraBara.woff2 */
         }
 
         body.mainpage-page {
@@ -4819,7 +4818,7 @@
                 {% if tour.image %}
                 <img src="{{ tour.image.url }}" alt="{{ tour.tour_name }}">
                 {% else %}
-                <img src="{% static 'images/bg.jpg' %}" alt="{{ tour.tour_name }}">
+                <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='1200' height='675' viewBox='0 0 1200 675'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0%25' y1='0%25' x2='100%25' y2='100%25'%3E%3Cstop offset='0%25' stop-color='%231f5fa8'/%3E%3Cstop offset='100%25' stop-color='%23d2853e'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='1200' height='675' fill='url(%23g)'/%3E%3Ctext x='50%25' y='50%25' dominant-baseline='middle' text-anchor='middle' fill='white' font-size='52' font-family='Arial, sans-serif'%3EBayawan Tour%3C/text%3E%3C/svg%3E" alt="{{ tour.tour_name }}">
                 {% endif %}
                 <div class="package-details">
                             {% if tour.schedules.exists %}

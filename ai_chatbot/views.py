@@ -38,14 +38,9 @@ except Exception:
     except Exception:
         genai = None
 
-try:
-    import numpy as np
-    import pandas as pd
-    import tensorflow as tf
-except ModuleNotFoundError:
-    np = None
-    pd = None
-    tf = None
+np = None
+pd = None
+tf = None
 
 from tour_app.models import Admission_Rates, Tour_Add, Tour_Schedule
 from admin_app.models import (
@@ -98,6 +93,9 @@ logger = logging.getLogger(__name__)
 
 _TEXT_CNN_MODEL_CACHE = None
 _TEXT_CNN_MODEL_PATH_CACHE = None
+_TEXT_CNN_RUNTIME_IMPORT_ATTEMPTED = False
+_TEXT_CNN_RUNTIME_IMPORT_ERROR = ""
+_TEXT_CNN_DISABLED_LOGGED = False
 _ACCOM_LOCATION_CACHE = None
 _MAP_REFERENCE_PLACE_CACHE = None
 _CHAT_STATE_SESSION_KEY = "ai_chatbot_state"
@@ -167,6 +165,46 @@ _INTENT_LABEL_ALIASES = {
     "employee_open_assignment": "employee_open_assignment",
     "employee_update_assignment": "employee_update_assignment",
 }
+
+
+def _env_flag(name, default=False):
+    raw = str(os.getenv(name, str(default))).strip().lower()
+    return raw in {"1", "true", "yes", "on"}
+
+
+def _is_text_cnn_intent_disabled():
+    return _env_flag("DISABLE_TEXT_CNN_INTENT", False)
+
+
+def _ensure_text_cnn_runtime_stack():
+    global np, pd, tf, _TEXT_CNN_RUNTIME_IMPORT_ATTEMPTED, _TEXT_CNN_RUNTIME_IMPORT_ERROR
+
+    if _is_text_cnn_intent_disabled():
+        return False, "disabled_by_environment"
+
+    if np is not None and pd is not None and tf is not None:
+        return True, ""
+
+    if _TEXT_CNN_RUNTIME_IMPORT_ATTEMPTED:
+        return False, _TEXT_CNN_RUNTIME_IMPORT_ERROR or "tensorflow_not_installed"
+
+    _TEXT_CNN_RUNTIME_IMPORT_ATTEMPTED = True
+    try:
+        import numpy as _np
+        import pandas as _pd
+        import tensorflow as _tf
+    except ModuleNotFoundError as exc:
+        _TEXT_CNN_RUNTIME_IMPORT_ERROR = f"module_not_found:{exc}"
+        return False, "tensorflow_not_installed"
+    except Exception as exc:
+        _TEXT_CNN_RUNTIME_IMPORT_ERROR = f"runtime_import_error:{exc}"
+        return False, "tensorflow_not_installed"
+
+    np = _np
+    pd = _pd
+    tf = _tf
+    _TEXT_CNN_RUNTIME_IMPORT_ERROR = ""
+    return True, ""
 _MAP_ANCHOR_ALIASES = {
     "Bayawan City Public Terminal": (
         "terminal",
@@ -1152,8 +1190,9 @@ def _default_text_cnn_repair_dataset_path():
 
 
 def _load_repair_corpus(dataset_path):
-    if pd is None:
-        return [], "pandas_not_installed"
+    runtime_ready, runtime_err = _ensure_text_cnn_runtime_stack()
+    if not runtime_ready:
+        return [], runtime_err or "pandas_not_installed"
     path = Path(dataset_path)
     if not path.exists():
         return [], f"repair_dataset_not_found:{path}"
@@ -1178,8 +1217,9 @@ def _load_repair_corpus(dataset_path):
 
 
 def _repair_text_vectorization_table(loaded_model, model_path=None):
-    if tf is None:
-        return None, "tensorflow_not_installed"
+    runtime_ready, runtime_err = _ensure_text_cnn_runtime_stack()
+    if not runtime_ready:
+        return None, runtime_err or "tensorflow_not_installed"
 
     try:
         old_vectorizer = None
@@ -1268,8 +1308,9 @@ def _repair_text_vectorization_table(loaded_model, model_path=None):
 def _load_text_cnn_model(model_path=None):
     global _TEXT_CNN_MODEL_CACHE, _TEXT_CNN_MODEL_PATH_CACHE
 
-    if tf is None:
-        return None, "tensorflow_not_installed"
+    runtime_ready, runtime_err = _ensure_text_cnn_runtime_stack()
+    if not runtime_ready:
+        return None, runtime_err or "tensorflow_not_installed"
 
     resolved_path = Path(model_path or _default_text_cnn_model_path())
     artifact_source = _resolve_text_cnn_model_source(resolved_path)
@@ -1343,6 +1384,10 @@ def _predict_text_cnn_labels(*, text, model_path, label_map_path):
     if not message:
         return None, "empty_text"
 
+    runtime_ready, runtime_err = _ensure_text_cnn_runtime_stack()
+    if not runtime_ready:
+        return None, runtime_err or "tensorflow_not_installed"
+
     model, model_err = _load_text_cnn_model(model_path=model_path)
     if model is None:
         return None, model_err
@@ -1369,6 +1414,8 @@ def _predict_text_cnn_labels(*, text, model_path, label_map_path):
 
 
 def _predict_accommodation_class_from_text(text):
+    if _is_text_cnn_intent_disabled():
+        return None, "disabled_by_environment"
     model_path, artifact_source = _resolve_accommodation_text_cnn_model_path()
     label_map_path = _default_label_map_path_for_model(model_path)
     payload, err = _predict_text_cnn_labels(
@@ -6470,6 +6517,22 @@ def _intent_confidence_threshold():
 
 
 def _classify_intent_with_text_cnn(message):
+    global _TEXT_CNN_DISABLED_LOGGED
+    if _is_text_cnn_intent_disabled():
+        if not _TEXT_CNN_DISABLED_LOGGED:
+            logger.info(
+                "Text CNN intent classifier disabled by environment; using fallback intent routing."
+            )
+            _TEXT_CNN_DISABLED_LOGGED = True
+        return {
+            "intent": "",
+            "source": "text_cnn_unavailable",
+            "confidence": 0.0,
+            "top_3": [],
+            "error": "disabled_by_environment",
+            "artifact_source": "env_disabled",
+        }
+
     model_path, artifact_source = _resolve_intent_text_cnn_model_path()
     label_map_path = _default_label_map_path_for_model(model_path)
     prediction, err = _predict_text_cnn_labels(
@@ -7618,6 +7681,8 @@ def _apply_strict_intent_overrides(*, actor, message, current_intent):
     intent = str(current_intent or "").strip().lower()
 
     if role == "guest":
+        if _is_accommodation_preview_command(text) or _is_accommodation_how_to_book_request(text):
+            return "book_accommodation"
         if _is_guest_tour_booking_command(text):
             return "get_recommendation"
         if _is_stay_planning_request(text):
@@ -8141,16 +8206,17 @@ def _build_small_talk_payload(*, request, actor, message):
     # Example: "can you help me plan my stay in bayawan?"
     actionable_query = (
         _is_stay_planning_request(lowered)
+        or _is_guest_tour_booking_command(lowered)
         or _looks_like_tour_request(lowered)
         or _is_dining_query(lowered)
         or _is_travel_guidance_request(lowered)
         or _is_reporting_summary_request(lowered)
         or any(token in lowered for token in ("hotel", "inn", "accommodation", "where should i stay"))
     )
-    if actionable_query and not (has_greeting and not asks_help):
+    if actionable_query:
         return None
 
-    if not (has_greeting or asks_help or says_thanks or asks_how_are_you or says_sorry):
+    if not (has_greeting or asks_help or says_thanks or asks_how_are_you or says_sorry or introduced_name):
         return None
 
     role = str(actor.get("role") or "").strip().lower()
@@ -8193,6 +8259,15 @@ def _build_small_talk_payload(*, request, actor, message):
             "quick_replies": guest_quick_replies if role == "guest" else ["Help", "Open dashboard"],
         }
 
+    if asks_help and role == "guest":
+        return {
+            "fulfillmentText": (
+                "I can help you find approved accommodations, show rooms, create accommodation cost previews, "
+                "explore tour packages, submit tour booking requests, check directions, and plan your Bayawan trip."
+            ),
+            "quick_replies": guest_quick_replies,
+        }
+
     if has_greeting or asks_help or says_sorry or introduced_name:
         name_part = f", {remembered_name}" if remembered_name else ""
         if role == "guest":
@@ -8206,9 +8281,9 @@ def _build_small_talk_payload(*, request, actor, message):
             )
             capability_line = _pick_response_variant(
                 [
-                    "I can help you explore Bayawan, check tours, suggest approved accommodations, guide directions, and plan your budget.",
-                    "I can help with tours, approved places to stay, directions, dining, and budget-based stay planning in Bayawan.",
-                    "I can guide you through tours, approved accommodations, travel directions, dining options, and practical trip planning.",
+                    "I can help you explore Bayawan tours, approved accommodations, directions, and trip planning.",
+                    "I can help with tour packages, approved stays, travel directions, and practical Bayawan trip planning.",
+                    "I can guide you through tours, approved accommodations, directions, and plan options for your trip.",
                 ],
                 seed_text=f"{lowered}|social-capability-line",
             )
@@ -8486,17 +8561,17 @@ def _build_out_of_scope_payload(actor, message=""):
     return {
         "fulfillmentText": _pick_response_variant(
             [
-                "I’m not completely sure which part you want yet, but I can help.\nYou can ask me about Bayawan trip planning, approved accommodations, tour packages, directions, nearby dining, or tourism information.",
-                "I want to make sure I understood you correctly.\nI can help with stay planning, approved accommodations, tours, directions, nearby dining, and tourism information.",
-                "I can still help with this.\nWould you like assistance with trip planning, approved stays, tour packages, directions, dining, or tourism details in Bayawan?",
+                "I'm mainly designed to help with Bayawan tourism services, such as tours, approved accommodations, directions, trip planning, and booking previews.",
+                "I can best help with Bayawan tourism tasks: tours, approved accommodations, directions, trip planning, and booking previews.",
+                "I can guide Bayawan tourism requests like tours, approved stays, directions, trip planning, and booking previews.",
             ],
             seed_text=f"{seed}|guest-oos",
         ),
         "quick_replies": [
             "Plan my Bayawan trip",
             "Show available tours",
-            "Recommend an approved accommodation",
-            "How far is this from me?",
+            "Find approved stays",
+            "Get directions",
         ],
     }
 
@@ -8626,6 +8701,14 @@ def _is_out_of_scope_message(message):
         "solve",
         "math",
         "code this",
+        "president",
+        "capital of",
+        "medical advice",
+        "legal advice",
+        "financial advice",
+        "java programming",
+        "homework",
+        "essay",
     )
     if any(marker in text for marker in out_scope_markers):
         return True
@@ -14166,22 +14249,19 @@ def ai_chat(request):
                 "missing_slot": "clarification",
             },
         )
-        if pending_tour_state:
-            active_flow = str(pending_tour_state.get("active_flow") or pending_tour_state.get("stage") or "").strip()
-        if not active_flow:
-            active_flow = chat_state_pending
-        chat_state_provenance["active_flow"] = active_flow[:80]
-        chat_state_provenance["slots_missing"] = chat_state_missing[:60]
-        if isinstance(chat_state_params, dict):
-            filled = [str(k) for k, v in chat_state_params.items() if v not in ("", None, [], {})]
-            chat_state_provenance["slots_filled"] = filled[:10]
-        last_results_type = ""
-        if isinstance(chat_state.get("last_accommodation_recommendations"), list) and chat_state.get("last_accommodation_recommendations"):
-            last_results_type = "accommodation"
-        elif isinstance(chat_state.get("last_tour_recommendation_sched_ids"), list) and chat_state.get("last_tour_recommendation_sched_ids"):
-            last_results_type = "tours"
-        chat_state_provenance["last_results_type"] = last_results_type
-        request._chatbot_log_context["provenance"] = chat_state_provenance
+
+    if (
+        actor.get("role") == "guest"
+        and _is_out_of_scope_message(message)
+        and not _has_strict_intent_signal(actor=actor, message=message)
+    ):
+        request._chatbot_log_context["resolved_intent"] = "out_of_scope"
+        request._chatbot_log_context["fallback_used"] = False
+        return _chat_json_response(
+            request,
+            start_time,
+            _build_out_of_scope_payload(actor, message=message),
+        )
 
     if actor.get("role") == "guest" and _contains_any_phrase(
         message,

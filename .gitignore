@@ -61,3 +61,6 @@ artifacts/text_cnn_intent/baseline_before_boost/
 
 # Runtime progress logs
 *.jsonl
+
+# Database dumps
+*.sql
