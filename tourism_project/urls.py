@@ -4,7 +4,7 @@ from django.conf import settings
 from django.conf.urls.static import static
 from django.shortcuts import redirect
 from django.views.generic import RedirectView
-from django.templatetags.static import static as static_file
+from django.http import HttpResponse
 from admin_app import views as admin_views
 
 urlpatterns = ([
@@ -16,6 +16,6 @@ urlpatterns = ([
     path('accom_app/', include('accom_app.urls')),
     path('request_app/', include('request_app.urls')),
     path("api/", include("ai_chatbot.urls")),
-    path("favicon.ico", RedirectView.as_view(url=static_file("no-image-icon-6.png"), permanent=True)),
+    path("favicon.ico", lambda request: HttpResponse(status=204)),
      path('', lambda request: redirect('admin_app:login')),  # redirect homepage to login
     ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT))

@@ -4616,6 +4616,96 @@
                 grid-auto-columns: 90%;
             }
         }
+
+        /* Final mobile polish pass (Render-safe, frontend only) */
+        @media (max-width: 768px) {
+            html,
+            body {
+                overflow-x: hidden;
+            }
+
+            .section-shell,
+            .approved-stays-panel,
+            .programs-panel,
+            .about-panel,
+            .contact-panel {
+                width: 100%;
+                max-width: 100%;
+            }
+
+            .approved-stays-featured-grid,
+            .approved-stays-carousel-viewport {
+                grid-auto-columns: 100%;
+            }
+
+            .approved-stay-card,
+            .approved-stay-featured-card {
+                width: 100%;
+                min-width: 0;
+                max-width: 100%;
+            }
+
+            .approved-stay-featured-overlay {
+                padding: 14px 12px;
+            }
+
+            .approved-stay-actions {
+                display: grid;
+                grid-template-columns: 1fr;
+                gap: 7px;
+            }
+
+            .approved-stay-btn {
+                width: 100%;
+                min-height: 38px;
+                justify-content: center;
+            }
+
+            .approved-stay-image-wrap,
+            .approved-stay-featured-media {
+                min-height: 210px;
+            }
+
+            .approved-stay-placeholder {
+                padding: 16px;
+                font-size: 0.84rem;
+            }
+
+            .packages-grid {
+                padding-right: 0;
+            }
+
+            .package-card {
+                width: min(92vw, 320px);
+            }
+        }
+
+        @media (max-width: 480px) {
+            .navbar {
+                padding-left: 10px;
+                padding-right: 10px;
+            }
+
+            .nav-links {
+                gap: 12px;
+                overflow-x: auto;
+                -webkit-overflow-scrolling: touch;
+                padding-bottom: 2px;
+            }
+
+            .approved-stays-panel {
+                padding: 14px 10px;
+            }
+
+            .approved-stay-image-wrap,
+            .approved-stay-featured-media {
+                min-height: 190px;
+            }
+
+            .approved-stays-carousel-hint {
+                font-size: 0.72rem;
+            }
+        }
     </style>
     <!-- Google Fonts -->
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800&family=Dancing+Script:wght@700&display=swap" rel="stylesheet">
