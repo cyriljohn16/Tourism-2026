@@ -27,6 +27,7 @@ var/
 local_settings.py
 db.sqlite3
 media
+staticfiles/
 
 # Environment variables
 .env

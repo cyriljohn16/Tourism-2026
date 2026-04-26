@@ -18,31 +18,50 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # Load environment variables from project-level .env file reliably.
 load_dotenv(dotenv_path=BASE_DIR / ".env", override=True)
 
-MEDIA_URL = '/media/'
-MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
+
+def _env_bool(name, default=False):
+    raw = str(os.getenv(name, str(default))).strip().lower()
+    return raw in {"1", "true", "yes", "on"}
+
+
+def _env_int(name, default):
+    try:
+        return int(str(os.getenv(name, str(default))).strip())
+    except (TypeError, ValueError):
+        return default
+
+
+def _env_list(name, default=None):
+    raw = str(os.getenv(name, "")).strip()
+    if raw:
+        return [item.strip() for item in raw.split(",") if item.strip()]
+    return list(default or [])
 
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.1/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = os.environ.get('SECRET_KEY', 'django-insecure-your-secret-key-here')
+SECRET_KEY = os.environ.get("SECRET_KEY", "django-insecure-your-secret-key-here")
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = _env_bool("DEBUG", True)
 
-#'192.168.101.12'
-ALLOWED_HOSTS = [
-    "unetymological-earnestine-aneurysmally.ngrok-free.dev",
-    "127.0.0.1"
-]
+ALLOWED_HOSTS = _env_list(
+    "ALLOWED_HOSTS",
+    default=[
+        "127.0.0.1",
+        "localhost",
+        "unetymological-earnestine-aneurysmally.ngrok-free.dev",
+    ],
+)
 
 
 
 # Application definition
 CRISPY_TEMPLATE_PACK = 'bootstrap4'  # or 'bootstrap5' depending on your choice
-MEDIA_URL = '/media/'  # URL to serve media files
-MEDIA_ROOT = os.path.join(BASE_DIR, 'media')  # Path where media files are stored
+MEDIA_URL = "/media/"  # URL to serve media files
+MEDIA_ROOT = BASE_DIR / "media"  # Path where media files are stored
 
 INSTALLED_APPS = [
     'django.contrib.admin',
@@ -63,6 +82,7 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.locale.LocaleMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -79,7 +99,7 @@ ROOT_URLCONF = 'tourism_project.urls'
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [],
+        'DIRS': [BASE_DIR / "templates"],
         'APP_DIRS': True,
         'OPTIONS': {
             'context_processors': [
@@ -98,16 +118,44 @@ WSGI_APPLICATION = 'tourism_project.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/5.1/ref/settings/#databases
 
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.mysql',
-        'NAME': 'project_db',            # Your DB name
-        'USER': 'root',           # MySQL username
-        'PASSWORD': 'september242023',     # MySQL password september242023
-        'HOST': '127.0.0.1',             # Localhost
-        'PORT': '3307',                  # Default MySQL port
+_cloud_db_engine = os.getenv("DB_ENGINE", "django.db.backends.mysql")
+_cloud_db_name = os.getenv("DB_NAME", "")
+_cloud_db_user = os.getenv("DB_USER", "")
+_cloud_db_password = os.getenv("DB_PASSWORD", "")
+_cloud_db_host = os.getenv("DB_HOST", "")
+_cloud_db_port = os.getenv("DB_PORT", "3306")
+
+_has_cloud_mysql_env = all([_cloud_db_name, _cloud_db_user, _cloud_db_password, _cloud_db_host])
+
+if _has_cloud_mysql_env:
+    DATABASES = {
+        "default": {
+            "ENGINE": _cloud_db_engine,
+            "NAME": _cloud_db_name,
+            "USER": _cloud_db_user,
+            "PASSWORD": _cloud_db_password,
+            "HOST": _cloud_db_host,
+            "PORT": _cloud_db_port,
+            "CONN_MAX_AGE": _env_int("DB_CONN_MAX_AGE", 60),
+            "OPTIONS": {
+                "charset": "utf8mb4",
+            },
+        }
     }
-}
+else:
+    DATABASES = {
+        "default": {
+            "ENGINE": os.getenv("LOCAL_DB_ENGINE", "django.db.backends.mysql"),
+            "NAME": os.getenv("LOCAL_DB_NAME", "project_db"),
+            "USER": os.getenv("LOCAL_DB_USER", "root"),
+            "PASSWORD": os.getenv("LOCAL_DB_PASSWORD", os.getenv("MYSQL_PASSWORD", "september242023")),
+            "HOST": os.getenv("LOCAL_DB_HOST", "127.0.0.1"),
+            "PORT": os.getenv("LOCAL_DB_PORT", "3307"),
+            "OPTIONS": {
+                "charset": "utf8mb4",
+            },
+        }
+    }
 
 
 # Password validation
@@ -156,11 +204,16 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/5.1/howto/static-files/
 
 STATIC_URL = '/static/'
-STATICFILES_DIRS = [os.path.join(BASE_DIR, 'static')]
+STATICFILES_DIRS = [BASE_DIR / "static"]
+STATIC_ROOT = BASE_DIR / "staticfiles"
+STORAGES = {
+    "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
+    "staticfiles": {"BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage"},
+}
 
 SESSION_COOKIE_AGE = 1800  # Session expires after 30 minutes
 SESSION_EXPIRE_AT_BROWSER_CLOSE = True  # Session expires when the browser is closed
-SESSION_COOKIE_SECURE = False  # Set to True if using HTTPS
+SESSION_COOKIE_SECURE = not DEBUG
 SESSION_ENGINE = 'django.contrib.sessions.backends.db'  # Store session in DB
 SESSION_COOKIE_NAME = 'sessionid'  # Default session cookie name
 SESSION_COOKIE_HTTPONLY = True  # Prevent JavaScript access to the session cookie
@@ -180,17 +233,25 @@ AUTHENTICATION_BACKENDS = [
 
 # Email configuration settings
 EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
-EMAIL_HOST = 'smtp.gmail.com'
-EMAIL_PORT = 587
-EMAIL_USE_TLS = True
-EMAIL_HOST_USER = os.environ.get('EMAIL_HOST_USER')
-EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_HOST_PASSWORD')
-DEFAULT_FROM_EMAIL = f'IBAYAW Tours <{os.environ.get("EMAIL_HOST_USER")}>'
+EMAIL_HOST = os.getenv("EMAIL_HOST", "smtp.gmail.com")
+EMAIL_PORT = _env_int("EMAIL_PORT", 587)
+EMAIL_USE_TLS = _env_bool("EMAIL_USE_TLS", True)
+EMAIL_HOST_USER = os.getenv("EMAIL_HOST_USER", "")
+EMAIL_HOST_PASSWORD = os.getenv("EMAIL_HOST_PASSWORD", "")
+DEFAULT_FROM_EMAIL = os.getenv(
+    "DEFAULT_FROM_EMAIL",
+    f'IBAYAW Tours <{EMAIL_HOST_USER}>' if EMAIL_HOST_USER else "IBAYAW Tours <noreply@localhost>",
+)
 
 # CSRF settings to fix form submission issues
-CSRF_TRUSTED_ORIGINS = ['http://localhost:8000', 'http://127.0.0.1:8000']
-CSRF_COOKIE_SECURE = False  # Set to True in production with HTTPS
+CSRF_TRUSTED_ORIGINS = _env_list(
+    "CSRF_TRUSTED_ORIGINS",
+    default=["http://localhost:8000", "http://127.0.0.1:8000"],
+)
+CSRF_COOKIE_SECURE = not DEBUG
 CSRF_USE_SESSIONS = True  # Store CSRF token in the session instead of cookie
+
+SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 
 # If you're using Gmail, you may need to create an App Password:
 # 1. Go to your Google Account > Security
