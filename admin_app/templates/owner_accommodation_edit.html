@@ -1,0 +1,204 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Edit Accommodation Profile</title>
+  <link rel="stylesheet" href="{% static 'css/navigation.css' %}">
+  <style>
+    body {
+      font-family: 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      background: #f3f5fa;
+      color: #1f2937;
+    }
+    .page-wrap {
+      padding: 16px;
+    }
+    .panel {
+      background: #fff;
+      border: 1px solid #e5e7eb;
+      border-radius: 12px;
+      padding: 16px;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+      margin-bottom: 14px;
+    }
+    .header-row {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+    .header-row h1 {
+      margin: 0;
+      font-size: 1.7rem;
+      color: #6b4423;
+      font-weight: 800;
+    }
+    .muted {
+      color: #6b7280;
+      font-size: 0.92rem;
+      margin-top: 4px;
+    }
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      text-decoration: none;
+      border-radius: 999px;
+      padding: 8px 14px;
+      font-weight: 700;
+      border: 1px solid transparent;
+      cursor: pointer;
+      font-size: 0.86rem;
+    }
+    .btn-primary {
+      background: #875a34;
+      color: #fff;
+      border-color: #875a34;
+    }
+    .btn-secondary {
+      background: #f9fafb;
+      color: #374151;
+      border-color: #d1d5db;
+    }
+    .form-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+      gap: 12px;
+    }
+    .field {
+      display: grid;
+      gap: 5px;
+    }
+    .field.full {
+      grid-column: 1 / -1;
+    }
+    .field label {
+      font-size: 0.86rem;
+      font-weight: 700;
+      color: #374151;
+    }
+    .field input,
+    .field textarea,
+    .field select {
+      width: 100%;
+      border: 1px solid #d1d5db;
+      border-radius: 8px;
+      padding: 9px 10px;
+      font-size: 0.9rem;
+      background: #fff;
+      box-sizing: border-box;
+    }
+    .error-text {
+      color: #b91c1c;
+      font-size: 0.82rem;
+    }
+    .actions {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-top: 14px;
+    }
+    .help {
+      font-size: 0.82rem;
+      color: #6b7280;
+    }
+  </style>
+</head>
+<body>
+  <div class="navigation">
+    {% include 'components/owner_navigation.html' %}
+  </div>
+
+  <main class="content page-wrap">
+    <section class="panel">
+      <div class="header-row">
+        <div>
+          <h1>Edit Accommodation Profile</h1>
+          <p class="muted">
+            Update your business details (including accommodation/company name).
+          </p>
+        </div>
+        <a href="{% url 'admin_app:owner_hub' %}" class="btn btn-secondary">Back to Owner Hub</a>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2 style="margin-top:0; color:#1f2937; font-size:1.15rem;">{{ accommodation.company_name }}</h2>
+      <p class="help">
+        Status: <strong>{{ accommodation.approval_status|title }}</strong>.
+        Editing details updates your profile information only.
+      </p>
+
+      <form method="post" enctype="multipart/form-data">
+        {% csrf_token %}
+        <div class="form-grid">
+          <div class="field">
+            <label for="{{ form.company_name.id_for_label }}">Business Name</label>
+            {{ form.company_name }}
+            {% for error in form.company_name.errors %}<div class="error-text">{{ error }}</div>{% endfor %}
+          </div>
+          <div class="field">
+            <label for="{{ form.company_type.id_for_label }}">Business Type</label>
+            {{ form.company_type }}
+            {% for error in form.company_type.errors %}<div class="error-text">{{ error }}</div>{% endfor %}
+          </div>
+          <div class="field">
+            <label for="{{ form.location.id_for_label }}">Address</label>
+            {{ form.location }}
+            {% for error in form.location.errors %}<div class="error-text">{{ error }}</div>{% endfor %}
+          </div>
+          <div class="field">
+            <label for="{{ form.phone_number.id_for_label }}">Contact Number</label>
+            {{ form.phone_number }}
+            {% for error in form.phone_number.errors %}<div class="error-text">{{ error }}</div>{% endfor %}
+          </div>
+          <div class="field">
+            <label for="{{ form.email_address.id_for_label }}">Contact Email</label>
+            {{ form.email_address }}
+            {% for error in form.email_address.errors %}<div class="error-text">{{ error }}</div>{% endfor %}
+          </div>
+          <div class="field">
+            <label for="{{ form.profile_picture.id_for_label }}">Accommodation Photo</label>
+            {{ form.profile_picture }}
+            {% for error in form.profile_picture.errors %}<div class="error-text">{{ error }}</div>{% endfor %}
+          </div>
+          <div class="field full">
+            <label for="{{ form.description.id_for_label }}">Business Description</label>
+            {{ form.description }}
+            {% for error in form.description.errors %}<div class="error-text">{{ error }}</div>{% endfor %}
+          </div>
+          <div class="field full">
+            <label for="{{ form.accommodation_amenities.id_for_label }}">Accommodation Amenities</label>
+            {{ form.accommodation_amenities }}
+            {% for error in form.accommodation_amenities.errors %}<div class="error-text">{{ error }}</div>{% endfor %}
+          </div>
+          <div class="field">
+            <label for="{{ form.official_booking_url.id_for_label }}">Official Booking Page URL</label>
+            {{ form.official_booking_url }}
+            {% for error in form.official_booking_url.errors %}<div class="error-text">{{ error }}</div>{% endfor %}
+          </div>
+          <div class="field">
+            <label for="{{ form.official_contact_url.id_for_label }}">Official Contact/Inquiry URL</label>
+            {{ form.official_contact_url }}
+            {% for error in form.official_contact_url.errors %}<div class="error-text">{{ error }}</div>{% endfor %}
+          </div>
+        </div>
+
+        {% if form.non_field_errors %}
+          <div class="error-text" style="margin-top:10px;">
+            {% for error in form.non_field_errors %}<div>{{ error }}</div>{% endfor %}
+          </div>
+        {% endif %}
+
+        <div class="actions">
+          <button type="submit" class="btn btn-primary">Save Changes</button>
+          <a href="{% url 'admin_app:owner_hub' %}" class="btn btn-secondary">Cancel</a>
+        </div>
+      </form>
+    </section>
+  </main>
+</body>
+</html>

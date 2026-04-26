@@ -314,7 +314,7 @@
     }
 
     .cal-month {
-      width: 120px;
+      width: 170px;
       margin: 0 auto 8px;
       border-radius: 999px;
       border: 1px solid #e5ddd3;
@@ -345,6 +345,22 @@
       background: #eef5ff;
       color: #123e7c;
       box-shadow: inset 0 0 0 2px rgba(47,128,237,.2);
+    }
+
+    .days button.today-day {
+      border-color: #f2b94b;
+      box-shadow: inset 0 0 0 1px rgba(242,185,75,.45);
+    }
+
+    .days button.has-tour::after {
+      content: "";
+      position: absolute;
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: #34a853;
+      bottom: 2px;
+      right: 2px;
     }
 
     .calendar-right {
@@ -655,8 +671,8 @@
               <div class="days" id="calendarDays"></div>
             </div>
             <div class="calendar-right">
-              <strong id="selectedDateLabel">Tours for --</strong>
-              <div id="selectedDateTours" class="calendar-empty">Select a date to view available tours.</div>
+              <strong id="selectedDateLabel">Select a date to view your assigned tours.</strong>
+              <div id="selectedDateTours" class="calendar-empty">Select a date to view your assigned tours.</div>
             </div>
           </div>
         </section>
@@ -712,8 +728,8 @@
       const selectedDateTours = document.getElementById("selectedDateTours");
       const tours = JSON.parse(document.getElementById("employeeCalendarTours").textContent || "[]");
 
-      const monthName = now.toLocaleString("default", { month: "short" }).toUpperCase();
-      calMonth.textContent = monthName;
+      const monthName = now.toLocaleString("default", { month: "long" });
+      calMonth.textContent = `${monthName} ${year}`;
 
       const firstDay = new Date(year, month, 1).getDay();
       const daysInMonth = new Date(year, month + 1, 0).getDate();
@@ -724,19 +740,35 @@
         calendarDays.appendChild(spacer);
       }
 
+      function formatLabel(dateISO) {
+        const [yy, mm, dd] = String(dateISO || "").split("-").map(v => Number(v));
+        if (!yy || !mm || !dd) return dateISO;
+        return new Date(yy, mm - 1, dd).toLocaleDateString("en-US", {
+          month: "long",
+          day: "numeric",
+          year: "numeric",
+        });
+      }
+
+      function hasToursOnDate(dateISO) {
+        return tours.some(t => t.start <= dateISO && t.end >= dateISO);
+      }
+
       function renderToursForDate(dateISO) {
         const items = tours.filter(t => t.start <= dateISO && t.end >= dateISO);
-        selectedDateLabel.textContent = "Tours for " + dateISO;
+        selectedDateLabel.textContent = "Tours for " + formatLabel(dateISO);
         if (!items.length) {
           selectedDateTours.className = "calendar-empty";
-          selectedDateTours.textContent = "Select a date to view available tours.";
+          selectedDateTours.textContent = "No assigned tours for this date.";
           return;
         }
         selectedDateTours.className = "";
         selectedDateTours.innerHTML = items.map(t =>
           `<div style="padding:8px 0; border-bottom:1px dashed #e2e8f0;">
             <strong>${t.tourName}</strong><br>
-            <span style="font-size:12px; color:#64748b;">Schedule: ${t.schedId} (${t.status})</span>
+            <span style="font-size:12px; color:#64748b;">Schedule: ${t.schedId} (${t.status})</span><br>
+            <span style="font-size:12px; color:#64748b;">${new Date(t.startDateTime).toLocaleString()} - ${new Date(t.endDateTime).toLocaleString()}</span><br>
+            <span style="font-size:12px; color:#334155;">Booked: ${t.confirmedBookings} | Slots Available: ${t.slotsAvailable}</span>
           </div>`
         ).join("");
       }
@@ -746,12 +778,31 @@
         btn.type = "button";
         btn.textContent = String(day);
         const dateISO = `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+        btn.style.position = "relative";
+        if (dateISO === new Date().toISOString().slice(0, 10)) {
+          btn.classList.add("today-day");
+        }
+        if (hasToursOnDate(dateISO)) {
+          btn.classList.add("has-tour");
+        }
         btn.addEventListener("click", () => {
           document.querySelectorAll("#calendarDays button").forEach(b => b.classList.remove("active-day"));
           btn.classList.add("active-day");
           renderToursForDate(dateISO);
         });
         calendarDays.appendChild(btn);
+      }
+
+      const todayISO = new Date().toISOString().slice(0, 10);
+      const initialPick = tours.length && hasToursOnDate(todayISO) ? todayISO : (tours[0] ? tours[0].start : todayISO);
+      const initialBtn = Array.from(document.querySelectorAll("#calendarDays button")).find(btn => {
+        const dayVal = Number(btn.textContent || "0");
+        const iso = `${year}-${String(month + 1).padStart(2, "0")}-${String(dayVal).padStart(2, "0")}`;
+        return iso === initialPick;
+      });
+      if (initialBtn) {
+        initialBtn.classList.add("active-day");
+        renderToursForDate(initialPick);
       }
     })();
   </script>

@@ -46,6 +46,7 @@ urlpatterns = [
     path('api/bookmarks/<int:bookmark_id>/update/', views.bookmark_update, name='bookmark_update'),
     path('api/bookmarks/<int:bookmark_id>/delete/', views.bookmark_delete, name='bookmark_delete'),
     path('api/bookmarks/debug/', views.bookmark_debug, name='bookmark_debug'),
+    path('api/location/current/', views.current_location_api, name='current_location_api'),
     
     # Bookmark image API endpoints
     path('api/bookmarks/<int:bookmark_id>/images/', views.bookmark_get_images, name='bookmark_get_images'),
@@ -55,13 +56,19 @@ urlpatterns = [
     # Booking cancellation endpoint
     path('cancel_booking/', views.cancel_booking, name='cancel_booking'),
 
-    # Accommodation recommendation and booking
+    # Accommodation discovery (transactions are disabled; official outbound links only)
     path('accommodations/', views.accommodation_page, name='accommodation_page'),
+    path('accommodation/<int:accom_id>/', views.accommodation_detail_page, name='accommodation_detail_page'),
+    path('accommodations/official-links/', views.my_accommodation_bookings, name='accommodation_official_links'),
     path('accommodations/my-bookings/', views.my_accommodation_bookings, name='my_accommodation_bookings'),
     path('accommodations/my-bookings/<int:booking_id>/cancel/', views.cancel_my_accommodation_booking, name='cancel_my_accommodation_booking'),
     path('accommodations/recommend/', views.accommodation_recommend, name='accommodation_recommend'),
+    # Deprecated accommodation transaction endpoints kept for safe compatibility.
+    path('accommodations/deprecated/billing/', views.accommodation_billing, name='accommodation_billing_deprecated'),
     path('accommodations/billing/', views.accommodation_billing, name='accommodation_billing'),
+    path('accommodations/deprecated/book/', views.accommodation_book, name='accommodation_book_deprecated'),
     path('accommodations/book/', views.accommodation_book, name='accommodation_book'),
+    path('accommodations/deprecated/payment/webhook/', views.payment_webhook_callback, name='payment_webhook_callback_deprecated'),
     path('accommodations/payment/webhook/', views.payment_webhook_callback, name='payment_webhook_callback'),
 
     # Companion request endpoints

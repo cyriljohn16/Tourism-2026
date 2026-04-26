@@ -3,459 +3,67 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>My Accommodation Bookings</title>
-  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <title>Accommodation Links</title>
   <style>
-    * { box-sizing: border-box; }
-
-    :root {
-      --bg: #f8f5f1;
-      --panel: #fffdf9;
-      --panel-alt: #fff7ef;
-      --ink: #3f2f26;
-      --muted: #765b48;
-      --line: #e6d7c8;
-      --brand-900: #6f4e37;
-      --brand-700: #b1743f;
-      --brand-500: #d09b6c;
-      --chip: #f2e4d6;
-      --chip-ink: #6b4423;
-    }
-
-    body {
-      font-family: "Poppins", "Segoe UI", Tahoma, Arial, sans-serif;
-      margin: 0;
-      color: var(--ink);
-      background:
-        radial-gradient(circle at 85% -10%, rgba(177, 116, 63, 0.2), transparent 32%),
-        radial-gradient(circle at -5% 35%, rgba(111, 78, 55, 0.15), transparent 26%),
-        var(--bg);
-    }
-
-    header {
-      background: linear-gradient(135deg, var(--brand-900), var(--brand-700));
-      color: #fff;
-      padding: 30px 16px 40px;
-      position: relative;
-      overflow: hidden;
-    }
-    header::after {
-      content: "";
-      position: absolute;
-      right: -90px;
-      top: -80px;
-      width: 300px;
-      height: 300px;
-      border-radius: 50%;
-      background: radial-gradient(circle, rgba(255,255,255,0.18), rgba(255,255,255,0));
-      pointer-events: none;
-    }
-
-    .container { max-width: 1160px; margin: 0 auto; padding: 18px; }
-
-    .card {
-      background: var(--panel);
-      border-radius: 16px;
-      padding: 18px;
-      border: 1px solid rgba(111, 78, 55, 0.12);
-      box-shadow: 0 10px 24px rgba(56, 33, 16, 0.08);
-      margin-bottom: 16px;
-    }
-
-    .actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 10px; }
-    .btn {
-      display: inline-block;
-      background: linear-gradient(135deg, var(--brand-900), var(--brand-700));
-      color: #fff;
-      text-decoration: none;
-      border: none;
-      padding: 10px 14px;
-      border-radius: 10px;
-      cursor: pointer;
-      font-weight: 600;
-      letter-spacing: 0.01em;
-      transition: transform 120ms ease, box-shadow 120ms ease, opacity 120ms ease;
-    }
-    .btn:hover { transform: translateY(-1px); box-shadow: 0 6px 14px rgba(70, 42, 21, 0.2); }
-    .btn.secondary { background: linear-gradient(135deg, #875a34, #b57946); }
-
-    .filter-tabs { display: flex; gap: 9px; flex-wrap: wrap; margin-top: 11px; }
-    .filter-tab {
-      display: inline-block;
-      text-decoration: none;
-      color: var(--chip-ink);
-      background: var(--chip);
-      border: 1px solid #e0c9b2;
-      padding: 9px 13px;
-      border-radius: 999px;
-      font-size: 0.9rem;
-      font-weight: 600;
-      transition: background 120ms ease, color 120ms ease, transform 120ms ease, border-color 120ms ease;
-    }
-    .filter-tab:hover {
-      transform: translateY(-1px);
-      border-color: #d3b395;
-      background: #fcf0e3;
-    }
-    .filter-tab.active {
-      background: linear-gradient(135deg, #6f4e37, #b1743f);
-      color: #fff;
-      border-color: #b1743f;
-    }
-
-    .muted { color: var(--muted); font-size: 0.95rem; }
-    .booking-list { display: grid; gap: 14px; }
-
-    .booking-item {
-      border: 1px solid var(--line);
-      border-radius: 14px;
-      padding: 15px;
-      background: linear-gradient(180deg, var(--panel-alt), #ffffff);
-      box-shadow: 0 4px 12px rgba(56, 33, 16, 0.06);
-      transition: transform 120ms ease, box-shadow 120ms ease;
-    }
-    .booking-item:hover {
-      transform: translateY(-1px);
-      box-shadow: 0 7px 18px rgba(56, 33, 16, 0.1);
-    }
-
-    .booking-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; margin-bottom: 8px; }
-    .booking-title { font-weight: 800; font-size: 1.04rem; color: #6b4423; letter-spacing: 0.01em; }
-    .booking-subtitle { color: #7a644f; font-size: 0.93rem; margin-top: 3px; }
-    .badge-row { display: flex; gap: 8px; flex-wrap: wrap; }
-    .badge { display: inline-block; padding: 4px 10px; border-radius: 999px; font-size: 0.78rem; font-weight: 800; letter-spacing: 0.01em; }
-    .badge.pending { background: #fff3cd; color: #8a6d1d; }
-    .badge.confirmed { background: #d1e7dd; color: #0f5132; }
-    .badge.declined { background: #f8d7da; color: #842029; }
-    .badge.cancelled { background: #e9ecef; color: #495057; }
-    .badge.unpaid { background: #f8d7da; color: #842029; }
-    .badge.partial { background: #fff3cd; color: #8a6d1d; }
-    .badge.paid { background: #d1e7dd; color: #0f5132; }
-    .details { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 9px 14px; margin-top: 9px; }
-    .detail { background: #fff; border: 1px solid #eadbcd; border-radius: 10px; padding: 8px 10px; }
-    .detail .label { display: block; font-size: 0.78rem; color: #7a644f; font-weight: 700; margin-bottom: 2px; }
-    .detail .value { display: block; font-size: 0.92rem; color: #4a3629; }
-    .alert { border-radius: 10px; padding: 10px 12px; margin-bottom: 12px; font-size: 0.92rem; }
-    .alert.success { background: #d1e7dd; color: #0f5132; border: 1px solid #badbcc; }
-    .alert.error { background: #f8d7da; color: #842029; border: 1px solid #f5c2c7; }
-    .alert.info { background: #cff4fc; color: #055160; border: 1px solid #b6effb; }
-    .cancel-panel { margin-top: 10px; padding: 10px; border: 1px dashed #d6bba4; border-radius: 10px; background: #fff8f2; }
-    .cancel-panel label { display: block; font-size: 0.82rem; font-weight: 700; color: #6b4423; margin-bottom: 6px; }
-    .cancel-panel textarea { width: 100%; box-sizing: border-box; min-height: 56px; border-radius: 8px; border: 1px solid #dfc4ac; padding: 8px; font-family: inherit; }
-    .cancel-panel textarea:focus { outline: none; border-color: #b57946; box-shadow: 0 0 0 3px rgba(181, 121, 70, 0.18); }
-    .cancel-actions { margin-top: 8px; display: flex; justify-content: flex-end; }
-    .btn.danger { background: linear-gradient(135deg, #8f1f1f, #c43131); }
-    .empty { text-align: center; padding: 24px 12px; color: #7a644f; }
-    a:focus-visible,
-    button:focus-visible,
-    textarea:focus-visible {
-      outline: 3px solid rgba(181, 121, 70, 0.35);
-      outline-offset: 2px;
-    }
-    @media (prefers-reduced-motion: reduce) {
-      * {
-        transition: none !important;
-        animation: none !important;
-      }
-    }
-    @media (max-width: 640px) {
-      .details { grid-template-columns: 1fr; }
-      header { padding-top: 24px; padding-bottom: 30px; }
-      .container { padding: 12px; }
-      .booking-title { font-size: 0.98rem; }
-    }
+    body { margin: 0; font-family: Arial, sans-serif; background: #f6f8fc; color: #1f2937; }
+    .container { max-width: 1000px; margin: 0 auto; padding: 18px; }
+    .card { background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; padding: 14px; margin-bottom: 12px; }
+    .notice { background: #fff7ed; border: 1px solid #fdba74; color: #9a3412; border-radius: 10px; padding: 12px; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 10px; margin-top: 12px; }
+    .row-title { font-weight: 700; color: #6b4423; }
+    .meta { font-size: 0.86rem; color: #475569; margin-top: 3px; }
+    .actions { margin-top: 8px; }
+    .btn { display: inline-block; text-decoration: none; padding: 8px 10px; border-radius: 8px; background: #1d4ed8; color: #fff; font-size: 0.84rem; font-weight: 700; }
+    .btn.secondary { background: #475569; }
+    .row-image-wrap { width: 100%; aspect-ratio: 16 / 10; border-radius: 10px; overflow: hidden; background: #edf3fb; border: 1px solid #d8e3f1; margin-bottom: 10px; display:flex; align-items:center; justify-content:center; }
+    .row-image-wrap img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .row-image-placeholder { font-size: 0.8rem; color: #577192; font-weight: 700; text-align: center; padding: 10px; }
   </style>
-  <link rel="stylesheet" href="/static/css/guest_unified.css">
 </head>
-<body class="guest-booking guest-with-topnav">
-  <nav class="guest-top-nav" aria-label="Guest navigation">
-    <div class="guest-top-nav-left">
-      <a class="guest-top-nav-brand" href="{% url 'main-page' %}">Ibayaw Tour</a>
-    </div>
-    <div class="guest-top-nav-links">
-      <a class="guest-top-nav-link" href="{% url 'main-page' %}" title="Home">
-        <span class="label">Home</span>
-      </a>
-      <div class="guest-top-nav-bell">
-        <button type="button" class="guest-top-nav-link" id="guestNotifToggle" title="Notifications">
-          <span class="label">Notifications</span>
-        </button>
-        <span class="guest-top-nav-badge" id="guestNotifBadge">0</span>
-        <div class="guest-notif-panel" id="guestNotifPanel">
-          <div class="guest-notif-head">
-            <h4>Notifications</h4>
-            <button type="button" class="guest-notif-action" id="guestNotifMarkRead">Mark all as read</button>
-          </div>
-          <div id="guestNotifList"></div>
-        </div>
-      </div>
-      <div style="position: relative;">
-        <button type="button" class="guest-top-nav-link" id="guestProfileToggle" title="Profile">
-          <span class="label">{{ request.user.first_name|default:request.user.username }}</span>
-        </button>
-        <div class="guest-profile-panel" id="guestProfilePanel">
-          <a href="{% url 'my_profile' %}">My Profile</a>
-          <a href="{% url 'my_accommodation_bookings' %}">My Bookings</a>
-          <a href="{% url 'main-page' %}#tour-packages">Tour Packages</a>
-          <a href="{% url 'main-page' %}#programs">Programs</a>
-          <a href="{% url 'logout' %}">Logout</a>
-        </div>
-      </div>
-    </div>
-  </nav>
-  <header>
-    <div class="container">
-      <h1 style="margin: 0;">My Accommodation Bookings</h1>
-      <p class="muted" style="margin: 6px 0 0; color: rgba(255,255,255,0.9);">
-        Track your hotel/inn booking status and payment status.
-      </p>
-    </div>
-  </header>
-
+<body>
   <div class="container">
-    {% if messages %}
-      <div class="card">
-        {% for message in messages %}
-          <div class="alert {% if message.tags == 'success' %}success{% elif message.tags == 'error' %}error{% else %}info{% endif %}">
-            {{ message }}
+    <div class="card">
+      <h1 style="margin:0 0 8px;">Accommodation Official Link Handoff</h1>
+      <div class="notice">
+        Accommodation transactions are no longer processed inside this system.
+        Please continue through each accommodation's official page or contact channel.
+      </div>
+      <div style="margin-top:10px;">
+        <a class="btn secondary" href="{% url 'main-page' %}#tour-packages">Go to Tour Package Booking</a>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2 style="margin-top:0;">Official Accommodation Links</h2>
+      <div class="grid">
+        {% for row in listing_rows %}
+        <div class="card" style="margin:0;">
+          <div class="row-image-wrap">
+            {% if row.image_url %}
+              <img src="{{ row.image_url }}" alt="{{ row.accommodation.company_name }}" onerror="this.style.display='none'; if(this.nextElementSibling){this.nextElementSibling.style.display='flex';}">
+              <div class="row-image-placeholder" style="display:none;">No image available</div>
+            {% else %}
+              <div class="row-image-placeholder">No image available</div>
+            {% endif %}
           </div>
+          <div class="row-title">{{ row.accommodation.company_name }}</div>
+          <div class="meta">{{ row.accommodation.company_type|title }} - {{ row.accommodation.location }}</div>
+          <div class="actions">
+            {% if row.official_link %}
+              <a class="btn" href="{{ row.official_link }}" target="_blank" rel="noopener noreferrer">Visit official page/contact channel</a>
+            {% else %}
+              <span class="meta">No official page/contact link published yet.</span>
+            {% endif %}
+          </div>
+        </div>
+        {% empty %}
+        <div class="meta">No active accommodation listings available.</div>
         {% endfor %}
       </div>
-    {% endif %}
-
-    <div class="card">
-      <div class="filter-tabs" aria-label="Booking status filters">
-        <a class="filter-tab {% if selected_status == 'all' %}active{% endif %}" href="{% url 'my_accommodation_bookings' %}?status=all&payment={{ selected_payment }}">All ({{ total_count }})</a>
-        <a class="filter-tab {% if selected_status == 'pending' %}active{% endif %}" href="{% url 'my_accommodation_bookings' %}?status=pending&payment={{ selected_payment }}">Pending ({{ pending_count }})</a>
-        <a class="filter-tab {% if selected_status == 'confirmed' %}active{% endif %}" href="{% url 'my_accommodation_bookings' %}?status=confirmed&payment={{ selected_payment }}">Confirmed ({{ confirmed_count }})</a>
-        <a class="filter-tab {% if selected_status == 'declined' %}active{% endif %}" href="{% url 'my_accommodation_bookings' %}?status=declined&payment={{ selected_payment }}">Declined ({{ declined_count }})</a>
-        <a class="filter-tab {% if selected_status == 'cancelled' %}active{% endif %}" href="{% url 'my_accommodation_bookings' %}?status=cancelled&payment={{ selected_payment }}">Cancelled ({{ cancelled_count }})</a>
-      </div>
-      <div class="filter-tabs" aria-label="Payment status filters" style="margin-top: 8px;">
-        <a class="filter-tab {% if selected_payment == 'all' %}active{% endif %}" href="{% url 'my_accommodation_bookings' %}?status={{ selected_status }}&payment=all">Payment: All ({{ payment_total_count }})</a>
-        <a class="filter-tab {% if selected_payment == 'unpaid' %}active{% endif %}" href="{% url 'my_accommodation_bookings' %}?status={{ selected_status }}&payment=unpaid">Unpaid ({{ unpaid_count }})</a>
-        <a class="filter-tab {% if selected_payment == 'partial' %}active{% endif %}" href="{% url 'my_accommodation_bookings' %}?status={{ selected_status }}&payment=partial">Partial ({{ partial_count }})</a>
-        <a class="filter-tab {% if selected_payment == 'paid' %}active{% endif %}" href="{% url 'my_accommodation_bookings' %}?status={{ selected_status }}&payment=paid">Paid ({{ paid_count }})</a>
-      </div>
-    </div>
-
-    <div class="card">
-      <p class="muted" style="margin-top: 0;">
-        Showing <strong>{{ selected_status|title }}</strong> bookings
-        with payment filter <strong>{{ selected_payment|title }}</strong>.
-      </p>
-      <div style="margin: -2px 0 10px;">
-        <span style="display:inline-block; padding:4px 10px; border-radius:999px; background:#f2e4d6; border:1px solid #e0c9b2; color:#6b4423; font-size:0.78rem; font-weight:700; letter-spacing:0.01em;">
-          Filter: {{ selected_status|title }} + {{ selected_payment|title }}
-        </span>
-      </div>
-      {% if bookings %}
-        <div class="booking-list">
-          {% for booking in bookings %}
-            <div class="booking-item">
-              <div class="booking-head">
-                <div>
-                  <div class="booking-title">
-                    Booking #{{ booking.booking_id }} - {{ booking.accommodation.company_name }}
-                  </div>
-                  <div class="booking-subtitle">
-                    {% if booking.room %}{{ booking.room.room_name }}{% else %}Room not assigned{% endif %}
-                    | Submitted {{ booking.booking_date|date:"M d, Y h:i A" }}
-                  </div>
-                </div>
-                <div class="badge-row">
-                  <span class="badge {{ booking.status|lower }}">{{ booking.get_status_display }}</span>
-                  <span class="badge {{ booking.payment_status|lower }}">{{ booking.get_payment_status_display }}</span>
-                </div>
-              </div>
-
-              <div class="details">
-                <div class="detail">
-                  <span class="label">Check-in</span>
-                  <span class="value">{{ booking.check_in|date:"Y-m-d" }}</span>
-                </div>
-                <div class="detail">
-                  <span class="label">Check-out</span>
-                  <span class="value">{{ booking.check_out|date:"Y-m-d" }}</span>
-                </div>
-                <div class="detail">
-                  <span class="label">Nights</span>
-                  <span class="value">{{ booking.nights }}</span>
-                </div>
-                <div class="detail">
-                  <span class="label">Guests</span>
-                  <span class="value">{{ booking.num_guests }}</span>
-                </div>
-                <div class="detail">
-                  <span class="label">Total Amount</span>
-                  <span class="value">PHP {{ booking.total_amount|floatformat:2 }}</span>
-                </div>
-                <div class="detail">
-                  <span class="label">Amount Paid</span>
-                  <span class="value">PHP {{ booking.amount_paid|floatformat:2 }}</span>
-                </div>
-                <div class="detail">
-                  <span class="label">Balance Due</span>
-                  <span class="value">PHP {{ booking.get_balance_due|floatformat:2 }}</span>
-                </div>
-                <div class="detail">
-                  <span class="label">Last Updated</span>
-                  <span class="value">{{ booking.last_updated|date:"M d, Y h:i A" }}</span>
-                </div>
-              </div>
-
-              {% if booking.cancellation_reason %}
-                <div class="detail" style="margin-top: 10px;">
-                  <span class="label">Cancellation Reason</span>
-                  <span class="value">{{ booking.cancellation_reason }}</span>
-                </div>
-              {% elif booking.status == 'pending' or booking.status == 'confirmed' %}
-                <div class="cancel-panel">
-                  <form method="post" action="{% url 'cancel_my_accommodation_booking' booking.booking_id %}" onsubmit="return confirm('Cancel this booking? This will update the admin booking list to Cancelled.');">
-                    {% csrf_token %}
-                    <input type="hidden" name="return_status" value="{{ selected_status }}">
-                    <input type="hidden" name="return_payment" value="{{ selected_payment }}">
-                    <label for="cancel-reason-{{ booking.booking_id }}">Cancellation Reason (optional)</label>
-                    <textarea id="cancel-reason-{{ booking.booking_id }}" name="reason" placeholder="Example: Change of plans"></textarea>
-                    <div class="cancel-actions">
-                      <button class="btn danger" type="submit">Cancel Booking</button>
-                    </div>
-                  </form>
-                </div>
-              {% endif %}
-            </div>
-          {% endfor %}
-        </div>
-      {% else %}
-        <div class="empty">
-          <p style="margin: 0 0 10px;"><strong>No accommodation bookings yet.</strong></p>
-          <p style="margin: 0 0 14px;">Once you submit a hotel/inn booking, it will appear here for status tracking.</p>
-          <a class="btn" href="{% url 'accommodation_page' %}">Start a Booking</a>
-        </div>
-      {% endif %}
     </div>
   </div>
-
-  <script>
-    (function initGuestTopNav() {
-      const notifUrl = "{% url 'guest_notifications' %}";
-      const notifToggle = document.getElementById("guestNotifToggle");
-      const notifPanel = document.getElementById("guestNotifPanel");
-      const notifList = document.getElementById("guestNotifList");
-      const notifBadge = document.getElementById("guestNotifBadge");
-      const markReadBtn = document.getElementById("guestNotifMarkRead");
-      const profileToggle = document.getElementById("guestProfileToggle");
-      const profilePanel = document.getElementById("guestProfilePanel");
-
-      function csrfToken() {
-        const m = document.cookie.match(/(?:^|;\s*)csrftoken=([^;]+)/);
-        return m ? decodeURIComponent(m[1]) : "";
-      }
-
-      function escapeHtml(text) {
-        return String(text || "")
-          .replaceAll("&", "&amp;")
-          .replaceAll("<", "&lt;")
-          .replaceAll(">", "&gt;");
-      }
-
-      function renderNotifications(items) {
-        if (!Array.isArray(items) || !items.length) {
-          notifList.innerHTML = '<div class="guest-notif-item"><p class="guest-notif-item-body">No notifications yet.</p></div>';
-          return;
-        }
-        notifList.innerHTML = items.map((item) => {
-          const unreadDot = item.is_unread ? '<span class="guest-notif-dot" title="Unread"></span>' : '<span></span>';
-          const link = item.link || "#";
-          return `
-            <a class="guest-notif-item" href="${escapeHtml(link)}" data-id="${escapeHtml(item.id || "")}">
-              <p class="guest-notif-item-title">${escapeHtml(item.title || "Notification")}</p>
-              <p class="guest-notif-item-body">${escapeHtml(item.message || "")}</p>
-              <div class="guest-notif-item-meta">
-                ${unreadDot}
-                <span>${escapeHtml(item.display_date || "")}</span>
-              </div>
-            </a>
-          `;
-        }).join("");
-      }
-
-      function updateBadge(count) {
-        const total = Number(count || 0);
-        if (total > 0) {
-          notifBadge.textContent = total > 99 ? "99+" : String(total);
-          notifBadge.classList.add("show");
-        } else {
-          notifBadge.classList.remove("show");
-          notifBadge.textContent = "0";
-        }
-      }
-
-      async function loadNotifications() {
-        try {
-          const res = await fetch(notifUrl, { headers: { "X-Requested-With": "XMLHttpRequest" } });
-          const data = await res.json();
-          if (!data || data.success !== true) return;
-          renderNotifications(data.notifications || []);
-          updateBadge(data.unread_count || 0);
-        } catch (_) {}
-      }
-
-      async function markAllRead() {
-        const visibleIds = Array.from(
-          document.querySelectorAll('#guestNotifList .guest-notif-item[data-id]')
-        )
-        .map((node) => String(node.getAttribute('data-id') || '').trim())
-        .filter(Boolean);
-        try {
-          await fetch(notifUrl, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              "X-CSRFToken": csrfToken(),
-              "X-Requested-With": "XMLHttpRequest",
-            },
-            body: JSON.stringify({ action: "mark_all_read", notification_ids: visibleIds }),
-          });
-          await loadNotifications();
-        } catch (_) {}
-      }
-
-      notifToggle?.addEventListener("click", async function (e) {
-        e.stopPropagation();
-        profilePanel?.classList.remove("open");
-        notifPanel?.classList.toggle("open");
-        if (notifPanel?.classList.contains("open")) {
-          await loadNotifications();
-        }
-      });
-
-      profileToggle?.addEventListener("click", function (e) {
-        e.stopPropagation();
-        notifPanel?.classList.remove("open");
-        profilePanel?.classList.toggle("open");
-      });
-
-      markReadBtn?.addEventListener("click", function (e) {
-        e.preventDefault();
-        markAllRead();
-      });
-
-      document.addEventListener("click", function () {
-        notifPanel?.classList.remove("open");
-        profilePanel?.classList.remove("open");
-      });
-
-      notifPanel?.addEventListener("click", function (e) {
-        e.stopPropagation();
-      });
-      profilePanel?.addEventListener("click", function (e) {
-        e.stopPropagation();
-      });
-
-      loadNotifications();
-    })();
-  </script>
+{% include "components/guest_chat_widget.html" %}
 </body>
 </html>
+
 

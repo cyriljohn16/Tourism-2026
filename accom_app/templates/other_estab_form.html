@@ -4,37 +4,59 @@
     <meta charset="UTF-8">
     <title>Other Establishment Answerable Form</title>
     <style>
-        /* Basic Styles */
+        :root {
+            --bg: #f4f7fc;
+            --panel: #ffffff;
+            --line: #e4e8ef;
+            --ink: #1f2937;
+            --muted: #6b7280;
+            --brand: #875a34;
+            --brand-dark: #6d4827;
+        }
         body {
-            font-family: Arial, sans-serif;
-            background-color: #f1f1f1;
+            font-family: "Poppins", "Segoe UI", Tahoma, Arial, sans-serif;
+            background:
+                radial-gradient(circle at 85% -10%, rgba(177, 116, 63, 0.16), transparent 32%),
+                radial-gradient(circle at -5% 35%, rgba(111, 78, 55, 0.12), transparent 26%),
+                var(--bg);
             margin: 0;
             padding: 20px;
+            color: var(--ink);
         }
         .container {
-            max-width: 1000px;
+            max-width: 1100px;
             margin: 0 auto;
-            background: #fff;
+            background: linear-gradient(180deg, #fffefc 0%, #fff9f2 100%);
             padding: 20px;
-            border-radius: 8px;
+            border-radius: 14px;
+            border: 1px solid #ead9c9;
+            box-shadow: 0 10px 24px rgba(56, 33, 16, 0.10);
+        }
+        h1, h2 {
+            color: #3f2f26;
         }
         .message {
             text-align: center;
-            color: green;
+            color: #1f7a47;
             font-weight: bold;
             margin-bottom: 20px;
+            background: #e8f5e9;
+            border: 1px solid #cfead6;
+            border-radius: 8px;
+            padding: 10px;
         }
         .region {
-            border: 1px solid #ddd;
-            border-radius: 8px;
+            border: 1px solid #e8d7c7;
+            border-radius: 12px;
             padding: 15px;
             margin-bottom: 20px;
-            background: #e9f7ef;
+            background: #fff;
         }
         .region-header {
-            font-size: 20px;
+            font-size: 18px;
             font-weight: bold;
             margin-bottom: 10px;
+            color: #5d4332;
         }
         .country {
             display: flex;
@@ -46,7 +68,9 @@
         }
         .country input[type="number"] {
             width: 100px;
-            padding: 5px;
+            padding: 7px;
+            border-radius: 8px;
+            border: 1px solid #decab7;
         }
         .subtotal {
             margin-top: 10px;
@@ -66,43 +90,49 @@
         .entry input[type="text"],
         .entry textarea {
             width: 100%;
-            padding: 8px;
-            border: 1px solid #ccc;
-            border-radius: 4px;
+            padding: 9px;
+            border: 1px solid #decab7;
+            border-radius: 8px;
         }
         .total {
             font-weight: bold;
             font-size: 18px;
             margin: 20px 0;
             text-align: right;
+            color: #5d4332;
         }
         .submit-btn {
             display: block;
             padding: 12px 20px;
             font-size: 16px;
-            background: #4CAF50;
+            background: linear-gradient(135deg, var(--brand), #b77744);
             color: #fff;
             border: none;
-            border-radius: 6px;
+            border-radius: 10px;
             margin: 20px auto 0;
             cursor: pointer;
+            font-weight: 700;
+            transition: all 0.2s ease;
         }
         .submit-btn:hover {
-            background: #45a049;
+            background: linear-gradient(135deg, var(--brand-dark), #a96f3f);
+            transform: translateY(-1px);
+            box-shadow: 0 8px 16px rgba(122, 79, 45, 0.22);
         }
         .user-info {
             margin-bottom: 20px;
             padding: 10px;
-            background-color: #f8f9fa;
-            border-radius: 4px;
+            background-color: #f8efe7;
+            border-radius: 8px;
             font-weight: bold;
-            color: #495057;
+            color: #5d4332;
+            border: 1px solid #e8d7c7;
         }
         .subtotal-input {
             width: 100px;
             padding: 5px;
-            border: 1px solid #ccc;
-            border-radius: 4px;
+            border: 1px solid #decab7;
+            border-radius: 8px;
             background-color: #f8f9fa;
             font-weight: bold;
             text-align: right;
@@ -110,6 +140,20 @@
         /* Make readonly inputs look like normal ones but prevent editing */
         input[readonly] {
             cursor: default;
+        }
+        select {
+            padding: 8px 10px;
+            border: 1px solid #decab7;
+            border-radius: 8px;
+            background: #fff;
+        }
+        @media (max-width: 900px) {
+            body { padding: 12px; }
+            .container { padding: 14px; border-radius: 12px; }
+            .country { flex-direction: column; align-items: flex-start; gap: 6px; }
+            .country label, .country input[type="number"] { width: 100%; }
+            .total { text-align: left; }
+            .submit-btn { width: 100%; }
         }
     </style>
     <!-- Include jQuery for dynamic calculations -->

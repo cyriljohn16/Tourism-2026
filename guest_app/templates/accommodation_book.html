@@ -1,706 +1,274 @@
-{% load static %}
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Hotel & Inn Recommendations</title>
-  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <title>Accommodation Directory</title>
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700;800&display=swap" rel="stylesheet">
   <style>
     :root {
-      --bg: #f8f5f1;
-      --panel: #fffdf9;
-      --panel-alt: #fff7ef;
-      --ink: #3f2f26;
-      --muted: #765b48;
-      --line: #e6d7c8;
-      --brand-900: #6f4e37;
-      --brand-700: #b1743f;
-      --brand-500: #d09b6c;
-      --chip: #f2e4d6;
-      --chip-ink: #6b4423;
+      --list-bg: #f3f7fc;
+      --list-card: #ffffff;
+      --list-text: #223247;
+      --list-muted: #4f647b;
+      --list-border: #d7e3f2;
+      --list-accent: #1f66d0;
+      --list-soft: #edf4ff;
+      --list-warm: #6f4e37;
+      --list-warm-soft: #b1743f;
     }
+
     * { box-sizing: border-box; }
 
     body {
-      font-family: "Poppins", "Segoe UI", Tahoma, Arial, sans-serif;
       margin: 0;
-      color: var(--ink);
-      background:
-        radial-gradient(circle at 85% -10%, rgba(177, 116, 63, 0.2), transparent 32%),
-        radial-gradient(circle at -5% 35%, rgba(111, 78, 55, 0.15), transparent 26%),
-        var(--bg);
+      font-family: "Poppins", Arial, sans-serif;
+      background: var(--list-bg);
+      color: var(--list-text);
     }
-    header {
-      background: linear-gradient(135deg, var(--brand-900), var(--brand-700));
+
+    .container {
+      max-width: 1120px;
+      margin: 0 auto;
+      padding: 20px 16px 28px;
+    }
+
+    .hero {
+      background: linear-gradient(135deg, var(--list-warm), var(--list-warm-soft));
       color: #fff;
-      padding: 24px 16px;
-      position: relative;
-      overflow: hidden;
-    }
-    .header-inner {
-      display: flex;
-      justify-content: space-between;
-      align-items: flex-start;
-      gap: 12px;
-      flex-wrap: wrap;
-    }
-    .header-actions {
-      display: flex;
-      gap: 8px;
-      flex-wrap: wrap;
-    }
-    .header-link {
-      display: inline-block;
-      text-decoration: none;
-      padding: 8px 12px;
-      border-radius: 999px;
-      border: 1px solid rgba(255, 255, 255, 0.35);
-      background: rgba(255, 255, 255, 0.18);
-      color: #fff;
-      font-size: 0.86rem;
-      font-weight: 700;
-      transition: background 0.18s ease, transform 0.18s ease;
-    }
-    .header-link:hover {
-      background: rgba(255, 255, 255, 0.26);
-      transform: translateY(-1px);
-    }
-    .header-subtitle {
-      color: rgba(255, 255, 255, 0.9);
-    }
-    header::after {
-      content: "";
-      position: absolute;
-      right: -90px;
-      top: -80px;
-      width: 260px;
-      height: 260px;
-      border-radius: 50%;
-      background: radial-gradient(circle, rgba(255,255,255,0.18), rgba(255,255,255,0));
-      pointer-events: none;
-    }
-    .container { max-width: 1120px; margin: 0 auto; padding: 18px; }
-    .card {
-      background: var(--panel);
       border-radius: 18px;
-      border: 1px solid rgba(111, 78, 55, 0.12);
-      padding: 20px;
-      box-shadow: 0 8px 20px rgba(56, 33, 16, 0.08);
-      margin-bottom: 16px;
+      padding: 16px;
+      box-shadow: 0 14px 28px rgba(44, 34, 26, 0.22);
     }
-    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; }
-    .grid > div { min-width: 0; }
-    h1, h2 { letter-spacing: 0.01em; }
-    h2 { margin-top: 0; margin-bottom: 12px; font-size: 2rem; font-weight: 700; color: #36251b; }
-    label { display: block; font-weight: 600; margin-bottom: 6px; font-size: 0.96rem; color: #3f2f26; }
-    input, select {
-      width: 100%;
-      min-width: 0;
-      height: 56px;
-      padding: 10px 14px;
-      border: 1px solid #dfc4ac;
-      border-radius: 14px;
-      background: #fff;
-      color: #3f2f26;
-      font-family: inherit;
-      font-size: 0.98rem;
-      line-height: 1.2;
-      appearance: none;
-      -webkit-appearance: none;
-    }
-    input[type="date"] {
-      padding-right: 44px;
-    }
-    input::-webkit-outer-spin-button,
-    input::-webkit-inner-spin-button {
+
+    .hero h1 {
       margin: 0;
+      font-size: clamp(1.5rem, 1.2vw + 1rem, 2rem);
+      line-height: 1.2;
     }
-    input:focus, select:focus {
-      outline: none;
-      border-color: #b57946;
-      box-shadow: 0 0 0 3px rgba(181, 121, 70, 0.18);
+
+    .hero p {
+      margin: 8px 0 0;
+      font-size: 0.9rem;
+      line-height: 1.45;
+      color: rgba(245, 248, 255, 0.94);
     }
-    button {
-      background: linear-gradient(135deg, var(--brand-900), var(--brand-700));
-      color: #fff;
-      border: none;
-      padding: 10px 14px;
-      border-radius: 14px;
-      cursor: pointer;
+
+    .top-actions {
+      margin-top: 10px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .notice {
+      margin-top: 12px;
+      background: #fff8eb;
+      border: 1px solid #f0d6ab;
+      color: #7a4b11;
+      border-radius: 12px;
+      padding: 11px 12px;
+      font-size: 0.82rem;
+      line-height: 1.45;
+      font-weight: 600;
+    }
+
+    .grid {
+      margin-top: 16px;
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 12px;
+    }
+
+    .card {
+      background: var(--list-card);
+      border: 1px solid var(--list-border);
+      border-radius: 16px;
+      padding: 12px;
+      box-shadow: 0 8px 18px rgba(21, 48, 79, 0.1);
+      transition: transform 0.2s ease, box-shadow 0.2s ease;
+      display: grid;
+      gap: 8px;
+    }
+
+    .card:hover {
+      transform: translateY(-4px);
+      box-shadow: 0 14px 26px rgba(21, 48, 79, 0.16);
+    }
+
+    .card-image-link,
+    .card-title-link {
+      text-decoration: none;
+      color: inherit;
+    }
+
+    .card-image-wrap {
+      width: 100%;
+      aspect-ratio: 16 / 10;
+      border-radius: 12px;
+      overflow: hidden;
+      background: #edf3fb;
+      border: 1px solid #d8e3f1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .card-image-wrap img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+      transition: transform 0.24s ease;
+    }
+
+    .card:hover .card-image-wrap img {
+      transform: scale(1.03);
+    }
+
+    .card-image-placeholder {
+      font-size: 0.8rem;
+      color: #587294;
       font-weight: 700;
-      font-family: inherit;
-      font-size: 0.98rem;
+      text-align: center;
+      padding: 10px;
     }
-    button:disabled {
-      opacity: 0.72;
-      cursor: not-allowed;
-      transform: none;
+
+    .title {
+      font-weight: 800;
+      font-size: 1rem;
+      margin: 0;
+      color: #17395f;
+      line-height: 1.3;
+    }
+
+    .meta {
+      font-size: 0.84rem;
+      color: var(--list-muted);
+      margin: 0;
+      line-height: 1.42;
+    }
+
+    .actions {
+      display: flex;
+      gap: 7px;
+      flex-wrap: wrap;
+      margin-top: 2px;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      text-decoration: none;
+      border-radius: 999px;
+      padding: 8px 11px;
+      min-height: 36px;
+      font-size: 0.78rem;
+      font-weight: 700;
+      border: 1px solid #cfddf0;
+      color: #1c4d84;
+      background: linear-gradient(180deg, #ffffff, #edf4ff);
+      cursor: pointer;
+      transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    .btn:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 10px 18px rgba(20, 63, 118, 0.16);
+    }
+
+    .btn.primary {
+      color: #fff;
+      border-color: transparent;
+      background: linear-gradient(135deg, #1f66d0, #1ca4bf);
+    }
+
+    .btn.secondary {
+      color: #334c6a;
+      background: #f8fbff;
+    }
+
+    .btn.disabled {
+      background: #f2f4f8;
+      border-color: #e0e6ef;
+      color: #6a7c92;
+      cursor: default;
       box-shadow: none;
-    }
-    button.secondary { background: linear-gradient(135deg, #875a34, #b57946); }
-    .results { margin-top: 12px; display: grid; gap: 10px; }
-    .result {
-      padding: 10px 12px;
-      border: 1px solid #eadbcd;
-      border-radius: 10px;
-      background: linear-gradient(180deg, var(--panel-alt), #fff);
-      color: #4a3629;
-    }
-    .muted { color: var(--muted); font-size: 0.95rem; }
-    .handoff-summary { display: none; border: 1px solid #e4cdb8; background: #fff4e8; border-radius: 10px; padding: 12px; margin-bottom: 12px; }
-    .handoff-summary h3 { margin: 0 0 8px; font-size: 1rem; color: #6b4423; }
-    .handoff-summary .row { margin: 4px 0; font-size: 0.95rem; }
-    .action-row { margin-top: 12px; display: flex; gap: 10px; flex-wrap: wrap; }
-
-    a:focus-visible,
-    button:focus-visible,
-    input:focus-visible,
-    select:focus-visible {
-      outline: 3px solid rgba(181, 121, 70, 0.35);
-      outline-offset: 2px;
+      transform: none;
     }
 
-    @media (max-width: 640px) {
-      .container { padding: 12px; }
-      .card { padding: 14px; border-radius: 14px; }
-      h2 { font-size: 1.75rem; }
-      input, select { height: 52px; border-radius: 12px; }
-      .header-actions { width: 100%; }
+    @media (max-width: 768px) {
+      .container { padding: 14px 12px 22px; }
+      .hero { border-radius: 16px; padding: 14px; }
+      .grid { grid-template-columns: minmax(0, 1fr); }
+      .btn { flex: 1 1 100%; }
     }
   </style>
-  <link rel="stylesheet" href="/static/css/guest_unified.css">
 </head>
-<body class="guest-booking guest-with-topnav">
-  <nav class="guest-top-nav" aria-label="Guest navigation">
-    <div class="guest-top-nav-left">
-      <a class="guest-top-nav-brand" href="{% url 'main-page' %}">Ibayaw Tour</a>
-    </div>
-    <div class="guest-top-nav-links">
-      <a class="guest-top-nav-link" href="{% url 'main-page' %}" title="Home">
-        <span class="label">Home</span>
-      </a>
-      <div class="guest-top-nav-bell">
-        <button type="button" class="guest-top-nav-link" id="guestNotifToggle" title="Notifications">
-          <span class="label">Notifications</span>
-        </button>
-        <span class="guest-top-nav-badge" id="guestNotifBadge">0</span>
-        <div class="guest-notif-panel" id="guestNotifPanel">
-          <div class="guest-notif-head">
-            <h4>Notifications</h4>
-            <button type="button" class="guest-notif-action" id="guestNotifMarkRead">Mark all as read</button>
-          </div>
-          <div id="guestNotifList"></div>
-        </div>
-      </div>
-      <div style="position: relative;">
-        <button type="button" class="guest-top-nav-link" id="guestProfileToggle" title="Profile">
-          <span class="label">{{ request.user.first_name|default:request.user.username }}</span>
-        </button>
-        <div class="guest-profile-panel" id="guestProfilePanel">
-          <a href="{% url 'my_profile' %}">My Profile</a>
-          <a href="{% url 'my_accommodation_bookings' %}">My Bookings</a>
-          <a href="{% url 'main-page' %}#tour-packages">Tour Packages</a>
-          <a href="{% url 'main-page' %}#programs">Programs</a>
-          <a href="{% url 'logout' %}">Logout</a>
-        </div>
-      </div>
-    </div>
-  </nav>
-  <header>
-    <div class="container">
-      <div class="header-inner">
-        <div>
-          <h1>Hotel & Inn Recommendations</h1>
-          <p class="muted header-subtitle">CNN + Decision Tree recommendations and guest booking flow</p>
-        </div>
-      </div>
-    </div>
-  </header>
-
+<body>
   <div class="container">
-    <div class="card">
-      <h2>Find a Hotel or Inn</h2>
-      <div class="grid">
-        <div>
-          <label for="location">Preferred Location</label>
-          <input id="location" type="text" placeholder="e.g., Bayawan City" />
-        </div>
-        <div>
-          <label for="budget">Budget per Night (PHP)</label>
-          <input id="budget" type="number" min="0" step="1" placeholder="1500" />
-        </div>
-        <div>
-          <label for="guests">Guests</label>
-          <input id="guests" type="number" min="1" step="1" value="1" />
-        </div>
-        <div>
-          <label for="company_type">Type</label>
-          <select id="company_type">
-            <option value="">Hotel or Inn</option>
-            <option value="hotel">Hotel</option>
-            <option value="inn">Inn</option>
-          </select>
-        </div>
+    <section class="hero">
+      <h1>Discover Bayawan Accommodations</h1>
+      <p>Explore approved hotels and inns, check details, and use preview-only estimates before continuing to official booking pages.</p>
+      <div class="top-actions">
+        <a class="btn secondary" href="{% url 'main-page' %}#approved-stays">Go Back to Main Page</a>
       </div>
-      <div style="margin-top: 12px;">
-        <button id="recommendBtn">Get Recommendations</button>
-      </div>
-      <div id="recommendations" class="results" aria-live="polite"></div>
+    </section>
+
+    <div class="notice">
+      This system provides booking previews only. Final booking is completed directly with each accommodation.
     </div>
 
-    <div class="card">
-      <h2>Book a Room</h2>
-      <div id="chatbotHandoffNotice" class="muted" style="display:none; margin-bottom: 10px;">
-        Opened from chatbot. Booking details were pre-filled for review.
-      </div>
-      <div id="chatbotHandoffSummary" class="handoff-summary" aria-live="polite">
-        <h3>Chatbot Handoff Summary</h3>
-        <div class="row"><strong>Room:</strong> <span id="handoffRoomLabel">-</span></div>
-        <div class="row"><strong>Check-in:</strong> <span id="handoffCheckIn">-</span></div>
-        <div class="row"><strong>Check-out:</strong> <span id="handoffCheckOut">-</span></div>
-        <div class="row"><strong>Guests:</strong> <span id="handoffGuests">-</span></div>
-        <div class="row"><strong>Booking ID:</strong> <span id="handoffBookingId">Draft / not created yet</span></div>
-      </div>
-      <form id="bookingForm">
-        {% csrf_token %}
-        <div class="grid">
-          <div>
-            <label for="room_id">Room</label>
-            <select id="room_id" name="room_id" required>
-              <option value="">Select a room</option>
-              {% for room in rooms %}
-                <option value="{{ room.room_id }}">
-                  {{ room.accommodation.company_name }} - {{ room.room_name }} (PHP {{ room.price_per_night }})
-                </option>
-              {% endfor %}
-            </select>
+    <div class="grid">
+      {% for row in listing_rows %}
+      <article class="card">
+        <a class="card-image-link" href="{% url 'accommodation_detail_page' accom_id=row.accommodation.accom_id %}">
+          <div class="card-image-wrap">
+            {% if row.image_url %}
+              <img src="{{ row.image_url }}" alt="{{ row.accommodation.company_name }}" loading="lazy" decoding="async" onerror="this.style.display='none'; if(this.nextElementSibling){this.nextElementSibling.style.display='flex';}">
+              <div class="card-image-placeholder" style="display:none;">No image available</div>
+            {% else %}
+              <div class="card-image-placeholder">No image available</div>
+            {% endif %}
           </div>
-          <div>
-            <label for="check_in">Check-in</label>
-            <input id="check_in" name="check_in" type="date" required />
-          </div>
-          <div>
-            <label for="check_out">Check-out</label>
-            <input id="check_out" name="check_out" type="date" required />
-          </div>
-          <div>
-            <label for="num_guests">Guests</label>
-            <input id="num_guests" name="num_guests" type="number" min="1" step="1" value="1" required />
-          </div>
+        </a>
+
+        <a class="card-title-link" href="{% url 'accommodation_detail_page' accom_id=row.accommodation.accom_id %}">
+          <h3 class="title">{{ row.accommodation.company_name }}</h3>
+        </a>
+
+        <p class="meta">{{ row.accommodation.location }}</p>
+        {% if row.price_per_night %}
+        <p class="meta">
+          Starting at PHP {{ row.price_per_night|floatformat:0 }} / night
+          {% if row.person_limit %} | up to {{ row.person_limit }} guests{% endif %}
+        </p>
+        {% endif %}
+        <p class="meta">{{ row.accommodation.description|default:"No description available yet."|truncatechars:120 }}</p>
+
+        <div class="actions">
+          <a class="btn primary" href="{% url 'accommodation_detail_page' accom_id=row.accommodation.accom_id %}">View Details</a>
+          <a class="btn open-chat-query" href="#" data-query="create booking preview for {{ row.accommodation.company_name|escape }}">Preview Cost</a>
+          {% if row.official_page_url %}
+            <a class="btn" href="{{ row.official_page_url }}" target="_blank" rel="noopener noreferrer">Open Official Page</a>
+          {% else %}
+            <span class="btn disabled">Official page unavailable</span>
+          {% endif %}
+          {% if row.facebook_url %}
+            <a class="btn secondary" href="{{ row.facebook_url }}" target="_blank" rel="noopener noreferrer">View Facebook</a>
+          {% endif %}
         </div>
-        <div class="action-row">
-          <button type="button" class="secondary" id="billingBtn">Calculate Billing</button>
-          <button type="submit">Submit Booking (Pending)</button>
-        </div>
-        <div id="billingResult" class="results"></div>
-      </form>
+      </article>
+      {% empty %}
+      <article class="card">
+        <h3 class="title">No active accommodation listings yet.</h3>
+        <p class="meta">Please check again later for updated approved listings.</p>
+      </article>
+      {% endfor %}
     </div>
   </div>
 
-  <script>
-    (function initGuestTopNav() {
-      const notifUrl = "{% url 'guest_notifications' %}";
-      const notifToggle = document.getElementById("guestNotifToggle");
-      const notifPanel = document.getElementById("guestNotifPanel");
-      const notifList = document.getElementById("guestNotifList");
-      const notifBadge = document.getElementById("guestNotifBadge");
-      const markReadBtn = document.getElementById("guestNotifMarkRead");
-      const profileToggle = document.getElementById("guestProfileToggle");
-      const profilePanel = document.getElementById("guestProfilePanel");
-
-      function csrfToken() {
-        const m = document.cookie.match(/(?:^|;\s*)csrftoken=([^;]+)/);
-        return m ? decodeURIComponent(m[1]) : "";
-      }
-
-      function escapeHtml(text) {
-        return String(text || "")
-          .replaceAll("&", "&amp;")
-          .replaceAll("<", "&lt;")
-          .replaceAll(">", "&gt;");
-      }
-
-      function renderNotifications(items) {
-        if (!Array.isArray(items) || !items.length) {
-          notifList.innerHTML = '<div class="guest-notif-item"><p class="guest-notif-item-body">No notifications yet.</p></div>';
-          return;
-        }
-        notifList.innerHTML = items.map((item) => {
-          const unreadDot = item.is_unread ? '<span class="guest-notif-dot" title="Unread"></span>' : '<span></span>';
-          const link = item.link || "#";
-          return `
-            <a class="guest-notif-item" href="${escapeHtml(link)}" data-id="${escapeHtml(item.id || "")}">
-              <p class="guest-notif-item-title">${escapeHtml(item.title || "Notification")}</p>
-              <p class="guest-notif-item-body">${escapeHtml(item.message || "")}</p>
-              <div class="guest-notif-item-meta">
-                ${unreadDot}
-                <span>${escapeHtml(item.display_date || "")}</span>
-              </div>
-            </a>
-          `;
-        }).join("");
-      }
-
-      function updateBadge(count) {
-        const total = Number(count || 0);
-        if (total > 0) {
-          notifBadge.textContent = total > 99 ? "99+" : String(total);
-          notifBadge.classList.add("show");
-        } else {
-          notifBadge.classList.remove("show");
-          notifBadge.textContent = "0";
-        }
-      }
-
-      async function loadNotifications() {
-        try {
-          const res = await fetch(notifUrl, { headers: { "X-Requested-With": "XMLHttpRequest" } });
-          const data = await res.json();
-          if (!data || data.success !== true) return;
-          renderNotifications(data.notifications || []);
-          updateBadge(data.unread_count || 0);
-        } catch (_) {}
-      }
-
-      async function markAllRead() {
-        try {
-          await fetch(notifUrl, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              "X-CSRFToken": csrfToken(),
-              "X-Requested-With": "XMLHttpRequest",
-            },
-            body: JSON.stringify({ action: "mark_all_read" }),
-          });
-          await loadNotifications();
-        } catch (_) {}
-      }
-
-      notifToggle?.addEventListener("click", async function (e) {
-        e.stopPropagation();
-        profilePanel?.classList.remove("open");
-        notifPanel?.classList.toggle("open");
-        if (notifPanel?.classList.contains("open")) {
-          await loadNotifications();
-        }
-      });
-
-      profileToggle?.addEventListener("click", function (e) {
-        e.stopPropagation();
-        notifPanel?.classList.remove("open");
-        profilePanel?.classList.toggle("open");
-      });
-
-      markReadBtn?.addEventListener("click", function (e) {
-        e.preventDefault();
-        markAllRead();
-      });
-
-      document.addEventListener("click", function () {
-        notifPanel?.classList.remove("open");
-        profilePanel?.classList.remove("open");
-      });
-
-      notifPanel?.addEventListener("click", function (e) {
-        e.stopPropagation();
-      });
-      profilePanel?.addEventListener("click", function (e) {
-        e.stopPropagation();
-      });
-
-      loadNotifications();
-    })();
-
-    function getCookie(name) {
-      let cookieValue = null;
-      if (document.cookie && document.cookie !== "") {
-        const cookies = document.cookie.split(";");
-        for (let i = 0; i < cookies.length; i++) {
-          const cookie = cookies[i].trim();
-          if (cookie.substring(0, name.length + 1) === (name + "=")) {
-            cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
-            break;
-          }
-        }
-      }
-      return cookieValue;
-    }
-
-    function getCsrfToken() {
-      const hidden = document.querySelector('input[name="csrfmiddlewaretoken"]');
-      if (hidden && hidden.value) return hidden.value;
-      const cookieToken = getCookie("csrftoken");
-      if (cookieToken) return cookieToken;
-      return "";
-    }
-
-    const recommendBtn = document.getElementById("recommendBtn");
-    const recommendations = document.getElementById("recommendations");
-    const billingBtn = document.getElementById("billingBtn");
-    const billingResult = document.getElementById("billingResult");
-    const bookingForm = document.getElementById("bookingForm");
-    const chatbotHandoffNotice = document.getElementById("chatbotHandoffNotice");
-    const chatbotHandoffSummary = document.getElementById("chatbotHandoffSummary");
-    const handoffRoomLabel = document.getElementById("handoffRoomLabel");
-    const handoffCheckIn = document.getElementById("handoffCheckIn");
-    const handoffCheckOut = document.getElementById("handoffCheckOut");
-    const handoffGuests = document.getElementById("handoffGuests");
-    const handoffBookingId = document.getElementById("handoffBookingId");
-    const submitBookingBtn = bookingForm ? bookingForm.querySelector('button[type="submit"]') : null;
-
-    function setButtonBusy(button, busy, busyLabel) {
-      if (!button) return;
-      if (!button.dataset.defaultLabel) {
-        button.dataset.defaultLabel = button.textContent || "";
-      }
-      button.disabled = !!busy;
-      button.textContent = busy ? busyLabel : button.dataset.defaultLabel;
-    }
-
-    function setResultMessage(message, type = "error") {
-      billingResult.innerHTML = "";
-      const box = document.createElement("div");
-      box.className = "result";
-      box.style.color = type === "error" ? "#842029" : "#0f5132";
-      if (type === "error") {
-        box.style.background = "#f8d7da";
-        box.style.border = "1px solid #f5c2c7";
-        box.style.borderRadius = "8px";
-        box.style.padding = "10px";
-      }
-      box.textContent = message;
-      billingResult.appendChild(box);
-    }
-
-    function extractValidationMessage(data, fallback) {
-      if (data && data.errors && typeof data.errors === "object") {
-        const first = Object.values(data.errors).find(Boolean);
-        if (first) return String(first);
-      }
-      return (data && data.message) ? String(data.message) : fallback;
-    }
-
-    async function runBillingCalculation() {
-      setResultMessage("Calculating billing...", "success");
-      const payload = {
-        room_id: document.getElementById("room_id").value,
-        check_in: document.getElementById("check_in").value,
-        check_out: document.getElementById("check_out").value
-      };
-      const res = await fetch("{% url 'accommodation_billing' %}", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-CSRFToken": getCsrfToken()
-        },
-        body: JSON.stringify(payload)
-      });
-      let data;
-      try {
-        data = await res.json();
-      } catch (e) {
-        setResultMessage(`Billing request failed (HTTP ${res.status}). Please refresh and try again.`);
-        return { success: false, message: "non_json_response" };
-      }
-      if (!data.success) {
-        setResultMessage(extractValidationMessage(data, "Billing failed."));
-        return data;
-      }
-      billingResult.innerHTML = `
-        <div class="result">
-          <strong>${data.accommodation} - ${data.room_name}</strong>
-          <div class="muted">Nights: ${data.nights} | Rate: PHP ${data.rate}</div>
-          <div>Total: PHP ${data.total}</div>
-        </div>
-      `;
-      return data;
-    }
-
-    function applyChatbotPrefillFromUrl() {
-      const params = new URLSearchParams(window.location.search);
-      const fromChatbot = params.get("from_chatbot") === "1";
-      if (!fromChatbot) return;
-
-      const roomId = params.get("room_id");
-      const checkIn = params.get("check_in");
-      const checkOut = params.get("check_out");
-      const numGuests = params.get("num_guests");
-      const focus = params.get("focus");
-      const bookingId = params.get("booking_id");
-
-      if (roomId) {
-        const roomSelect = document.getElementById("room_id");
-        if (roomSelect && [...roomSelect.options].some(opt => String(opt.value) === String(roomId))) {
-          roomSelect.value = String(roomId);
-        }
-      }
-      if (checkIn) document.getElementById("check_in").value = checkIn;
-      if (checkOut) document.getElementById("check_out").value = checkOut;
-      if (numGuests) document.getElementById("num_guests").value = numGuests;
-
-      if (chatbotHandoffNotice) {
-        chatbotHandoffNotice.style.display = "block";
-      }
-      if (chatbotHandoffSummary) {
-        const roomSelect = document.getElementById("room_id");
-        const selectedText = roomSelect && roomSelect.selectedIndex >= 0
-          ? roomSelect.options[roomSelect.selectedIndex].text
-          : "";
-        chatbotHandoffSummary.style.display = "block";
-        handoffRoomLabel.textContent = (selectedText && selectedText !== "Select a room") ? selectedText : (roomId ? `Room ID ${roomId}` : "-");
-        handoffCheckIn.textContent = checkIn || "-";
-        handoffCheckOut.textContent = checkOut || "-";
-        handoffGuests.textContent = numGuests || "-";
-        handoffBookingId.textContent = bookingId ? `#${bookingId}` : "Draft / not created yet";
-      }
-
-      if (focus === "booking") {
-        requestAnimationFrame(() => {
-          bookingForm.scrollIntoView({ behavior: "smooth", block: "start" });
-        });
-      }
-
-      const hasBillingInputs =
-        document.getElementById("room_id").value &&
-        document.getElementById("check_in").value &&
-        document.getElementById("check_out").value;
-      if (hasBillingInputs) {
-        // Fire and forget for UX convenience after chatbot handoff.
-        runBillingCalculation().catch(() => {
-          setResultMessage("Unable to auto-calculate billing. Please click Calculate Billing.");
-        });
-      }
-    }
-
-    recommendBtn.addEventListener("click", async () => {
-      setButtonBusy(recommendBtn, true, "Loading...");
-      recommendations.innerHTML = "<div class='result'>Loading recommendations...</div>";
-      try {
-        const payload = {
-          location: document.getElementById("location").value,
-          budget: document.getElementById("budget").value,
-          guests: document.getElementById("guests").value,
-          company_type: document.getElementById("company_type").value
-        };
-
-        const res = await fetch("{% url 'accommodation_recommend' %}", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "X-CSRFToken": getCsrfToken()
-          },
-          body: JSON.stringify(payload)
-        });
-        let data;
-        try {
-          data = await res.json();
-        } catch (e) {
-          recommendations.innerHTML = `Recommendation request failed (HTTP ${res.status}). Please refresh and try again.`;
-          return;
-        }
-        if (!data.success) {
-          recommendations.innerHTML = `<div class='result'>${data.message || "Unable to fetch recommendations."}</div>`;
-          return;
-        }
-        const rows = Array.isArray(data.results) ? data.results : [];
-        if (rows.length === 0) {
-          recommendations.innerHTML = "<div class='result'>No recommendations found for the current filters.</div>";
-          return;
-        }
-        recommendations.innerHTML = rows.map(item =>
-          `<div class="result"><strong>${item.title}</strong><div class="muted">${item.subtitle}</div></div>`
-        ).join("");
-      } catch (error) {
-        recommendations.innerHTML = "<div class='result'>Unable to fetch recommendations right now. Check your login/session and try again.</div>";
-        console.error("Recommendation fetch error:", error);
-      } finally {
-        setButtonBusy(recommendBtn, false, "");
-      }
-    });
-
-    billingBtn.addEventListener("click", async () => {
-      setButtonBusy(billingBtn, true, "Calculating...");
-      try {
-        await runBillingCalculation();
-      } catch (error) {
-        setResultMessage("Unable to calculate billing right now. Please refresh and try again.");
-        console.error("Billing fetch error:", error);
-      } finally {
-        setButtonBusy(billingBtn, false, "");
-      }
-    });
-
-    bookingForm.addEventListener("submit", async (e) => {
-      e.preventDefault();
-      setButtonBusy(submitBookingBtn, true, "Submitting...");
-      try {
-        const formData = new FormData(bookingForm);
-        const res = await fetch("{% url 'accommodation_book' %}", {
-          method: "POST",
-          headers: {
-            "X-CSRFToken": getCsrfToken()
-          },
-          body: formData
-        });
-        let data;
-        try {
-          data = await res.json();
-        } catch (e) {
-          setResultMessage(`Booking request failed (HTTP ${res.status}). Please refresh and try again.`);
-          return;
-        }
-        if (!data.success) {
-          setResultMessage(extractValidationMessage(data, "Booking failed."));
-          return;
-        }
-        billingResult.innerHTML = "";
-
-        const successBox = document.createElement("div");
-        successBox.className = "result";
-        successBox.style.display = "grid";
-        successBox.style.gap = "10px";
-
-        const successText = document.createElement("div");
-        successText.innerHTML = `<strong>Booking submitted!</strong> ID: ${data.booking_id} | Total: PHP ${data.total_amount}`;
-
-        const actions = document.createElement("div");
-        actions.style.display = "flex";
-        actions.style.gap = "8px";
-        actions.style.flexWrap = "wrap";
-
-        const backBtn = document.createElement("button");
-        backBtn.type = "button";
-        backBtn.className = "secondary";
-        backBtn.textContent = "Back to Main Page";
-        backBtn.addEventListener("click", () => {
-          window.location.href = "{% url 'main-page' %}";
-        });
-
-        const statusBtn = document.createElement("button");
-        statusBtn.type = "button";
-        statusBtn.textContent = "View My Booking Status";
-        statusBtn.style.background = "linear-gradient(135deg, #6f4e37, #b1743f)";
-        statusBtn.addEventListener("click", () => {
-          window.location.href = "{% url 'my_accommodation_bookings' %}";
-        });
-
-        actions.appendChild(backBtn);
-        actions.appendChild(statusBtn);
-        successBox.appendChild(successText);
-        successBox.appendChild(actions);
-        billingResult.appendChild(successBox);
-      } catch (error) {
-        setResultMessage("Booking request failed due to a network error. Please try again.");
-        console.error("Booking submit error:", error);
-      } finally {
-        setButtonBusy(submitBookingBtn, false, "");
-      }
-    });
-
-    applyChatbotPrefillFromUrl();
-  </script>
+  {% include "components/guest_chat_widget.html" %}
 </body>
 </html>
-

@@ -17,7 +17,10 @@
       </g>
     </svg>
   </div>
-  
+  <div class="nav-shell-meta">
+    <p class="nav-shell-title">Admin Panel</p>
+    <p class="nav-shell-subtitle">System monitoring, approvals, and configuration</p>
+  </div>
   <!-- Main Navigation -->
   <div class="nav-section">Main</div>
   <ul class="nav-menu">
@@ -44,6 +47,31 @@
         </span>
         Tour Calendar
       </a>
+    </li>
+    <li class="nav-item nav-notif-row">
+      <div class="nav-notif-wrap sidebar-inline" id="navNotifWrap">
+        <button type="button" class="nav-notif-toggle sidebar-notification-card" id="navNotifToggle" aria-label="Notifications">
+          <span class="nav-notif-toggle-left">
+            <span class="nav-notif-bell" aria-hidden="true">
+              <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"></path><path d="M13.73 21a2 2 0 0 1-3.46 0"></path></svg>
+            </span>
+            <span class="nav-notif-text">
+              <strong>Notifications</strong>
+              <small>Recent system updates</small>
+            </span>
+          </span>
+          <span class="nav-notif-badge" id="navNotifBadge" style="display:none;">0</span>
+        </button>
+        <div class="nav-notif-dropdown" id="navNotifDropdown">
+          <div class="nav-notif-head">
+            <span class="nav-notif-head-title">Recent updates</span>
+            <a class="nav-notif-mark-all" href="{% url 'admin_app:notifications_mark_all_read' %}?next={{ request.path|urlencode }}">Mark all read</a>
+          </div>
+          <div class="nav-notif-list" id="navNotifList">
+            <div class="nav-notif-empty">Loading notifications...</div>
+          </div>
+        </div>
+      </div>
     </li>
   </ul>
   
@@ -110,11 +138,11 @@
       </a>
     </li>
     <li class="nav-item">
-      <a href="{% url 'admin_app:accommodation_bookings' %}" class="nav-link {% if request.path == '/admin_app/accommodation/bookings/' %}active{% endif %}">
+      <a href="{% url 'admin_app:owner_reports_review' %}" class="nav-link {% if request.path == '/admin_app/owner/reports/review/' %}active{% endif %}">
         <span class="nav-icon">
           <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"></rect><path d="M8 2v4"></path><path d="M16 2v4"></path><path d="M3 10h18"></path></svg>
         </span>
-        Accommodation Bookings
+        Owner Reports Review
       </a>
     </li>
   </ul>
@@ -247,6 +275,88 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         });
     }
+
+    const notifToggle = document.getElementById('navNotifToggle');
+    const notifDropdown = document.getElementById('navNotifDropdown');
+    const notifList = document.getElementById('navNotifList');
+    const notifBadge = document.getElementById('navNotifBadge');
+    const notifWrap = document.getElementById('navNotifWrap');
+    const notifFeedUrl = "{% url 'admin_app:notifications_feed' %}";
+    const notifOpenTemplate = "{% url 'admin_app:notification_open' 0 %}";
+
+    function escapeHtml(value) {
+      return String(value || "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/\"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+    }
+
+    function buildOpenUrl(id, nextUrl) {
+      const base = notifOpenTemplate.replace('/0/', '/' + encodeURIComponent(String(id)) + '/');
+      const target = nextUrl ? String(nextUrl) : window.location.pathname;
+      return base + "?next=" + encodeURIComponent(target);
+    }
+
+    function renderNotifications(payload) {
+      const items = Array.isArray(payload.notifications) ? payload.notifications : [];
+      const unread = Number(payload.unread_count || 0);
+      if (unread > 0) {
+        notifBadge.style.display = "inline-flex";
+        notifBadge.textContent = unread > 99 ? "99+" : String(unread);
+      } else {
+        notifBadge.style.display = "none";
+      }
+      if (!items.length) {
+        notifList.innerHTML = '<div class="nav-notif-empty">No notifications yet.</div>';
+        return;
+      }
+      notifList.innerHTML = items.map(function(item) {
+        const unreadClass = item.is_read ? '' : ' unread';
+        return `
+          <a class="nav-notif-item${unreadClass}" href="${escapeHtml(buildOpenUrl(item.id, item.url))}">
+            <p class="nav-notif-title">${escapeHtml(item.title || 'Notification')}</p>
+            <p class="nav-notif-message">${escapeHtml(item.message || '')}</p>
+            <p class="nav-notif-date">${escapeHtml(item.display_date || '')}</p>
+          </a>
+        `;
+      }).join('');
+    }
+
+    function loadNotifications() {
+      fetch(notifFeedUrl, { credentials: 'same-origin' })
+        .then(function(resp) { return resp.json(); })
+        .then(function(data) {
+          if (data && data.success) {
+            renderNotifications(data);
+          } else {
+            notifList.innerHTML = '<div class="nav-notif-empty">Unable to load notifications.</div>';
+          }
+        })
+        .catch(function() {
+          notifList.innerHTML = '<div class="nav-notif-empty">Unable to load notifications.</div>';
+        });
+    }
+
+    if (notifToggle) {
+      notifToggle.addEventListener('click', function(event) {
+        event.preventDefault();
+        notifDropdown.classList.toggle('open');
+        if (notifDropdown.classList.contains('open')) {
+          loadNotifications();
+        }
+      });
+      loadNotifications();
+      setInterval(loadNotifications, 45000);
+    }
+
+    document.addEventListener('click', function(event) {
+      if (!notifWrap || !notifDropdown) return;
+      if (!notifWrap.contains(event.target)) {
+        notifDropdown.classList.remove('open');
+      }
+    });
 });
 </script> 
 

@@ -89,12 +89,43 @@ class GuestAccommodationApprovalVisibilityTests(TestCase):
             price_per_night=Decimal("1200.00"),
             status="AVAILABLE",
         )
+        self.prototype_accom = Accomodation.objects.create(
+            company_name="Prototype Hidden Stay",
+            email_address="prototype_hidden_stay@placeholder.local",
+            location="Bayawan",
+            company_type="hotel",
+            password="demo-password",
+            phone_number="09990000077",
+            approval_status="accepted",
+            status="accepted",
+            is_active=True,
+        )
+        self.prototype_room = Room.objects.create(
+            accommodation=self.prototype_accom,
+            room_name="Prototype Room",
+            person_limit=2,
+            current_availability=2,
+            price_per_night=Decimal("1200.00"),
+            status="AVAILABLE",
+        )
 
     def test_pending_and_declined_do_not_appear_on_guest_accommodation_page(self):
         response = self.client.get(reverse("accommodation_page"))
         self.assertEqual(response.status_code, 200)
         content = response.content.decode("utf-8")
         self.assertIn("Accepted Hotel", content)
+        self.assertNotIn("Pending Hotel", content)
+        self.assertNotIn("Declined Inn", content)
+        self.assertNotIn("Prototype Hidden Stay", content)
+
+    @override_settings(TOURISM_APPROVED_ACCOMMODATION_IDS=[])
+    def test_guest_accommodation_page_respects_approved_allowlist(self):
+        with self.settings(TOURISM_APPROVED_ACCOMMODATION_IDS=[self.accepted_accom.accom_id]):
+            response = self.client.get(reverse("accommodation_page"))
+        self.assertEqual(response.status_code, 200)
+        content = response.content.decode("utf-8")
+        self.assertIn("Accepted Hotel", content)
+        # Any accommodation not in explicit allowlist must stay hidden.
         self.assertNotIn("Pending Hotel", content)
         self.assertNotIn("Declined Inn", content)
 
@@ -111,7 +142,7 @@ class GuestAccommodationApprovalVisibilityTests(TestCase):
                 "num_guests": 1,
             },
         )
-        self.assertEqual(pending_response.status_code, 404)
+        self.assertEqual(pending_response.status_code, 410)
 
         accepted_response = self.client.post(
             reverse("accommodation_book"),
@@ -122,26 +153,10 @@ class GuestAccommodationApprovalVisibilityTests(TestCase):
                 "num_guests": 1,
             },
         )
-        self.assertEqual(accepted_response.status_code, 200)
+        self.assertEqual(accepted_response.status_code, 410)
         body = accepted_response.json()
-        self.assertTrue(body.get("success"))
-        self.assertTrue(
-            AccommodationBooking.objects.filter(
-                guest=self.user,
-                room=self.accepted_room,
-                accommodation=self.accepted_accom,
-            ).exists()
-        )
-        booking = AccommodationBooking.objects.get(
-            guest=self.user,
-            room=self.accepted_room,
-            accommodation=self.accepted_accom,
-        )
-        billing = Billing.objects.filter(booking=booking).first()
-        self.assertIsNotNone(billing)
-        self.assertEqual(billing.booking_reference, f"AB-{booking.booking_id}")
-        self.assertEqual(billing.payment_status, "unpaid")
-        self.assertEqual(billing.total_amount, booking.total_amount)
+        self.assertFalse(body.get("success"))
+        self.assertEqual(body.get("code"), "accommodation_transaction_disabled")
 
     def test_pending_and_declined_rooms_are_not_billable(self):
         pending_response = self.client.post(
@@ -151,7 +166,7 @@ class GuestAccommodationApprovalVisibilityTests(TestCase):
                 "nights": 2,
             },
         )
-        self.assertEqual(pending_response.status_code, 404)
+        self.assertEqual(pending_response.status_code, 410)
 
         accepted_response = self.client.post(
             reverse("accommodation_billing"),
@@ -160,8 +175,8 @@ class GuestAccommodationApprovalVisibilityTests(TestCase):
                 "nights": 2,
             },
         )
-        self.assertEqual(accepted_response.status_code, 200)
-        self.assertTrue(accepted_response.json().get("success"))
+        self.assertEqual(accepted_response.status_code, 410)
+        self.assertFalse(accepted_response.json().get("success"))
 
     def test_overlapping_room_booking_is_blocked(self):
         check_in = timezone.now().date() + timedelta(days=5)
@@ -274,6 +289,15 @@ class GuestAccommodationRoleEnforcementTests(TestCase):
         )
         owner_group, _ = Group.objects.get_or_create(name="accommodation_owner")
         self.owner_user.groups.add(owner_group)
+        self.declined_owner_user = user_model.objects.create_user(
+            username="rbac_declined_owner_user",
+            email="rbac_declined_owner_user@example.com",
+            password="secure-pass-123",
+            first_name="Rbac",
+            last_name="Declined",
+        )
+        declined_group, _ = Group.objects.get_or_create(name="accommodation_owner_declined")
+        self.declined_owner_user.groups.add(declined_group)
 
         self.accepted_accom = Accomodation.objects.create(
             company_name="RBAC Accepted Hotel",
@@ -303,6 +327,24 @@ class GuestAccommodationRoleEnforcementTests(TestCase):
         self.client.force_login(self.owner_user)
         response = self.client.get(reverse("my_accommodation_bookings"))
         self.assertEqual(response.status_code, 403)
+
+    def test_declined_owner_group_user_can_still_access_guest_pages(self):
+        self.client.force_login(self.declined_owner_user)
+        response = self.client.get(reverse("accommodation_page"))
+        self.assertEqual(response.status_code, 200)
+
+    def test_declined_owner_group_user_can_login_via_guest_login(self):
+        response = self.client.post(
+            reverse("login"),
+            data={
+                "email": "rbac_declined_owner_user@example.com",
+                "password": "secure-pass-123",
+            },
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertTrue(payload.get("success"))
 
     def test_accommodation_owner_cannot_preview_billing_or_create_booking(self):
         self.client.force_login(self.owner_user)
@@ -366,6 +408,57 @@ class GuestAccommodationRoleEnforcementTests(TestCase):
         self.assertEqual(response.status_code, 403)
         booking.refresh_from_db()
         self.assertEqual(booking.status, "pending")
+
+
+class GuestOwnerRoutingUxTests(TestCase):
+    def setUp(self):
+        user_model = get_user_model()
+        self.owner_without_accommodation = user_model.objects.create_user(
+            username="owner_no_accommodation",
+            email="owner_no_accommodation@example.com",
+            password="secure-pass-123",
+            first_name="Owner",
+            last_name="NoAccommodation",
+        )
+        owner_group, _ = Group.objects.get_or_create(name="accommodation_owner")
+        self.owner_without_accommodation.groups.add(owner_group)
+
+        self.owner_with_accepted_accommodation = user_model.objects.create_user(
+            username="owner_with_accommodation",
+            email="owner_with_accommodation@example.com",
+            password="secure-pass-123",
+            first_name="Owner",
+            last_name="WithAccommodation",
+        )
+        self.owner_with_accepted_accommodation.groups.add(owner_group)
+        Accomodation.objects.create(
+            owner=self.owner_with_accepted_accommodation,
+            company_name="Owner Linked Hotel",
+            email_address="owner-linked-hotel@example.com",
+            location="Bayawan",
+            company_type="hotel",
+            password="accom-pass-123",
+            phone_number="09991112222",
+            approval_status="accepted",
+            status="accepted",
+        )
+
+    def test_authenticated_owner_get_login_goes_to_admin_login(self):
+        self.client.force_login(self.owner_without_accommodation)
+        response = self.client.get(reverse("login"))
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, reverse("admin_app:login"))
+
+    def test_owner_without_accepted_accommodation_is_not_auto_redirected_to_owner_hub(self):
+        self.client.force_login(self.owner_without_accommodation)
+        response = self.client.get(reverse("main-page"))
+        self.assertEqual(response.status_code, 200)
+
+    def test_owner_with_accepted_accommodation_is_redirected_to_owner_hub(self):
+        self.client.force_login(self.owner_with_accepted_accommodation)
+        response = self.client.get(reverse("main-page"))
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, reverse("admin_app:owner_hub"))
 
 
 class AccommodationRoomAvailabilityLifecycleTests(TestCase):
@@ -535,6 +628,7 @@ class AccommodationOwnerSignupFromGuestRegisterTests(TestCase):
                 "password": "owner-pass-123",
                 "confirm_password": "owner-pass-123",
                 "register_as_accommodation_owner": "on",
+                "owner_signup_intent": "1",
                 "picture": SimpleUploadedFile("owner.gif", image_bytes, content_type="image/gif"),
             },
             HTTP_X_REQUESTED_WITH="XMLHttpRequest",
@@ -547,6 +641,44 @@ class AccommodationOwnerSignupFromGuestRegisterTests(TestCase):
         user_model = get_user_model()
         owner_user = user_model.objects.get(email="owner-signup-flow@example.com")
         self.assertTrue(owner_user.groups.filter(name__iexact="accommodation_owner_pending").exists())
+
+    def test_guest_signup_does_not_enter_owner_approval_without_owner_intent(self):
+        image_bytes = (
+            b"\x47\x49\x46\x38\x39\x61\x01\x00\x01\x00\x80\x00\x00"
+            b"\x00\x00\x00\xff\xff\xff\x21\xf9\x04\x01\x00\x00\x00\x00"
+            b"\x2c\x00\x00\x00\x00\x01\x00\x01\x00\x00\x02\x02\x44\x01"
+            b"\x00\x3b"
+        )
+        response = self.client.post(
+            reverse("register"),
+            data={
+                "first_name": "Guest",
+                "middle_initial": "B",
+                "last_name": "Signup",
+                "age": "24",
+                "country_of_origin": "Philippines",
+                "city": "Bayawan",
+                "phone_number": "09992223333",
+                "email": "guest-signup-flow@example.com",
+                "company_name": "",
+                "sex": "F",
+                "password": "guest-pass-123",
+                "confirm_password": "guest-pass-123",
+                "register_as_accommodation_owner": "on",
+                "owner_signup_intent": "0",
+                "picture": SimpleUploadedFile("guest.gif", image_bytes, content_type="image/gif"),
+            },
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertTrue(payload.get("success"))
+        self.assertEqual(payload.get("redirect_url"), "")
+
+        user_model = get_user_model()
+        guest_user = user_model.objects.get(email="guest-signup-flow@example.com")
+        self.assertFalse(guest_user.groups.filter(name__iexact="accommodation_owner_pending").exists())
+        self.assertFalse(guest_user.groups.filter(name__iexact="accommodation_owner").exists())
 
 
 class PaymentWebhookCallbackTests(TestCase):
@@ -634,15 +766,43 @@ class PaymentWebhookCallbackTests(TestCase):
             content_type="application/json",
             HTTP_X_PAYMENT_SIGNATURE=signature,
         )
-        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.status_code, 410)
         body = response.json()
-        self.assertEqual(body.get("status"), "ok")
-        self.assertEqual(body.get("payment_status"), "paid")
+        self.assertEqual(body.get("status"), "disabled")
+        self.assertEqual(body.get("error"), "accommodation_transaction_disabled")
 
         self.booking.refresh_from_db()
         self.billing.refresh_from_db()
-        self.assertEqual(self.booking.payment_status, "paid")
-        self.assertEqual(self.billing.payment_status, "paid")
-        self.assertEqual(self.booking.amount_paid, Decimal("2400.00"))
-        self.assertEqual(self.billing.amount_paid, Decimal("2400.00"))
-        self.assertEqual(self.billing.payment_method, "gcash")
+        self.assertEqual(self.booking.payment_status, "unpaid")
+        self.assertEqual(self.billing.payment_status, "unpaid")
+
+
+class GuestCurrentLocationApiTests(TestCase):
+    def setUp(self):
+        user_model = get_user_model()
+        self.user = user_model.objects.create_user(
+            username="guest_geo_user",
+            email="guest_geo_user@example.com",
+            password="secure-pass-123",
+            first_name="Geo",
+            last_name="Guest",
+        )
+        self.client.force_login(self.user)
+        self.url = reverse("current_location_api")
+
+    def test_post_and_get_current_location(self):
+        post_response = self.client.post(
+            self.url,
+            data='{"latitude":9.3679,"longitude":122.8071,"accuracy":18.2}',
+            content_type="application/json",
+        )
+        self.assertEqual(post_response.status_code, 200)
+        self.assertTrue(post_response.json().get("success"))
+
+        get_response = self.client.get(self.url)
+        self.assertEqual(get_response.status_code, 200)
+        body = get_response.json()
+        self.assertTrue(body.get("success"))
+        location = body.get("location") or {}
+        self.assertAlmostEqual(float(location.get("latitude")), 9.3679, places=3)
+        self.assertAlmostEqual(float(location.get("longitude")), 122.8071, places=3)

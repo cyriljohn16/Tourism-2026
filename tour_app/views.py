@@ -6,7 +6,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.contrib import messages
 from django.views.generic.edit import UpdateView
 from guest_app.models import Pending, Guest
-from django.urls import reverse_lazy
+from django.urls import reverse, reverse_lazy
 from datetime import date, timedelta
 import calendar
 from django.shortcuts import redirect, render
@@ -21,12 +21,52 @@ from functools import wraps
 from django.utils.dateparse import parse_datetime
 from django.utils import timezone
 from django.core.mail import send_mail
+from django.core.mail import EmailMultiAlternatives
 from django.conf import settings
 from django.template.loader import render_to_string
 from django.utils.html import strip_tags
 from decimal import Decimal
+from io import BytesIO
+from email.mime.image import MIMEImage
+import qrcode
 from .translation_models import TourAddTranslation
 from guest_app.utils import get_current_language, translate, get_translations_json, LANGUAGE_SESSION_KEY
+from admin_app.models import Employee, TourAssignment
+from admin_app.notification_service import create_notification, notify_assigned_employees_for_schedule
+from ai_chatbot.models import RecommendationEvent, SystemMetricLog
+
+
+def _safe_log_tour_status_event(*, request, user, event_type, item_ref):
+    try:
+        if not user:
+            return
+        session_id = ""
+        if hasattr(request, "session"):
+            session_id = request.session.session_key or ""
+        RecommendationEvent.objects.create(
+            user=user,
+            event_type=str(event_type or "view").strip().lower(),
+            item_ref=str(item_ref or "").strip()[:100],
+            session_id=session_id,
+            data_source="real_world",
+        )
+    except Exception:
+        pass
+
+
+def _safe_log_tour_email_dispatch(*, email_type, success, error_message=""):
+    try:
+        SystemMetricLog.objects.create(
+            module="email",
+            endpoint=f"tour_email:{str(email_type or '').strip().lower()}",
+            response_time_ms=0,
+            success_flag=bool(success),
+            status_code=200 if success else 500,
+            error_message=str(error_message or "")[:300],
+            data_source="real_world",
+        )
+    except Exception:
+        pass
 
 
 def admin_employee_required(view_func):
@@ -42,6 +82,24 @@ def admin_employee_required(view_func):
             return redirect('admin_app:login')
         return view_func(request, *args, **kwargs)
     return wrapped_view
+
+
+def _get_employee_session_context(request):
+    if request.session.get('user_type') != 'employee':
+        return None, False
+    employee_id = request.session.get('employee_id')
+    if not employee_id:
+        return None, False
+    employee = Employee.objects.filter(emp_id=employee_id).first()
+    if not employee:
+        return None, False
+    return employee, bool(request.session.get('is_admin', False))
+
+
+def _assigned_schedule_ids_for_employee(employee):
+    return list(
+        TourAssignment.objects.filter(employee=employee).values_list('schedule_id', flat=True)
+    )
 
 
 # Apply the decorator to all view functions
@@ -274,6 +332,15 @@ def tour_detail(request, tour_id):
 
 @admin_employee_required
 def pending_view(request):
+    employee, is_admin = _get_employee_session_context(request)
+    if employee is None:
+        messages.error(request, "Session expired. Please log in again.")
+        return redirect('admin_app:login')
+
+    # Admin safeguard: explicit override is required to approve/reject from this screen.
+    # Employees can still update statuses for schedules assigned to them.
+    allow_override = str(request.GET.get("override") or "").strip() == "1"
+
     if request.method == 'POST':
         print("\n🔵 POST Request Received 🔵")
         print("📩 Request Data:", request.POST)  # Debugging print
@@ -297,17 +364,23 @@ def pending_view(request):
 
             if not sched_id or not tour_id:
                 messages.error(request, "Missing schedule or tour information.")
-                return redirect('pending_view')
+                return redirect('tour_app:pending_view')
 
             schedule = get_object_or_404(Tour_Schedule, sched_id=sched_id)
             tour = get_object_or_404(Tour_Add, tour_id=tour_id)
+
+            if not is_admin:
+                assigned_schedule_ids = set(_assigned_schedule_ids_for_employee(employee))
+                if schedule.sched_id not in assigned_schedule_ids:
+                    messages.error(request, "You can only manage bookings for tours assigned to you.")
+                    return redirect('tour_app:pending_view')
 
             print(f"👤 Guest: {guest}, 📅 Schedule: {schedule}, 🎟️ Tour: {tour}, 👥 Total Guests: {total_guests}")
 
             # Ensure that there are enough available slots
             if schedule.slots_available < total_guests:
                 messages.error(request, "Not enough available slots.")
-                return redirect('pending_view')
+                return redirect('tour_app:pending_view')
 
             # Create a new Pending booking entry
             pending = Pending.objects.create(
@@ -321,6 +394,23 @@ def pending_view(request):
                 your_phone=guest.phone_number,
                 num_adults=num_adults,
                 num_children=num_children
+            )
+            create_notification(
+                recipient_guest=guest,
+                title="Tour booking submitted",
+                message=f"Your booking request for {tour.tour_name} is pending staff review.",
+                notification_type="booking",
+                url=reverse("main-page") + "#user-bookings",
+                dedupe_key=f"tour-pending-{pending.id}",
+                related_object_id=str(pending.id),
+            )
+            notify_assigned_employees_for_schedule(
+                schedule=schedule,
+                title="New tour booking request",
+                message=f"{tour.tour_name} received a new pending booking from {guest.first_name} {guest.last_name}.",
+                notification_type="booking",
+                url=reverse("tour_app:pending_view"),
+                dedupe_key_prefix=f"tour-pending-{pending.id}",
             )
 
             # Update slots availability in the schedule
@@ -341,18 +431,26 @@ def pending_view(request):
             messages.error(request, f"Unexpected error: {e}")
             return redirect('tour_app:pending_view')
 
+    base_qs = Pending.objects.select_related('guest_id', 'tour_id', 'sched_id')
+    if not is_admin:
+        assigned_schedule_ids = _assigned_schedule_ids_for_employee(employee)
+        base_qs = base_qs.filter(sched_id_id__in=assigned_schedule_ids)
+
     # Fetch all pending, accepted, and declined bookings
-    pending_bookings = Pending.objects.filter(status="Pending").select_related('guest_id', 'tour_id', 'sched_id')
-    accepted_bookings = Pending.objects.filter(status="Accepted").select_related('guest_id', 'tour_id', 'sched_id')
-    declined_bookings = Pending.objects.filter(status="Declined").select_related('guest_id', 'tour_id', 'sched_id')
+    pending_bookings = base_qs.filter(status__iexact="Pending").exclude(sched_id__status__iexact="cancelled")
+    accepted_bookings = base_qs.filter(status__iexact="Accepted")
+    declined_bookings = base_qs.filter(status__iexact="Declined")
     # Add cancelled bookings by users
-    cancelled_by_guest_bookings = Pending.objects.filter(status="Cancelled").select_related('guest_id', 'tour_id', 'sched_id')
+    cancelled_by_guest_bookings = base_qs.filter(status__iexact="Cancelled")
 
     return render(request, 'pending.html', {
         'pending_bookings': pending_bookings,
         'accepted_bookings': accepted_bookings,
         'declined_bookings': declined_bookings,
         'cancelled_by_guest_bookings': cancelled_by_guest_bookings,
+        'is_admin': is_admin,
+        'allow_override': allow_override,
+        'can_update_booking_status': (not is_admin) or allow_override,
     })
 
 #this handles the declined status of bookings 
@@ -368,7 +466,76 @@ class StatusUpdateView(UpdateView):
         return super().dispatch(*args, **kwargs)
 
     def form_valid(self, form):
-        instance = form.save(commit=False)
+        instance = self.get_object()
+        employee, is_admin = _get_employee_session_context(self.request)
+        if employee is None:
+            messages.error(self.request, "Session expired. Please log in again.")
+            return redirect('admin_app:login')
+
+        requested_status = str(self.request.POST.get("status") or "").strip()
+        if requested_status not in {"Accepted", "Declined"}:
+            messages.error(self.request, "Only Accepted or Declined status is allowed.")
+            return redirect(self.success_url)
+
+        if str(instance.status or "").strip() != "Pending":
+            messages.error(self.request, "Only pending bookings can be updated.")
+            return redirect(self.success_url)
+
+        allow_override = str(self.request.POST.get("allow_override") or "").strip() == "1"
+        if is_admin and not allow_override:
+            messages.error(
+                self.request,
+                "Admin monitoring mode is enabled. Direct approve/reject is blocked unless override is explicitly enabled.",
+            )
+            return redirect(self.success_url)
+
+        if not is_admin:
+            is_assigned = TourAssignment.objects.filter(
+                employee=employee,
+                schedule=instance.sched_id,
+            ).exists()
+            if not is_assigned:
+                messages.error(self.request, "You can only update bookings assigned to your tours.")
+                return redirect(self.success_url)
+
+        if requested_status == "Accepted":
+            schedule = instance.sched_id
+            if str(schedule.status or "").lower() == "cancelled":
+                messages.error(self.request, "This tour schedule is cancelled and cannot accept new bookings.")
+                return redirect(self.success_url)
+            if int(instance.total_guests or 0) < 1:
+                messages.error(self.request, "Invalid booking: total guests must be at least 1.")
+                return redirect(self.success_url)
+            if int(schedule.slots_available or 0) < 0:
+                messages.error(self.request, "Schedule availability is inconsistent. Please review capacity first.")
+                return redirect(self.success_url)
+
+        instance.status = requested_status
+        status_key = str(requested_status).strip().lower()
+        if status_key in {"accepted", "declined"}:
+            create_notification(
+                recipient_guest=instance.guest_id,
+                title=f"Tour booking {status_key}",
+                message=f"Your booking for {instance.tour_id.tour_name} was {status_key} by staff.",
+                notification_type="booking",
+                url=reverse("main-page") + "#user-bookings",
+                dedupe_key=f"tour-status-{instance.id}-{status_key}",
+                related_object_id=str(instance.id),
+            )
+        if status_key == "accepted":
+            _safe_log_tour_status_event(
+                request=self.request,
+                user=instance.guest_id,
+                event_type="book",
+                item_ref="tour_booking_approved",
+            )
+        elif status_key == "declined":
+            _safe_log_tour_status_event(
+                request=self.request,
+                user=instance.guest_id,
+                event_type="book",
+                item_ref="tour_booking_declined",
+            )
         
         # Get email from hidden form field
         guest_email = self.request.POST.get('guest_email')
@@ -378,6 +545,7 @@ class StatusUpdateView(UpdateView):
         if instance.status == "Accepted":
             # For accepted bookings, send confirmation email
             subject = f"Booking Confirmation: {instance.tour_id.tour_name}"
+            payment_url = "https://bayawancity.gov.ph/payments/tour-booking"
             
             # Calculate prices for email - get price from schedule instead of tour
             price_per_adult = instance.sched_id.price if hasattr(instance.sched_id, 'price') else 0
@@ -398,22 +566,45 @@ class StatusUpdateView(UpdateView):
                 'price_per_child': price_per_child,
                 'adults_subtotal': adults_subtotal,
                 'children_subtotal': children_subtotal,
-                'total_amount': total_amount
+                'total_amount': total_amount,
+                'payment_url': payment_url,
             })
             plain_message = strip_tags(html_message)
             
             try:
-                send_mail(
-                    subject,
-                    plain_message,
-                    settings.DEFAULT_FROM_EMAIL,
-                    [guest_email],
-                    html_message=html_message,
-                    fail_silently=False,
+                email_message = EmailMultiAlternatives(
+                    subject=subject,
+                    body=plain_message,
+                    from_email=settings.DEFAULT_FROM_EMAIL,
+                    to=[guest_email],
                 )
+                email_message.attach_alternative(html_message, "text/html")
+
+                # Inline QR code for the official Treasurer payment page.
+                qr = qrcode.QRCode(box_size=6, border=2)
+                qr.add_data(payment_url)
+                qr.make(fit=True)
+                qr_image = qr.make_image(fill_color="black", back_color="white")
+                qr_buffer = BytesIO()
+                qr_image.save(qr_buffer, format="PNG")
+                qr_mime = MIMEImage(qr_buffer.getvalue(), _subtype="png")
+                qr_mime.add_header("Content-ID", "<tour_payment_qr>")
+                qr_mime.add_header("Content-Disposition", "inline", filename="tour_payment_qr.png")
+                email_message.attach(qr_mime)
+
+                email_message.send(fail_silently=False)
                 messages.success(self.request, f"Confirmation email sent to {guest_email}")
+                _safe_log_tour_email_dispatch(
+                    email_type="tour_approval_email_sent",
+                    success=True,
+                )
             except Exception as e:
                 messages.error(self.request, f"Failed to send email: {e}")
+                _safe_log_tour_email_dispatch(
+                    email_type="tour_approval_email_failed",
+                    success=False,
+                    error_message=str(e),
+                )
                 
         elif instance.status == "Declined":
             # Send declined notification
@@ -440,10 +631,19 @@ class StatusUpdateView(UpdateView):
                     fail_silently=False,
                 )
                 messages.success(self.request, f"Notification email sent to {guest_email}")
+                _safe_log_tour_email_dispatch(
+                    email_type="tour_rejection_email_sent",
+                    success=True,
+                )
             except Exception as e:
                 messages.error(self.request, f"Failed to send email: {e}")
+                _safe_log_tour_email_dispatch(
+                    email_type="tour_rejection_email_failed",
+                    success=False,
+                    error_message=str(e),
+                )
         
-        instance.save()
+        instance.save(update_fields=["status"])
         return redirect(self.success_url)
 
     def form_invalid(self, form):
@@ -1302,3 +1502,4 @@ def update_tour_translation(request, tour_id):
         'translations': translations
     })
 
+    allow_override = str(request.GET.get("override") or "").strip() == "1"

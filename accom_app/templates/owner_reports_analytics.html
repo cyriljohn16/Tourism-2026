@@ -158,6 +158,9 @@
       font-weight: 700;
       padding: 3px 8px;
       line-height: 1.3;
+      text-decoration: none;
+      display: inline-block;
+      cursor: pointer;
     }
     .mini-tab.active {
       background: #2563eb;
@@ -455,23 +458,29 @@
         <section class="section">
           <div class="trend-head">
             <h3>Monthly Occupancy Trend</h3>
-            <div class="mini-tabs" aria-hidden="true">
-              <span class="mini-tab active">6 Months</span>
-              <span class="mini-tab">1 Year</span>
-              <span class="mini-tab">2 Years</span>
+            <div class="mini-tabs">
+              <a class="mini-tab {% if selected_trend_window == '6' %}active{% endif %}" href="?month={{ selected_month }}&year={{ selected_year }}&trend_window=6&trend_metric={{ selected_trend_metric }}">6 Months</a>
+              <a class="mini-tab {% if selected_trend_window == '12' %}active{% endif %}" href="?month={{ selected_month }}&year={{ selected_year }}&trend_window=12&trend_metric={{ selected_trend_metric }}">1 Year</a>
+              <a class="mini-tab {% if selected_trend_window == '24' %}active{% endif %}" href="?month={{ selected_month }}&year={{ selected_year }}&trend_window=24&trend_metric={{ selected_trend_metric }}">2 Years</a>
             </div>
           </div>
           <div class="trend-head" style="margin-top:-2px;">
-            <div class="mini-tabs" aria-hidden="true">
-              <span class="mini-tab active">Guests</span>
-              <span class="mini-tab">Nights</span>
-              <span class="mini-tab">Rooms</span>
-              <span class="mini-tab">All</span>
+            <div class="mini-tabs">
+              <a class="mini-tab {% if selected_trend_metric == 'guests' %}active{% endif %}" href="?month={{ selected_month }}&year={{ selected_year }}&trend_window={{ selected_trend_window }}&trend_metric=guests">Guests</a>
+              <a class="mini-tab {% if selected_trend_metric == 'nights' %}active{% endif %}" href="?month={{ selected_month }}&year={{ selected_year }}&trend_window={{ selected_trend_window }}&trend_metric=nights">Nights</a>
+              <a class="mini-tab {% if selected_trend_metric == 'rooms' %}active{% endif %}" href="?month={{ selected_month }}&year={{ selected_year }}&trend_window={{ selected_trend_window }}&trend_metric=rooms">Rooms</a>
+              <a class="mini-tab {% if selected_trend_metric == 'all' %}active{% endif %}" href="?month={{ selected_month }}&year={{ selected_year }}&trend_window={{ selected_trend_window }}&trend_metric=all">All</a>
             </div>
             <div class="trend-legend">
-              <span class="legend-chip"><i class="dot checkins"></i>Guest Check-ins</span>
-              <span class="legend-chip"><i class="dot nights"></i>Guest Nights</span>
-              <span class="legend-chip"><i class="dot rooms"></i>Rooms Occupied</span>
+              {% if selected_trend_metric == 'all' or selected_trend_metric == 'guests' %}
+                <span class="legend-chip"><i class="dot checkins"></i>Guest Check-ins</span>
+              {% endif %}
+              {% if selected_trend_metric == 'all' or selected_trend_metric == 'nights' %}
+                <span class="legend-chip"><i class="dot nights"></i>Guest Nights</span>
+              {% endif %}
+              {% if selected_trend_metric == 'all' or selected_trend_metric == 'rooms' %}
+                <span class="legend-chip"><i class="dot rooms"></i>Rooms Occupied</span>
+              {% endif %}
             </div>
           </div>
           <div class="trend-grid">
@@ -479,19 +488,31 @@
               <div class="trend-row">
                 <div class="trend-label">{{ label }}</div>
                 <div class="bars">
-                  <div class="bar-line">
-                    <span class="bar-fill checkins" style="width:{% widthratio checkins trend_max 100 %}%"></span>
-                  </div>
-                  <div class="bar-line">
-                    <span class="bar-fill nights" style="width:{% widthratio nights trend_max 100 %}%"></span>
-                  </div>
-                  <div class="bar-line">
-                    <span class="bar-fill rooms" style="width:{% widthratio rooms trend_max 100 %}%"></span>
-                  </div>
+                  {% if selected_trend_metric == 'all' or selected_trend_metric == 'guests' %}
+                    <div class="bar-line">
+                      <span class="bar-fill checkins" style="width:{% widthratio checkins trend_max 100 %}%"></span>
+                    </div>
+                  {% endif %}
+                  {% if selected_trend_metric == 'all' or selected_trend_metric == 'nights' %}
+                    <div class="bar-line">
+                      <span class="bar-fill nights" style="width:{% widthratio nights trend_max 100 %}%"></span>
+                    </div>
+                  {% endif %}
+                  {% if selected_trend_metric == 'all' or selected_trend_metric == 'rooms' %}
+                    <div class="bar-line">
+                      <span class="bar-fill rooms" style="width:{% widthratio rooms trend_max 100 %}%"></span>
+                    </div>
+                  {% endif %}
                   <div class="bar-values">
-                    <span>Check-ins: {{ checkins }}</span>
-                    <span>Guest Nights: {{ nights }}</span>
-                    <span>Rooms: {{ rooms }}</span>
+                    {% if selected_trend_metric == 'all' or selected_trend_metric == 'guests' %}
+                      <span>Check-ins: {{ checkins }}</span>
+                    {% endif %}
+                    {% if selected_trend_metric == 'all' or selected_trend_metric == 'nights' %}
+                      <span>Guest Nights: {{ nights }}</span>
+                    {% endif %}
+                    {% if selected_trend_metric == 'all' or selected_trend_metric == 'rooms' %}
+                      <span>Rooms: {{ rooms }}</span>
+                    {% endif %}
                   </div>
                 </div>
               </div>

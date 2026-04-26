@@ -1,0 +1,535 @@
+{% load static %}
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Owner Monthly Reports</title>
+  <link rel="stylesheet" href="{% static 'css/navigation.css' %}">
+  <style>
+    .owner-report-content {
+      display: grid;
+      gap: 18px;
+    }
+
+    .owner-report-card {
+      background: #fff;
+      border: 1px solid #e3e9f3;
+      border-radius: 16px;
+      box-shadow: 0 8px 24px rgba(15, 23, 42, 0.06);
+      padding: 18px;
+    }
+
+    .owner-report-hero h1 {
+      margin: 0 0 10px;
+      font-size: clamp(1.45rem, 2vw, 1.95rem);
+      line-height: 1.15;
+      color: #111827;
+    }
+
+    .owner-report-hero p {
+      margin: 0;
+      color: #475569;
+      line-height: 1.5;
+      max-width: 72ch;
+    }
+
+    .owner-report-title {
+      margin: 0 0 14px;
+      font-size: clamp(1.2rem, 1.8vw, 1.45rem);
+      color: #0f172a;
+      letter-spacing: 0.01em;
+    }
+
+    .owner-form-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 12px 14px;
+    }
+
+    .owner-form-grid .field {
+      min-width: 0;
+    }
+
+    .owner-form-grid .field.field-wide {
+      grid-column: span 2;
+    }
+
+    .owner-form-grid .field.field-full {
+      grid-column: 1 / -1;
+    }
+
+    .owner-form-grid label {
+      display: block;
+      margin-bottom: 6px;
+      font-weight: 700;
+      font-size: 0.82rem;
+      color: #334155;
+      letter-spacing: 0.01em;
+    }
+
+    .owner-form-grid input,
+    .owner-form-grid select,
+    .owner-form-grid textarea {
+      width: 100%;
+      min-width: 0;
+      border: 1px solid #cfd8e6;
+      border-radius: 10px;
+      padding: 10px 11px;
+      font-size: 0.95rem;
+      line-height: 1.35;
+      color: #0f172a;
+      background: #fff;
+      transition: border-color 0.18s ease, box-shadow 0.18s ease;
+    }
+
+    .owner-form-grid textarea {
+      min-height: 96px;
+      resize: vertical;
+    }
+
+    .owner-form-grid input:focus,
+    .owner-form-grid select:focus,
+    .owner-form-grid textarea:focus {
+      outline: none;
+      border-color: #bf824d;
+      box-shadow: 0 0 0 3px rgba(191, 130, 77, 0.2);
+    }
+
+    .owner-report-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 14px;
+    }
+    .owner-room-usage-grid {
+      border: 1px solid #e6ecf5;
+      border-radius: 12px;
+      padding: 10px;
+      background: #fafcff;
+      display: grid;
+      gap: 8px;
+    }
+    .owner-room-usage-head {
+      font-size: 0.84rem;
+      color: #334155;
+      font-weight: 700;
+    }
+    .owner-room-usage-table {
+      width: 100%;
+      border-collapse: collapse;
+      background: #fff;
+      border: 1px solid #e6ecf5;
+      border-radius: 10px;
+      overflow: hidden;
+    }
+    .owner-room-usage-table th,
+    .owner-room-usage-table td {
+      padding: 8px 9px;
+      border-bottom: 1px solid #eef2f8;
+      font-size: 0.84rem;
+      text-align: left;
+    }
+    .owner-room-usage-table th {
+      background: #f8fbff;
+      font-weight: 700;
+      color: #0f172a;
+    }
+    .owner-room-usage-empty {
+      font-size: 0.85rem;
+      color: #64748b;
+      padding: 6px 4px;
+    }
+
+    .owner-report-btn {
+      border: 0;
+      border-radius: 10px;
+      min-height: 40px;
+      padding: 10px 16px;
+      font-size: 0.95rem;
+      font-weight: 700;
+      text-decoration: none;
+      cursor: pointer;
+      transition: transform 0.16s ease, filter 0.16s ease, box-shadow 0.16s ease;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .owner-report-btn:hover {
+      transform: translateY(-1px);
+      filter: brightness(1.02);
+      box-shadow: 0 8px 16px rgba(15, 23, 42, 0.12);
+    }
+
+    .owner-report-btn.primary {
+      background: linear-gradient(180deg, #1f63d3 0%, #0f52c0 100%);
+      color: #fff;
+    }
+
+    .owner-report-btn.secondary {
+      background: #64748b;
+      color: #fff;
+    }
+
+    .owner-report-messages {
+      display: grid;
+      gap: 8px;
+    }
+
+    .owner-report-message {
+      border-radius: 10px;
+      padding: 10px 12px;
+      font-size: 0.9rem;
+      line-height: 1.4;
+      border: 1px solid #e2e8f0;
+      background: #f8fafc;
+      color: #1e293b;
+    }
+
+    .owner-report-table-wrap {
+      width: 100%;
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+      border: 1px solid #e6ecf5;
+      border-radius: 12px;
+    }
+
+    .owner-report-table {
+      width: 100%;
+      min-width: 760px;
+      border-collapse: collapse;
+      background: #fff;
+    }
+
+    .owner-report-table th,
+    .owner-report-table td {
+      border-bottom: 1px solid #e6ecf5;
+      padding: 10px 11px;
+      text-align: left;
+      font-size: 0.86rem;
+      white-space: nowrap;
+    }
+
+    .owner-report-table th {
+      background: #f8fbff;
+      color: #0f172a;
+      font-size: 0.84rem;
+      font-weight: 800;
+      letter-spacing: 0.01em;
+    }
+
+    .owner-report-table tbody tr:hover td {
+      background: #fcfdff;
+    }
+
+    .owner-report-badge {
+      display: inline-block;
+      border-radius: 999px;
+      padding: 4px 9px;
+      font-size: 0.74rem;
+      font-weight: 800;
+      letter-spacing: 0.01em;
+      text-transform: capitalize;
+    }
+
+    .owner-report-badge.submitted {
+      background: #e0f2fe;
+      color: #0c4a6e;
+    }
+
+    .owner-report-badge.reviewed {
+      background: #dcfce7;
+      color: #166534;
+    }
+
+    .owner-report-badge.returned {
+      background: #fef3c7;
+      color: #92400e;
+    }
+
+    .owner-report-badge.draft {
+      background: #e2e8f0;
+      color: #334155;
+    }
+
+    .owner-report-empty {
+      color: #64748b;
+      font-size: 0.9rem;
+      padding: 12px;
+    }
+    .owner-pagination {
+      display: flex;
+      justify-content: flex-end;
+      align-items: center;
+      gap: 8px;
+      margin-top: 12px;
+      flex-wrap: wrap;
+      font-size: 0.84rem;
+      color: #334155;
+    }
+    .owner-pagination a {
+      text-decoration: none;
+      border: 1px solid #d4deed;
+      border-radius: 8px;
+      padding: 6px 9px;
+      color: #1e3a8a;
+      background: #f8fbff;
+      font-weight: 700;
+    }
+
+    @media (max-width: 1280px) {
+      .owner-form-grid {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+      }
+    }
+
+    @media (max-width: 1024px) {
+      .owner-form-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+    }
+
+    @media (max-width: 768px) {
+      .content {
+        margin-left: 0;
+        padding: 14px;
+      }
+
+      .owner-report-card {
+        padding: 14px;
+        border-radius: 14px;
+      }
+
+      .owner-form-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .owner-form-grid .field.field-wide,
+      .owner-form-grid .field.field-full {
+        grid-column: auto;
+      }
+
+      .owner-report-btn {
+        width: 100%;
+      }
+    }
+  </style>
+</head>
+<body>
+  <aside class="navigation">
+    {% include 'components/owner_navigation.html' %}
+  </aside>
+
+  <main class="content owner-report-content">
+    <section class="owner-report-card owner-report-hero">
+      <h1>Tourism Office Monthly Reports</h1>
+      <p>Submit required tourism monitoring data for each accommodation and reporting period.</p>
+    </section>
+
+    {% if messages %}
+    <section class="owner-report-card owner-report-messages" aria-live="polite">
+      {% for message in messages %}
+      <div class="owner-report-message">{{ message }}</div>
+      {% endfor %}
+    </section>
+    {% endif %}
+
+    <section class="owner-report-card">
+      <h2 class="owner-report-title">Submit / Update Report</h2>
+      <form method="post">
+        {% csrf_token %}
+        <div class="owner-form-grid">
+          <div class="field">
+            <label for="accommodation_id">Accommodation</label>
+            <select id="accommodation_id" name="accommodation_id" required>
+              <option value="">Select accommodation</option>
+              {% for accom in owner_accommodations %}
+                <option value="{{ accom.accom_id }}">{{ accom.company_name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+
+          <div class="field">
+            <label for="reporting_period">Reporting Period</label>
+            <input id="reporting_period" name="reporting_period" type="month" required>
+          </div>
+
+          <div class="field">
+            <label for="status">Save As</label>
+            <select id="status" name="status">
+              <option value="submitted">Submitted</option>
+              <option value="draft">Draft</option>
+            </select>
+          </div>
+
+          <div class="field">
+            <label for="guests_checked_in">Guests Checked In</label>
+            <input id="guests_checked_in" name="guests_checked_in" type="number" min="0" value="0" required>
+          </div>
+
+          <div class="field">
+            <label for="guests_checked_out">Guests Checked Out</label>
+            <input id="guests_checked_out" name="guests_checked_out" type="number" min="0" value="0" required>
+          </div>
+
+          <div class="field">
+            <label for="rooms_used">Rooms Used / Occupied</label>
+            <input id="rooms_used" name="rooms_used" type="number" min="0" value="0">
+          </div>
+
+          <div class="field field-wide">
+            <label for="room_usage_notes">Room Usage Statistics</label>
+            <textarea id="room_usage_notes" name="room_usage_notes" placeholder="Example: Average occupancy 78%, peak during weekends."></textarea>
+          </div>
+
+          <div class="field field-full">
+            <label>Room Usage (Tourism Office Required)</label>
+            <div class="owner-room-usage-grid">
+              <div class="owner-room-usage-head">
+                Enter check-ins/check-outs per room type. Totals are computed from this section when provided.
+              </div>
+              {% for group in owner_accommodation_room_rows %}
+                <div class="room-usage-group" data-accom-id="{{ group.accom_id }}" style="display:none;">
+                  {% if group.rooms %}
+                  <table class="owner-room-usage-table">
+                    <thead>
+                      <tr>
+                        <th>Room Type</th>
+                        <th>Check-ins</th>
+                        <th>Check-outs</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {% for room in group.rooms %}
+                      <tr>
+                        <td>{{ room.room_name }}</td>
+                        <td>
+                          <input
+                            type="number"
+                            min="0"
+                            value="0"
+                            name="room_checkins_{{ room.room_id }}"
+                            inputmode="numeric"
+                          >
+                        </td>
+                        <td>
+                          <input
+                            type="number"
+                            min="0"
+                            value="0"
+                            name="room_checkouts_{{ room.room_id }}"
+                            inputmode="numeric"
+                          >
+                        </td>
+                      </tr>
+                      {% endfor %}
+                    </tbody>
+                  </table>
+                  {% else %}
+                    <div class="owner-room-usage-empty">
+                      No rooms found for this accommodation yet. Add rooms first, then submit room-level reporting.
+                    </div>
+                  {% endif %}
+                </div>
+              {% endfor %}
+              <div id="room-usage-empty" class="owner-room-usage-empty">
+                Select an accommodation to show room-level fields.
+              </div>
+            </div>
+          </div>
+
+          <div class="field field-wide">
+            <label for="nationality_breakdown">Nationality Breakdown</label>
+            <textarea id="nationality_breakdown" name="nationality_breakdown" placeholder="Example: Filipino 120, Foreign 24 (JP 8, KR 6, US 10)."></textarea>
+          </div>
+
+          <div class="field field-full">
+            <label for="additional_remarks">Additional Remarks</label>
+            <textarea id="additional_remarks" name="additional_remarks" placeholder="Any additional tourism monitoring notes."></textarea>
+          </div>
+        </div>
+
+        <div class="owner-report-actions">
+          <button class="owner-report-btn primary" type="submit">Save Report</button>
+          <a class="owner-report-btn secondary" href="{% url 'admin_app:owner_hub' %}">Back to Owner Hub</a>
+        </div>
+      </form>
+    </section>
+
+    <section class="owner-report-card">
+      <h2 class="owner-report-title">My Submitted Reports</h2>
+      <div class="owner-report-table-wrap">
+        <table class="owner-report-table">
+          <thead>
+            <tr>
+              <th>Period</th>
+              <th>Accommodation</th>
+              <th>Status</th>
+              <th>Check-ins</th>
+              <th>Check-outs</th>
+              <th>Rooms Used</th>
+              <th>Room-level</th>
+              <th>Updated</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in report_rows %}
+            <tr>
+              <td>{{ row.reporting_period|date:"M Y" }}</td>
+              <td>{{ row.accommodation.company_name }}</td>
+              <td><span class="owner-report-badge {{ row.status }}">{{ row.status|title }}</span></td>
+              <td>{{ row.guests_checked_in }}</td>
+              <td>{{ row.guests_checked_out }}</td>
+              <td>{{ row.rooms_used }}</td>
+              <td>
+                {% if row.room_usage_rows.all %}
+                  Detailed
+                {% else %}
+                  Total-only (legacy)
+                {% endif %}
+              </td>
+              <td>{{ row.updated_at|date:"M d, Y H:i" }}</td>
+            </tr>
+            {% empty %}
+            <tr>
+              <td colspan="8" class="owner-report-empty">No reports submitted yet.</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% if report_rows.paginator.num_pages > 1 %}
+      <div class="owner-pagination">
+        <span>Page {{ report_rows.number }} of {{ report_rows.paginator.num_pages }}</span>
+        {% if report_rows.has_previous %}
+        <a href="?page={{ report_rows.previous_page_number }}">Previous</a>
+        {% endif %}
+        {% if report_rows.has_next %}
+        <a href="?page={{ report_rows.next_page_number }}">Next</a>
+        {% endif %}
+      </div>
+      {% endif %}
+    </section>
+  </main>
+  <script>
+    (function () {
+      const accommodationSelect = document.getElementById("accommodation_id");
+      const groups = Array.from(document.querySelectorAll(".room-usage-group"));
+      const emptyState = document.getElementById("room-usage-empty");
+      if (!accommodationSelect || !groups.length || !emptyState) return;
+      function syncRoomGroup() {
+        const selected = String(accommodationSelect.value || "");
+        let shown = false;
+        groups.forEach((group) => {
+          const visible = String(group.getAttribute("data-accom-id") || "") === selected;
+          group.style.display = visible ? "block" : "none";
+          if (visible) shown = true;
+        });
+        emptyState.style.display = shown ? "none" : "block";
+      }
+      accommodationSelect.addEventListener("change", syncRoomGroup);
+      syncRoomGroup();
+    })();
+  </script>
+</body>
+</html>

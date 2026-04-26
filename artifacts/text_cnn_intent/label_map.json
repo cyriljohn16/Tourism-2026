@@ -3,8 +3,14 @@
     "book_accommodation",
     "calculate_accommodation_billing",
     "calculate_billing",
+    "employee_assigned_tours",
+    "employee_open_assignment",
+    "employee_update_assignment",
     "get_accommodation_recommendation",
     "get_recommendation",
-    "get_tourism_information"
+    "get_tourism_information",
+    "plan_bayawan_stay",
+    "reporting_summary",
+    "travel_guidance"
   ]
 }

@@ -1,4 +1,3 @@
-<!DOCTYPE html>
 <html>
 <head>
   <meta charset="UTF-8">
@@ -13,14 +12,14 @@
     .container {
       padding: 20px;
       border: 1px solid #ddd;
-      border-radius: 5px;
+      border-radius: 6px;
     }
     .header {
       background-color: #007bff;
-      color: white;
+      color: #fff;
       padding: 10px;
       text-align: center;
-      border-radius: 5px 5px 0 0;
+      border-radius: 6px 6px 0 0;
     }
     .content {
       padding: 20px;
@@ -28,21 +27,40 @@
     .details {
       background-color: #f9f9f9;
       padding: 15px;
-      border-radius: 5px;
+      border-radius: 6px;
       margin-top: 20px;
     }
     .payment {
       background-color: #e9f7ef;
       padding: 15px;
-      border-radius: 5px;
+      border-radius: 6px;
       margin-top: 20px;
       border-left: 4px solid #28a745;
+    }
+    .instructions {
+      background-color: #f4f8ff;
+      padding: 15px;
+      border-radius: 6px;
+      margin-top: 16px;
+      border-left: 4px solid #0d6efd;
     }
     .footer {
       text-align: center;
       margin-top: 30px;
       color: #777;
       font-size: 12px;
+    }
+    .qr-wrap {
+      margin-top: 16px;
+      text-align: center;
+    }
+    .qr-img {
+      width: 160px;
+      height: 160px;
+      border: 1px solid #dcdcdc;
+      border-radius: 8px;
+      background: #fff;
+      padding: 6px;
     }
   </style>
 </head>
@@ -53,10 +71,10 @@
     </div>
     <div class="content">
       <p>Dear {{ name }},</p>
-      <p>Your booking for <strong>{{ tour_name }}</strong> has been confirmed!</p>
-      
+      <p>Your booking for <strong>{{ tour_name }}</strong> has been confirmed.</p>
+
       <div class="details">
-        <h3>Booking Details:</h3>
+        <h3>Booking Details</h3>
         <p><strong>Tour:</strong> {{ tour_name }}</p>
         <p><strong>Start Time:</strong> {{ start_time }}</p>
         <p><strong>End Time:</strong> {{ end_time }}</p>
@@ -64,22 +82,56 @@
         <p><strong>Number of Children:</strong> {{ num_children }}</p>
         <p><strong>Total Guests:</strong> {{ total_guests }}</p>
       </div>
-      
+
       <div class="payment">
-        <h3>Payment Information:</h3>
-        <p><strong>Adult Price:</strong> ₱{{ price_per_adult }} per person</p>
-        <p><strong>Child Price:</strong> ₱{{ price_per_child }} per person</p>
+        <h3>Payment Summary</h3>
+        <p><strong>Adult Price:</strong> &#8369;{{ price_per_adult }} per person</p>
+        <p><strong>Child Price:</strong> &#8369;{{ price_per_child }} per person</p>
         <hr>
-        <p><strong>Adults Subtotal:</strong> {{ num_adults }} × ₱{{ price_per_adult }} = ₱{{ adults_subtotal }}</p>
-        <p><strong>Children Subtotal:</strong> {{ num_children }} × ₱{{ price_per_child }} = ₱{{ children_subtotal }}</p>
-        <p style="font-size: 18px; font-weight: bold;">Total Amount Due: ₱{{ total_amount }}</p>
-        <p style="font-style: italic;">Please pay this amount upon arrival or through our online payment options.</p>
+        <p><strong>Adults Subtotal:</strong> {{ num_adults }} x &#8369;{{ price_per_adult }} = &#8369;{{ adults_subtotal }}</p>
+        <p><strong>Children Subtotal:</strong> {{ num_children }} x &#8369;{{ price_per_child }} = &#8369;{{ children_subtotal }}</p>
+        <p style="font-size:18px;font-weight:bold;margin-bottom:8px;">Total Amount Due: &#8369;{{ total_amount }}</p>
+
+        <div class="instructions">
+          <h3 style="margin-top:0;">Payment Instructions</h3>
+          <p style="margin: 0 0 8px 0;">
+            Payment is handled by the <strong>Bayawan City Treasurer&rsquo;s Office</strong>.
+            Please complete your payment using one of the options below:
+          </p>
+          <ul style="margin: 0 0 12px 20px; padding: 0;">
+            <li><strong>Online:</strong> click the payment button to continue to the official payment page.</li>
+            <li><strong>Onsite:</strong> pay at the Treasurer&rsquo;s Office counter and present your booking details.</li>
+          </ul>
+
+          <p style="margin: 0 0 10px 0;">
+            <a
+              href="{{ payment_url }}"
+              target="_blank"
+              rel="noopener noreferrer"
+              style="display:inline-block;background:#0d6efd;color:#fff;text-decoration:none;font-weight:700;padding:10px 18px;border-radius:6px;"
+            >Proceed to Payment</a>
+          </p>
+          <p style="margin:0;font-size:13px;">
+            If the button does not work, open this link: <br>
+            <a href="{{ payment_url }}" target="_blank" rel="noopener noreferrer">{{ payment_url }}</a>
+          </p>
+        </div>
+
+        <div class="qr-wrap">
+          <p style="margin:0 0 8px 0;font-weight:700;">Quick Access QR Code</p>
+          <img
+            src="cid:tour_payment_qr"
+            alt="QR code for Treasurer payment page"
+            class="qr-img"
+          >
+          <p style="font-size:13px;color:#666;margin:8px 0 0 0;">
+            If the QR image is blocked, use the payment link above.
+          </p>
+        </div>
       </div>
-      
-      <p>Thank you for choosing our tour service. We look forward to welcoming you!</p>
-      
-      <p>Best regards,<br>
-      The IBAYAW Tour Team</p>
+
+      <p>Thank you for choosing IBAYAW Tour. We look forward to welcoming you.</p>
+      <p>Best regards,<br>The IBAYAW Tour Team</p>
     </div>
     <div class="footer">
       <p>This is an automated message. Please do not reply to this email.</p>
@@ -87,4 +139,4 @@
     </div>
   </div>
 </body>
-</html> 
+</html>

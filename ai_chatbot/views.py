@@ -2,21 +2,24 @@ import json
 import importlib
 import hashlib
 import logging
+import math
 import os
 import re
 import time
 import uuid
+import calendar
 from collections import Counter
 from datetime import datetime, timedelta
 from decimal import Decimal
 from difflib import get_close_matches
 from pathlib import Path
-from urllib.parse import urlencode
+from types import SimpleNamespace
 
 from django.conf import settings
 from django.contrib.auth.models import Group
+from django.core.mail import send_mail
 from django.db import transaction
-from django.db.models import DecimalField, ExpressionWrapper, F, Q, Sum
+from django.db.models import Count, DecimalField, ExpressionWrapper, F, Q, Sum
 from django.http import JsonResponse
 from django.urls import reverse
 from django.utils import timezone
@@ -44,15 +47,26 @@ except ModuleNotFoundError:
     pd = None
     tf = None
 
-from tour_app.models import Admission_Rates, Tour_Schedule
-from admin_app.models import Accomodation, Employee, Room, TourismInformation, TourAssignment
+from tour_app.models import Admission_Rates, Tour_Add, Tour_Schedule
+from admin_app.models import (
+    Accomodation,
+    Employee,
+    Room,
+    TourismInformation,
+    TourAssignment,
+    OwnerMonthlyReport,
+    MonthlyReportRoomUsage,
+)
 from accom_app.models import AuthoritativeRoomDetails
+from admin_app.notification_service import (
+    create_notification,
+    notify_assigned_employees_for_schedule,
+)
 from guest_app.models import AccommodationBooking, Billing, Guest, TourBooking, Pending
-from guest_app.booking_integrity import create_accommodation_booking_with_integrity
 from .recommenders import (
+    apply_approved_accommodation_scope,
     recommend_tours,
     recommend_accommodations_with_diagnostics,
-    calculate_accommodation_billing,
     get_decision_tree_runtime_status,
     get_unavailable_tour_matches,
 )
@@ -88,8 +102,11 @@ _ACCOM_LOCATION_CACHE = None
 _MAP_REFERENCE_PLACE_CACHE = None
 _CHAT_STATE_SESSION_KEY = "ai_chatbot_state"
 _CHAT_PREFERENCE_SESSION_KEY = "ai_chatbot_saved_preferences"
+_CHAT_SOCIAL_SESSION_KEY = "ai_chatbot_social_profile"
+_CHAT_ASSISTANT_MEMORY_SESSION_KEY = "ai_chatbot_assistant_memory"
 _CHAT_STATE_TTL_SECONDS = 30 * 60
 _PENDING_BOOKING_TTL_SECONDS = 10 * 60
+DEMO_SAFE_MODE = bool(getattr(settings, "DEMO_SAFE_MODE", True))
 _VALID_DATA_SOURCES = {"unlabeled", "demo_seeded", "pilot_test", "real_world"}
 _ALLOWED_INTENTS = {
     "get_recommendation",
@@ -98,6 +115,12 @@ _ALLOWED_INTENTS = {
     "get_accommodation_recommendation",
     "calculate_accommodation_billing",
     "book_accommodation",
+    "plan_bayawan_stay",
+    "travel_guidance",
+    "reporting_summary",
+    "employee_assigned_tours",
+    "employee_open_assignment",
+    "employee_update_assignment",
 }
 _INTENT_LABEL_ALIASES = {
     "gettourrecommendation": "get_recommendation",
@@ -121,9 +144,28 @@ _INTENT_LABEL_ALIASES = {
     "calculatehotelbilling": "calculate_accommodation_billing",
     "hotel_billing": "calculate_accommodation_billing",
     "hotel billing": "calculate_accommodation_billing",
-    "bookhotel": "book_accommodation",
-    "book_hotel": "book_accommodation",
-    "reserve_accommodation": "book_accommodation",
+    # Accommodation bookings are external-link only; keep these routed to
+    # recommendation/link guidance instead of any internal transaction flow.
+    "bookhotel": "get_accommodation_recommendation",
+    "book_hotel": "get_accommodation_recommendation",
+    "reserve_accommodation": "get_accommodation_recommendation",
+    "stay_planning": "plan_bayawan_stay",
+    "budget_planning": "plan_bayawan_stay",
+    "itinerary_planning": "plan_bayawan_stay",
+    "plan_stay": "plan_bayawan_stay",
+    "plan_trip": "plan_bayawan_stay",
+    "bayawan_stay_planning": "plan_bayawan_stay",
+    "directions": "travel_guidance",
+    "direction": "travel_guidance",
+    "travel_guidance": "travel_guidance",
+    "distance_check": "travel_guidance",
+    "reporting": "reporting_summary",
+    "tourist_influx_report": "reporting_summary",
+    "monthly_report": "reporting_summary",
+    "employee_assigned": "employee_assigned_tours",
+    "employee_assigned_tours": "employee_assigned_tours",
+    "employee_open_assignment": "employee_open_assignment",
+    "employee_update_assignment": "employee_update_assignment",
 }
 _MAP_ANCHOR_ALIASES = {
     "Bayawan City Public Terminal": (
@@ -203,6 +245,13 @@ _GUEST_FUNNEL_EVENT_MAP = {
     "billing_link_shown": {"item_ref": "chat:funnel_billing_link_shown", "event_type": "view"},
     "billing_link_clicked": {"item_ref": "chat:funnel_billing_link_clicked", "event_type": "click"},
     "booking_completed": {"item_ref": "chat:funnel_booking_completed", "event_type": "book"},
+    # Clean accommodation preview-only flow events.
+    "accommodation_search_started": {"item_ref": "accommodation_search_started", "event_type": "view"},
+    "accommodation_recommendations_shown": {"item_ref": "accommodation_recommendations_shown", "event_type": "view"},
+    "accommodation_rooms_viewed": {"item_ref": "accommodation_rooms_viewed", "event_type": "click"},
+    "accommodation_preview_started": {"item_ref": "accommodation_preview_started", "event_type": "save"},
+    "accommodation_preview_completed": {"item_ref": "accommodation_preview_completed", "event_type": "view"},
+    "accommodation_external_handoff_clicked": {"item_ref": "accommodation_external_handoff_clicked", "event_type": "click"},
 }
 
 
@@ -227,7 +276,7 @@ def _known_accommodation_locations(force_reload=False):
         return _ACCOM_LOCATION_CACHE
     try:
         rows = (
-            Accomodation.objects.filter(is_active=True, approval_status="accepted")
+            apply_approved_accommodation_scope(Accomodation.objects.all(), accommodation_path="")
             .exclude(location__isnull=True)
             .exclude(location__exact="")
             .values_list("location", flat=True)
@@ -265,18 +314,47 @@ def _load_map_reference_place_entries(force_reload=False):
     try:
         template_path = Path(__file__).resolve().parent.parent / "admin_app" / "templates" / "map.html"
         raw = template_path.read_text(encoding="utf-8", errors="ignore")
-        for name in re.findall(r'name:\s*"([^"]+)"', raw):
-            canonical = " ".join(str(name or "").split()).strip()
+        object_pattern = re.compile(
+            r'name:\s*"([^"]+)"\s*,\s*gps:\s*\{\s*lat:\s*([-0-9.]+)\s*,\s*lng:\s*([-0-9.]+)\s*\}',
+            re.IGNORECASE | re.MULTILINE,
+        )
+        for match in object_pattern.finditer(raw):
+            canonical = " ".join(str(match.group(1) or "").split()).strip()
             normalized = _normalize_chat_text(canonical)
             if not canonical or not normalized or normalized in seen:
                 continue
+            lat_val = None
+            lng_val = None
+            try:
+                lat_val = float(match.group(2))
+                lng_val = float(match.group(3))
+            except Exception:
+                lat_val = None
+                lng_val = None
             seen.add(normalized)
             entries.append(
                 {
                     "name": canonical,
                     "normalized": normalized,
+                    "lat": lat_val,
+                    "lng": lng_val,
                 }
             )
+        if not entries:
+            for name in re.findall(r'name:\s*"([^"]+)"', raw):
+                canonical = " ".join(str(name or "").split()).strip()
+                normalized = _normalize_chat_text(canonical)
+                if not canonical or not normalized or normalized in seen:
+                    continue
+                seen.add(normalized)
+                entries.append(
+                    {
+                        "name": canonical,
+                        "normalized": normalized,
+                        "lat": None,
+                        "lng": None,
+                    }
+                )
     except Exception:
         entries = []
 
@@ -302,6 +380,8 @@ def _match_map_reference_places(raw_location, *, limit=5):
             return
         name = " ".join(str(entry.get("name") or "").split()).strip()
         normalized = _normalize_chat_text(entry.get("normalized") or name)
+        lat_val = entry.get("lat")
+        lng_val = entry.get("lng")
         if not name or not normalized:
             return
         key = normalized
@@ -312,6 +392,8 @@ def _match_map_reference_places(raw_location, *, limit=5):
             {
                 "name": name,
                 "normalized": normalized,
+                "lat": lat_val,
+                "lng": lng_val,
                 "_rank": int(rank),
             }
         )
@@ -340,6 +422,8 @@ def _match_map_reference_places(raw_location, *, limit=5):
                     {
                         "name": anchor_name,
                         "normalized": _normalize_chat_text(anchor_name),
+                        "lat": None,
+                        "lng": None,
                     },
                     rank=0,
                 )
@@ -348,6 +432,8 @@ def _match_map_reference_places(raw_location, *, limit=5):
                     {
                         "name": anchor_name,
                         "normalized": _normalize_chat_text(anchor_name),
+                        "lat": None,
+                        "lng": None,
                     },
                     rank=1,
                 )
@@ -415,6 +501,533 @@ def _is_generic_terminal_reference(value):
         return False
     return not any(marker in normalized for marker in _TERMINAL_SPECIFIC_MARKERS)
 
+
+def _approved_accommodation_queryset():
+    return apply_approved_accommodation_scope(
+        Accomodation.objects.all(),
+        accommodation_path="",
+    )
+
+
+def _approved_room_queryset():
+    room_qs = Room.objects.select_related("accommodation").all()
+    return apply_approved_accommodation_scope(room_qs, accommodation_path="accommodation")
+
+
+def _safe_float(value, default=None):
+    try:
+        if value in (None, ""):
+            return default
+        return float(value)
+    except Exception:
+        return default
+
+
+def _resolve_client_location(payload, request):
+    location_payload = payload.get("client_location") if isinstance(payload, dict) else {}
+    if not isinstance(location_payload, dict):
+        location_payload = {}
+    lat = _safe_float(location_payload.get("latitude"))
+    lng = _safe_float(location_payload.get("longitude"))
+    accuracy = _safe_float(
+        location_payload.get("accuracy_m")
+        if location_payload.get("accuracy_m") not in (None, "")
+        else location_payload.get("accuracy")
+    )
+    status = str(location_payload.get("status") or "").strip().lower()
+
+    if lat is None or lng is None:
+        session_payload = {}
+        try:
+            session_payload = request.session.get("guest_current_location") if hasattr(request, "session") else {}
+        except Exception:
+            session_payload = {}
+        if isinstance(session_payload, dict):
+            lat = _safe_float(session_payload.get("latitude"), default=lat)
+            lng = _safe_float(session_payload.get("longitude"), default=lng)
+            if accuracy is None:
+                accuracy = _safe_float(session_payload.get("accuracy_m"))
+            if not status:
+                status = str(session_payload.get("status") or "available").strip().lower()
+
+    if lat is None or lng is None:
+        return {"status": status or "unavailable"}
+    if not (-90.0 <= lat <= 90.0 and -180.0 <= lng <= 180.0):
+        return {"status": "unavailable"}
+    return {
+        "status": status or "available",
+        "latitude": round(float(lat), 6),
+        "longitude": round(float(lng), 6),
+        "accuracy_m": round(float(accuracy), 2) if isinstance(accuracy, float) and accuracy >= 0 else None,
+    }
+
+
+def _haversine_km(lat1, lon1, lat2, lon2):
+    radius_km = 6371.0
+    p1 = math.radians(float(lat1))
+    p2 = math.radians(float(lat2))
+    dlat = math.radians(float(lat2) - float(lat1))
+    dlon = math.radians(float(lon2) - float(lon1))
+    a = math.sin(dlat / 2) ** 2 + math.cos(p1) * math.cos(p2) * math.sin(dlon / 2) ** 2
+    c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+    return max(0.0, radius_km * c)
+
+
+def _estimate_travel_minutes(distance_km):
+    km = max(0.0, float(distance_km or 0.0))
+    if km <= 2.0:
+        speed_kmh = 4.5  # walkable city estimate
+    elif km <= 12.0:
+        speed_kmh = 22.0  # tricycle/local city traffic
+    else:
+        speed_kmh = 35.0  # mixed local road estimate
+    minutes = (km / speed_kmh) * 60.0
+    return int(max(1, round(minutes)))
+
+
+def _is_travel_guidance_request(message):
+    text = _normalize_chat_text(message)
+    if not text:
+        return False
+    markers = (
+        "how far",
+        "how many minutes",
+        "how many hours",
+        "how long",
+        "how to go",
+        "how to go there",
+        "how to get to",
+        "how to get there",
+        "how do i get",
+        "how far is that",
+        "how far is that from",
+        "which way",
+        "directions",
+        "directions to",
+        "directions there",
+        "route to",
+        "from my location",
+        "from manila",
+        "from another country",
+        "international",
+        "where is",
+    )
+    return any(marker in text for marker in markers)
+
+
+def _is_contextual_direction_followup(message):
+    text = _normalize_chat_text(message)
+    if not text:
+        return False
+    followup_markers = (
+        "how to go there",
+        "how to get there",
+        "directions there",
+        "how far is that",
+        "how far is that from",
+    )
+    return any(marker in text for marker in followup_markers)
+
+
+def _is_guest_vague_query(message):
+    text = _normalize_chat_text(message)
+    if not text:
+        return False
+    # Very short generic prompts should be clarified first.
+    if text in {
+        "help",
+        "where",
+        "place",
+        "something",
+        "something nice",
+        "hotel",
+        "inn",
+        "accommodation",
+        "stay",
+        "recommendation",
+        "any recommendation",
+    }:
+        return True
+    # Planning requests should never be treated as vague/open-ended.
+    if _is_stay_planning_request(text):
+        return False
+    direct_scope_terms = (
+        "tour",
+        "hotel",
+        "inn",
+        "accommodation",
+        "directions",
+        "how to go",
+        "how to get",
+        "map",
+        "report",
+        "book",
+        "booking",
+    )
+    if any(term in text for term in direct_scope_terms):
+        return False
+    vague_phrases = (
+        "i want to go somewhere nice",
+        "help me",
+        "any recommendation",
+        "where should i go",
+        "where do i go",
+    )
+    if any(phrase in text for phrase in vague_phrases):
+        return True
+    if text in {"what can i do", "recommend me something", "recommend something"}:
+        return True
+    return False
+
+
+def _is_likely_gibberish_query(message):
+    text = _normalize_chat_text(message)
+    if not text:
+        return False
+    if len(text) <= 2:
+        return False
+    # If it already contains domain cues, treat it as intentional.
+    if re.search(
+        r"\b(tour|hotel|inn|accommodation|stay|room|book|booking|preview|directions?|map|plan|trip|bayawan|report|owner|employee|admin)\b",
+        text,
+    ):
+        return False
+
+    tokens = re.findall(r"[a-z]+", text.lower())
+    if not tokens:
+        return True
+    if len(tokens) > 3:
+        return False
+
+    collapsed = "".join(tokens)
+    if len(tokens) == 1:
+        token = tokens[0]
+        if len(token) < 6:
+            return False
+        if any(pattern in token for pattern in ("qwe", "asd", "zxc", "qaz", "wsx")):
+            return True
+        common_single_words = {
+            "recommendation",
+            "recommendations",
+            "something",
+            "somewhere",
+            "planning",
+            "direction",
+            "directions",
+            "accommodation",
+            "accommodations",
+            "itinerary",
+            "tourism",
+        }
+        if len(token) >= 10 and token not in common_single_words:
+            return True
+        if re.fullmatch(r"([a-z]{2,4})\1{1,}", token):
+            return True
+        vowel_count = sum(1 for ch in token if ch in "aeiou")
+        vowel_ratio = float(vowel_count) / float(max(len(token), 1))
+        if vowel_ratio < 0.20:
+            return True
+        if not re.search(r"(th|he|in|re|an|on|to|at|er|st|or|ar|ou|el|ho|di|pl|tr)", token):
+            return True
+    else:
+        vowel_count = sum(1 for ch in collapsed if ch in "aeiou")
+        if len(collapsed) >= 10 and float(vowel_count) / float(max(len(collapsed), 1)) < 0.22:
+            return True
+    return False
+
+
+def _is_vague_accommodation_request(message, params=None):
+    text = _normalize_chat_text(message)
+    params = params if isinstance(params, dict) else {}
+    if not text:
+        return False
+    if not re.search(r"\b(hotel|inn|accommodation|place to stay|stay)\b", text):
+        return False
+    budget = _to_int(params.get("budget"), default=0)
+    guests = _to_int(params.get("guests"), default=0)
+    location = str(params.get("location") or "").strip()
+    if budget > 0 or guests > 0 or location:
+        return False
+    vague_markers = (
+        "place to stay",
+        "maybe like a place to stay",
+        "accommodation",
+        "maybe a place to stay",
+        "find a place to stay",
+    )
+    return any(marker in text for marker in vague_markers)
+
+
+def _recent_accommodation_choices(chat_state, *, limit=3):
+    rows = (
+        chat_state.get("last_accommodation_recommendations")
+        if isinstance(chat_state, dict) and isinstance(chat_state.get("last_accommodation_recommendations"), list)
+        else []
+    )
+    seen = set()
+    choices = []
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        name = str(
+            row.get("accom_name")
+            or row.get("company_name")
+            or row.get("name")
+            or ""
+        ).strip()
+        location = str(row.get("location") or "").strip()
+        if not name:
+            continue
+        key = _normalize_chat_text(name)
+        if key in seen:
+            continue
+        seen.add(key)
+        choices.append({"name": name, "location": location})
+        if len(choices) >= max(1, limit):
+            break
+    return choices
+
+
+def _has_accommodation_plus_direction_mix(message, params=None):
+    text = _normalize_chat_text(message)
+    params = params if isinstance(params, dict) else {}
+    if not text:
+        return False
+    has_accommodation = bool(re.search(r"\b(hotel|inn|accommodation|stay|place to stay)\b", text))
+    has_direction = _is_travel_guidance_request(text)
+    has_constraints = bool(
+        re.search(r"\bunder\s*\d+|\bbudget\b|\b\d+\s*(guest|guests|people|person|pax)\b", text)
+        or str(params.get("location") or "").strip()
+    )
+    return has_accommodation and has_direction and has_constraints
+
+
+def _is_role_vague_query(actor, message):
+    role = str((actor or {}).get("role") or "").strip().lower()
+    text = _normalize_chat_text(message)
+    if not text:
+        return False
+    if role == "guest":
+        return _is_guest_vague_query(text)
+    if role == "owner":
+        return text in {"what do i do here", "help", "what now"} or (
+            "help" in text and not _is_owner_help_command(text)
+        )
+    if role == "employee":
+        return text in {"help", "what now"} or (
+            "help" in text and not _is_employee_assigned_tours_command(text)
+        )
+    if role == "admin":
+        return text in {"help", "what now"} or ("help" in text and not _is_reporting_summary_request(text))
+    return False
+
+
+def _is_reporting_summary_request(message):
+    text = _normalize_chat_text(message)
+    if not text:
+        return False
+    markers = (
+        "summary",
+        "reports",
+        "tourist influx",
+        "monthly report",
+        "monthly reports",
+        "accommodation report",
+        "owner report",
+        "owner monthly report",
+        "tourism report",
+        "report for",
+        "guests recorded",
+        "room usage by room",
+        "check ins per room",
+        "check-ins per room",
+        "latest monthly report",
+        "show latest monthly report",
+    )
+    return any(marker in text for marker in markers)
+
+
+def _extract_reporting_period_hint(message):
+    text = str(message or "").strip()
+    if not text:
+        return None
+
+    iso_match = re.search(r"\b(20\d{2})[-/](0?[1-9]|1[0-2])\b", text)
+    if iso_match:
+        year_val = int(iso_match.group(1))
+        month_val = int(iso_match.group(2))
+        return datetime(year_val, month_val, 1).date()
+
+    month_names = [m for m in calendar.month_name if m]
+    month_pattern = "|".join(month_names)
+    month_match = re.search(rf"\b({month_pattern})\s+(20\d{{2}})\b", text, flags=re.IGNORECASE)
+    if month_match:
+        month_name = str(month_match.group(1) or "").strip().lower()
+        year_val = int(month_match.group(2))
+        month_val = 0
+        for idx, value in enumerate(month_names, start=1):
+            if value.lower() == month_name:
+                month_val = idx
+                break
+        if month_val > 0:
+            return datetime(year_val, month_val, 1).date()
+
+    return None
+
+
+def _extract_nationality_counts(raw_text):
+    text = str(raw_text or "").strip()
+    if not text:
+        return Counter()
+    counts = Counter()
+    for match in re.finditer(r"([A-Za-z][A-Za-z\s\-]{1,40})\s*[:\-]?\s*(\d{1,6})", text):
+        label = " ".join(str(match.group(1) or "").split()).strip().title()
+        value = _to_int(match.group(2), default=0)
+        if label and value > 0:
+            counts[label] += value
+    return counts
+
+
+def _resolve_reporting_accommodation_name(message, params, available_names):
+    preferred = str((params or {}).get("accom_name") or "").strip()
+    if preferred:
+        return preferred
+
+    text = str(message or "").strip()
+    if not text:
+        return ""
+    hint_match = re.search(
+        r"\b(?:for|of|from)\s+([A-Za-z0-9][A-Za-z0-9\s\-'&]{2,80})\b",
+        text,
+        flags=re.IGNORECASE,
+    )
+    if hint_match:
+        raw_name = " ".join(str(hint_match.group(1) or "").split()).strip(" .,!?")
+        if raw_name:
+            if re.fullmatch(
+                r"(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|"
+                r"sep(?:tember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\s+20\d{2}",
+                raw_name.strip().lower(),
+            ):
+                raw_name = ""
+        if raw_name:
+            close = get_close_matches(raw_name, available_names, n=1, cutoff=0.72)
+            return close[0] if close else raw_name
+    close = get_close_matches(text, available_names, n=1, cutoff=0.78)
+    return close[0] if close else ""
+
+
+def _build_reporting_summary_payload(message, params):
+    lower_message = _normalize_chat_text(message)
+    requested_latest = _contains_any_phrase(lower_message, ("latest monthly report", "latest report"))
+    requested_this_month = _contains_any_phrase(lower_message, ("this month", "monthly summary this month"))
+
+    base_qs = OwnerMonthlyReport.objects.select_related("accommodation").exclude(status="draft")
+    if not base_qs.exists():
+        return {
+            "reply": "No report data is available yet for this period.",
+            "quick_replies": ["Show latest monthly report", "Show tourist influx this month"],
+        }
+
+    available_names = [str(v or "").strip() for v in base_qs.values_list("accommodation__company_name", flat=True)]
+    available_names = [v for v in available_names if v]
+    report_period = _extract_reporting_period_hint(message)
+    if report_period is None and requested_this_month:
+        today = timezone.localdate()
+        report_period = datetime(today.year, today.month, 1).date()
+    accommodation_name = _resolve_reporting_accommodation_name(message, params, available_names)
+
+    qs = base_qs
+    if accommodation_name:
+        qs = qs.filter(accommodation__company_name__icontains=accommodation_name)
+    if report_period is not None:
+        qs = qs.filter(
+            reporting_period__year=report_period.year,
+            reporting_period__month=report_period.month,
+        )
+    elif requested_latest:
+        latest_period = qs.order_by("-reporting_period").values_list("reporting_period", flat=True).first()
+        if latest_period is not None:
+            report_period = latest_period
+            qs = qs.filter(
+                reporting_period__year=latest_period.year,
+                reporting_period__month=latest_period.month,
+            )
+
+    if not qs.exists():
+        period_text = report_period.strftime("%B %Y") if report_period is not None else "the selected period"
+        if accommodation_name:
+            no_data_text = f"No report data is available yet for {accommodation_name} in {period_text}."
+        else:
+            no_data_text = f"No report data is available yet for {period_text}."
+        return {
+            "reply": no_data_text,
+            "quick_replies": ["Show latest monthly report", "Show tourist influx this month", "Show accommodation reports"],
+        }
+
+    totals = qs.aggregate(
+        total_in=Sum("guests_checked_in"),
+        total_out=Sum("guests_checked_out"),
+        total_rooms=Sum("rooms_used"),
+    )
+    total_in = _to_int(totals.get("total_in"), default=0)
+    total_out = _to_int(totals.get("total_out"), default=0)
+    total_rooms = _to_int(totals.get("total_rooms"), default=0)
+
+    room_usage_rows = (
+        MonthlyReportRoomUsage.objects.filter(monthly_report__in=qs)
+        .values("room_name_snapshot")
+        .annotate(total_check_ins=Sum("check_ins"), total_check_outs=Sum("check_outs"))
+        .order_by("-total_check_ins", "room_name_snapshot")
+    )
+    has_room_level = bool(room_usage_rows)
+
+    nationality_counts = Counter()
+    for item in qs.values_list("nationality_breakdown", flat=True):
+        nationality_counts.update(_extract_nationality_counts(item))
+
+    sample = qs.order_by("-reporting_period", "accommodation__company_name").first()
+    period_text = report_period.strftime("%B %Y") if report_period is not None else sample.reporting_period.strftime("%B %Y")
+    accommodation_text = ""
+    if accommodation_name and sample is not None:
+        accommodation_text = f" for {sample.accommodation.company_name}"
+
+    has_finalized = qs.filter(status="reviewed").exists()
+    if has_finalized:
+        lines = [f"Here's the tourism report summary for {period_text}{accommodation_text}:"]
+    else:
+        lines = [
+            f"No finalized monthly summary document is available yet, but submitted owner reports show for {period_text}{accommodation_text}:"
+        ]
+
+    lines.append(f"- Check-ins: {total_in}")
+    lines.append(f"- Check-outs: {total_out}")
+    if has_room_level:
+        lines.append("- Room usage (by room type):")
+        for row in list(room_usage_rows)[:8]:
+            room_name = str(row.get("room_name_snapshot") or "Unnamed Room").strip()
+            check_ins = _to_int(row.get("total_check_ins"), default=0)
+            check_outs = _to_int(row.get("total_check_outs"), default=0)
+            lines.append(f"  - {room_name}: {check_ins} check-ins, {check_outs} check-outs")
+    else:
+        lines.append(f"- Room usage (total only): {total_rooms} room(s) used")
+        lines.append("Older reports only contain total room usage. New reports provide room-level details.")
+
+    if nationality_counts:
+        labels = [f"{label} ({count})" for label, count in nationality_counts.most_common(6)]
+        lines.append(f"- Visitor nationalities: {', '.join(labels)}")
+    else:
+        lines.append("- Visitor nationalities: not reported yet")
+    lines.append("This is based on submitted owner reports.")
+
+    return {
+        "reply": "\n".join(lines),
+        "quick_replies": [
+            "Show tourist influx this month",
+            "Show monthly report for April 2026",
+            "Show accommodation reports",
+        ],
+    }
 
 def _allow_demo_artifact_fallback():
     override = os.getenv("CHATBOT_ALLOW_DEMO_ARTIFACT_FALLBACK")
@@ -509,7 +1122,19 @@ def _load_saved_vectorizer_vocab(model_path):
         try:
             payload = json.loads(vocab_path.read_text(encoding="utf-8"))
             if isinstance(payload, list) and payload:
-                return [str(token) for token in payload], str(vocab_path)
+                tokens = []
+                for token in payload:
+                    text = str(token or "").strip()
+                    if not text:
+                        continue
+                    # Reserved placeholders are added internally by
+                    # TextVectorization; re-injecting them shifts token ids.
+                    lowered = text.lower()
+                    if lowered in {"[unk]", "unk"}:
+                        continue
+                    tokens.append(text)
+                if tokens:
+                    return tokens, str(vocab_path)
         except Exception:
             continue
     return None, ""
@@ -862,6 +1487,14 @@ def _safe_log_recommendation_event(request, intent):
             session_id=session_key,
             data_source=_resolve_data_source(request=request),
         )
+        if intent in ("get_accommodation_recommendation", "gethotelrecommendation"):
+            RecommendationEvent.objects.create(
+                user=user,
+                event_type="view",
+                item_ref="accommodation_search_started",
+                session_id=session_key,
+                data_source=_resolve_data_source(request=request),
+            )
     except Exception:
         # Event logging is optional and should not affect chatbot behavior.
         pass
@@ -909,6 +1542,13 @@ def _safe_log_recommendation_click(request, payload):
             item_ref=item_ref[:100],
             rating_score=rating_score if 1 <= rating_score <= 5 else None,
             dwell_time_sec=dwell_time if dwell_time >= 0 else None,
+            session_id=session_key,
+            data_source=_resolve_data_source(request=request, payload=payload),
+        )
+        RecommendationEvent.objects.create(
+            user=user,
+            event_type="click",
+            item_ref="accommodation_rooms_viewed",
             session_id=session_key,
             data_source=_resolve_data_source(request=request, payload=payload),
         )
@@ -989,6 +1629,11 @@ def _safe_log_step_events_from_response(request, *, intent, response_payload):
                     event_type=str(funnel.get("event_type") or "view"),
                     item_ref=str(funnel.get("item_ref") or "chat:funnel_recommendation_shown"),
                 )
+                _safe_log_chat_step_event(
+                    request,
+                    event_type="view",
+                    item_ref="accommodation_recommendations_shown",
+                )
         elif intent in ("get_recommendation", "gettourrecommendation"):
             _safe_log_chat_step_event(
                 request,
@@ -1026,6 +1671,11 @@ def _safe_log_step_events_from_response(request, *, intent, response_payload):
             event_type=str(flow_ev.get("event_type") or "save"),
             item_ref=str(flow_ev.get("item_ref") or "chat:funnel_booking_flow_started"),
         )
+        _safe_log_chat_step_event(
+            request,
+            event_type="save",
+            item_ref="accommodation_preview_started",
+        )
 
     if response_payload.get("billing_link"):
         _safe_log_chat_step_event(
@@ -1039,6 +1689,11 @@ def _safe_log_step_events_from_response(request, *, intent, response_payload):
                 request,
                 event_type=str(billing_ev.get("event_type") or "view"),
                 item_ref=str(billing_ev.get("item_ref") or "chat:funnel_billing_link_shown"),
+            )
+            _safe_log_chat_step_event(
+                request,
+                event_type="view",
+                item_ref="accommodation_preview_completed",
             )
     if is_guest and response_payload.get("booking_id"):
         completed_ev = _GUEST_FUNNEL_EVENT_MAP.get("booking_completed") or {}
@@ -1227,6 +1882,10 @@ def _chat_json_response(request, start_time, payload, status=200, error_message=
     response_payload = payload if isinstance(payload, dict) else payload
     try:
         if isinstance(response_payload, dict):
+            if isinstance(response_payload.get("recommendation_trace"), list):
+                response_payload["recommendation_trace"] = _normalize_chat_recommendation_trace(
+                    response_payload.get("recommendation_trace")
+                )
             if response_payload.get("needs_clarification"):
                 existing_qr = response_payload.get("quick_replies")
                 if not (isinstance(existing_qr, list) and existing_qr):
@@ -1239,7 +1898,7 @@ def _chat_json_response(request, start_time, payload, status=200, error_message=
             if not fallback_text:
                 if response_payload.get("billing_link"):
                     response_payload["fulfillmentText"] = (
-                        "I found a page/action for your request. Use the button below to continue."
+                        "You can continue using the link below."
                     )
                 elif isinstance(response_payload.get("recommendation_trace"), list) and response_payload.get("recommendation_trace"):
                     response_payload["fulfillmentText"] = (
@@ -1256,19 +1915,70 @@ def _chat_json_response(request, start_time, payload, status=200, error_message=
 
         context = getattr(request, "_chatbot_log_context", None)
         if isinstance(context, dict) and isinstance(response_payload, dict):
+            response_payload = _inject_contextual_ux_suggestions(
+                response_payload,
+                intent=str(context.get("resolved_intent") or "").strip().lower(),
+                actor_role=(
+                    (context.get("provenance") or {}).get("chat_role")
+                    if isinstance(context.get("provenance"), dict)
+                    else ""
+                ),
+            )
             bot_text = str(response_payload.get("fulfillmentText") or "").strip()
+            resolved_intent = str(context.get("resolved_intent") or "").strip().lower()
+            user_message = str(context.get("user_message") or "").strip().lower()
             context_nlg_source = str(
                 response_payload.get("response_nlg_source")
                 or context.get("response_nlg_source")
                 or ""
             ).strip()
+            # Performance-only guard: deterministic accommodation slot-filling filters
+            # like "suba under 1500" do not need external NLG rewriting.
+            fast_accommodation_filter_turn = bool(
+                resolved_intent in {"get_accommodation_recommendation", "gethotelrecommendation"}
+                and re.search(r"\b(?:suba|poblacion|bayawan|villareal|tinago|ubos)\b", user_message)
+                and (
+                    re.search(r"\b(?:under|below|budget)\s*[0-9][0-9,]*(?:\.[0-9]+)?k?\b", user_message)
+                    or re.search(r"\b(?:cheap|affordable|budget[-\s]?friendly)\b", user_message)
+                )
+            )
+            fast_clarification_turn = bool(
+                resolved_intent == "clarification"
+                and (
+                    bool(response_payload.get("needs_clarification"))
+                    or _contains_any_phrase(
+                        user_message,
+                        (
+                            "i want to go somewhere nice",
+                            "where should i go",
+                            "any recommendation",
+                            "what can i do",
+                        ),
+                    )
+                )
+            )
+            if (
+                bot_text
+                and not context_nlg_source
+                and (
+                    (
+                        bool(response_payload.get("needs_clarification"))
+                        and resolved_intent in {"get_accommodation_recommendation", "gethotelrecommendation"}
+                        and re.search(r"\b(?:under|below|budget)\s*[0-9][0-9,]*(?:\.[0-9]+)?k?\b", user_message)
+                        and re.search(r"\b(?:suba|poblacion|bayawan|villareal|tinago|ubos)\b", user_message)
+                    )
+                    or fast_accommodation_filter_turn
+                    or fast_clarification_turn
+                )
+            ):
+                context_nlg_source = "backend_structured_template"
+                response_payload["response_nlg_source"] = context_nlg_source
+                context["response_nlg_source"] = context_nlg_source
             if (
                 bot_text
                 and not context_nlg_source
                 and status < 400
             ):
-                resolved_intent = str(context.get("resolved_intent") or "").strip()
-                user_message = str(context.get("user_message") or "").strip()
                 finalized_text, finalized_source = generate_final_ai_response(
                     request=request,
                     intent=resolved_intent,
@@ -1283,6 +1993,31 @@ def _chat_json_response(request, start_time, payload, status=200, error_message=
                     response_payload["response_nlg_source"] = context_nlg_source
                     context["response_nlg_source"] = context_nlg_source
             provenance = context.get("provenance") if isinstance(context.get("provenance"), dict) else {}
+            if response_payload.get("needs_clarification"):
+                provenance["used_clarification_response"] = True
+                provenance["clarification_used"] = True
+                missing_slot = str(response_payload.get("missing_slot") or "").strip()
+                if missing_slot:
+                    provenance["clarification_slot"] = missing_slot[:60]
+            fallback_reason = str(response_payload.get("recommendation_fallback") or "").strip()
+            if fallback_reason:
+                provenance["fallback_reason"] = fallback_reason[:120]
+            no_match_reasons = response_payload.get("no_match_reasons")
+            if isinstance(no_match_reasons, list) and no_match_reasons:
+                provenance["no_match_reasons"] = [str(v)[:60] for v in no_match_reasons[:4]]
+                provenance["used_no_match_fallback"] = True
+            if response_payload.get("error_code"):
+                provenance["error_code"] = str(response_payload.get("error_code"))[:80]
+            provenance["fallback_used"] = bool(
+                context.get("fallback_used")
+                or response_payload.get("needs_clarification")
+                or response_payload.get("recommendation_fallback")
+                or (
+                    isinstance(response_payload.get("no_match_reasons"), list)
+                    and bool(response_payload.get("no_match_reasons"))
+                )
+            )
+            context["provenance"] = provenance
             detected_language = str(provenance.get("detected_language") or "").strip().lower()
             already_back_translated = "gemini_back_translate" in context_nlg_source
             if bot_text and detected_language not in ("", "en", "english") and not already_back_translated:
@@ -1339,7 +2074,7 @@ def _chat_json_response(request, start_time, payload, status=200, error_message=
             runtime_models = provenance_payload.get("runtime_models") if isinstance(provenance_payload.get("runtime_models"), dict) else {}
             if "gemini" in nlg_source_payload:
                 runtime_models["llm_provider"] = "gemini"
-                runtime_models["gemini_model"] = str(os.getenv("GEMINI_MODEL", "gemini-1.5-flash") or "").strip() or "gemini-1.5-flash"
+                runtime_models["gemini_model"] = str(os.getenv("GEMINI_MODEL", "gemini-2.5-flash-lite") or "").strip() or "gemini-2.5-flash-lite"
             elif "openai" in nlg_source_payload:
                 runtime_models["llm_provider"] = "openai"
                 runtime_models["openai_model"] = str(os.getenv("OPENAI_MODEL", "gpt-4o-mini") or "").strip() or "gpt-4o-mini"
@@ -1374,10 +2109,15 @@ def _chat_json_response(request, start_time, payload, status=200, error_message=
                 ),
                 fallback_used=bool(
                     context.get("fallback_used")
+                    or payload_for_logs.get("needs_clarification")
                     or payload_for_logs.get("recommendation_fallback")
                     or (
-                        context.get("response_nlg_source")
-                        and context.get("response_nlg_source") != "openai_nlg"
+                        isinstance(payload_for_logs.get("no_match_reasons"), list)
+                        and bool(payload_for_logs.get("no_match_reasons"))
+                    )
+                    or _is_nlg_fallback_source(
+                        payload_for_logs.get("response_nlg_source")
+                        or context.get("response_nlg_source", "")
                     )
                 ),
                 provenance=context.get("provenance", {}),
@@ -1486,6 +2226,15 @@ def _normalize_iso_date(value):
             return datetime.strptime(raw, fmt).date().isoformat()
         except ValueError:
             continue
+
+    # Allow month/day inputs without year (e.g., "May 10") for conversational flow.
+    inferred_year = timezone.localdate().year
+    for fmt in ("%B %d", "%b %d"):
+        try:
+            parsed = datetime.strptime(raw, fmt).date()
+            return parsed.replace(year=inferred_year).isoformat()
+        except ValueError:
+            continue
     return ""
 
 
@@ -1499,6 +2248,20 @@ def _has_stay_details(params):
     return has_dates or nights > 0
 
 
+def _has_sufficient_accommodation_details(params):
+    if not isinstance(params, dict):
+        return False
+    company_type = str(params.get("company_type") or "").strip().lower()
+    has_type = company_type in {"hotel", "inn", "either"}
+    has_location = bool(
+        str(params.get("location") or "").strip()
+        or str(params.get("location_anchor") or "").strip()
+    )
+    budget = _to_int(params.get("budget"), default=0)
+    guests = _to_int(params.get("guests"), default=0)
+    return (has_location or has_type) and (budget > 0 or guests > 0)
+
+
 def _next_accommodation_clarifying_question(params):
     if not isinstance(params, dict):
         params = {}
@@ -1506,8 +2269,6 @@ def _next_accommodation_clarifying_question(params):
     missing_fields = []
 
     company_type = str(params.get("company_type") or "").strip().lower()
-    if company_type not in ("hotel", "inn", "either"):
-        missing_fields.append(("company_type", "Accommodation type (hotel / inn / either)"))
 
     location = str(params.get("location") or "").strip()
     location_anchor = str(params.get("location_anchor") or "").strip()
@@ -1519,11 +2280,6 @@ def _next_accommodation_clarifying_question(params):
     if guests <= 0:
         missing_fields.append(("guests", "Number of guests"))
 
-    if not _has_stay_details(params):
-        missing_fields.append(
-            ("stay_details", "Stay details: check-in/check-out dates (YYYY-MM-DD) or number of nights")
-        )
-
     budget = _to_int(params.get("budget"), default=0)
     if budget <= 0:
         missing_fields.append(("budget", "Budget per night in PHP"))
@@ -1533,26 +2289,20 @@ def _next_accommodation_clarifying_question(params):
         return field, _build_dynamic_accommodation_slot_question(field, params)
 
     if len(missing_fields) > 1:
-        acknowledged_parts = []
-        if company_type in ("hotel", "inn", "either"):
-            if company_type == "either":
-                acknowledged_parts.append("accommodation type: hotel or inn")
-            else:
-                acknowledged_parts.append(f"accommodation type: {company_type}")
-        if location:
-            acknowledged_parts.append(f"location: {location}")
-        if budget > 0:
-            acknowledged_parts.append(f"budget: PHP {budget}")
-        if guests > 0:
-            acknowledged_parts.append(f"guests: {guests}")
-        if _has_stay_details(params):
-            acknowledged_parts.append("stay details received")
-
+        missing_keys = [field for field, _label in missing_fields]
+        if "guests" in missing_keys and "budget" in missing_keys:
+            return (
+                "guests",
+                "Sure. To narrow this down quickly, how many guests and what budget per night in PHP?",
+            )
+        if "location" in missing_keys and "budget" in missing_keys:
+            return (
+                "location",
+                "Got it. Which area in Bayawan do you prefer, and what is your budget per night in PHP?",
+            )
+        # Ask the next most relevant missing slot instead of repeating a full checklist every turn.
         next_field = missing_fields[0][0]
-        next_question = _build_dynamic_accommodation_slot_question(next_field, params)
-        if acknowledged_parts:
-            return (next_field, format_acknowledged_details(acknowledged_parts, next_question))
-        return next_field, next_question
+        return next_field, _build_dynamic_accommodation_slot_question(next_field, params)
 
     return None, ""
 
@@ -1631,14 +2381,23 @@ def _looks_like_slot_update(params):
         return False
     slot_keys = {
         "budget",
+        "total_budget",
+        "spending_style",
         "guests",
+        "group_size",
+        "party_type",
         "adults",
         "children",
         "location",
         "company_type",
         "check_in",
         "check_out",
+        "duration_days",
         "nights",
+        "accommodation_needed",
+        "experience_style",
+        "activity_mix",
+        "preference_text",
         "amenities",
         "amenity",
         "preference_tags",
@@ -1665,6 +2424,428 @@ def _looks_like_tour_request(message):
     ):
         return True
     return False
+
+
+def _is_stay_planning_request(message):
+    text = str(message or "").strip().lower()
+    if not text:
+        return False
+    planning_markers = (
+        "plan my stay",
+        "plan a stay",
+        "plan my trip",
+        "trip plan",
+        "itinerary",
+        "adjust to budget version",
+        "make it family-friendly",
+        "family version",
+        "budget version",
+        "make it cheaper",
+        "what can i do with",
+        "how can i spend",
+        "help me plan",
+        "budget plan",
+        "budget planning",
+        "can you plan it",
+        "plan it",
+        "spend",
+        "suggest a hotel and places",
+        "suggest a hotel and tourist spots",
+    )
+    if any(marker in text for marker in planning_markers):
+        return True
+    # Natural planning phrasing: number appears before budget (e.g., "10k budget").
+    if bool(re.search(r"\b[0-9][0-9,]*(?:\.[0-9]+)?k?\s*budget\b", text, flags=re.IGNORECASE)):
+        if any(token in text for token in ("plan", "trip", "stay", "bayawan", "spend", "days")):
+            return True
+    has_budget = bool(
+        re.search(
+            r"\b([0-9][0-9,]*(?:\.[0-9]+)?k?)\s*(?:php|peso|pesos)\b|\bbudget\b\s*[0-9][0-9,]*(?:\.[0-9]+)?k?\b|\b[0-9][0-9,]*(?:\.[0-9]+)?k?\s*budget\b",
+            text,
+            flags=re.IGNORECASE,
+        )
+    )
+    tourism_scope = any(
+        token in text
+        for token in ("bayawan", "stay", "trip", "tour", "tourist", "attraction", "spot", "places to visit")
+    )
+    return has_budget and tourism_scope
+
+
+def _next_stay_planning_clarifying_question(params):
+    seed = str(params or "")
+    budget_total = _to_int((params or {}).get("total_budget"), default=0)
+    if budget_total <= 0:
+        return (
+            "total_budget",
+            _pick_response_variant(
+                [
+                    "I'd love to help. What's your total budget in PHP for this Bayawan stay?",
+                    "Sure, I can help with that. What’s your total budget in PHP for this trip?",
+                    "Great, let’s plan it properly. What total budget in PHP are you working with?",
+                ],
+                seed_text=f"{seed}|plan-budget",
+            ),
+        )
+
+    duration_days = _to_int((params or {}).get("duration_days"), default=0)
+    if duration_days <= 0:
+        return (
+            "duration_days",
+            _pick_response_variant(
+                [
+                    "How many days are you planning to stay in Bayawan?",
+                    "How long are you planning to stay in Bayawan?",
+                    "How many days should I use for your Bayawan plan?",
+                ],
+                seed_text=f"{seed}|plan-days",
+            ),
+        )
+
+    party_type = str((params or {}).get("party_type") or "").strip().lower()
+    group_size = _to_int((params or {}).get("group_size"), default=0)
+    guests = _to_int((params or {}).get("guests"), default=0)
+    if not party_type and group_size <= 0 and guests <= 0:
+        return (
+            "party_type",
+            _pick_response_variant(
+                [
+                    "Are you traveling solo, as a couple, with family, or as a group?",
+                    "Who are you traveling with: solo, couple, family, or group?",
+                    "Is this for solo travel, a couple trip, a family trip, or a group?",
+                ],
+                seed_text=f"{seed}|plan-party",
+            ),
+        )
+
+    return "", ""
+
+
+def _estimate_tourism_spot_cost(row, spending_style="mid"):
+    raw = " ".join(
+        [
+            str(getattr(row, "spot_name", "") or ""),
+            str(getattr(row, "description", "") or ""),
+            str(getattr(row, "location", "") or ""),
+        ]
+    ).lower()
+    if any(token in raw for token in ("museum", "heritage", "landmark", "church", "plaza")):
+        base = 120
+        duration = "1-2 hours"
+    elif any(token in raw for token in ("falls", "waterfall", "beach", "island", "nature", "park", "trail")):
+        base = 250
+        duration = "2-4 hours"
+    else:
+        base = 180
+        duration = "1-3 hours"
+
+    style = str(spending_style or "mid").strip().lower()
+    if style in {"budget", "low"}:
+        base = int(base * 0.85)
+    elif style in {"premium", "high"}:
+        base = int(base * 1.25)
+    else:
+        base = int(base)
+
+    tags = []
+    if base <= 150:
+        tags.append("budget-friendly")
+    if any(token in raw for token in ("family", "kids", "park", "plaza", "beach")):
+        tags.append("family-friendly")
+    if any(token in raw for token in ("nature", "falls", "beach", "river", "trail")):
+        tags.append("relaxing")
+    if any(token in raw for token in ("trail", "hike", "climb", "adventure")):
+        tags.append("adventure")
+    if not tags:
+        tags.append("general-interest")
+
+    return {
+        "estimated_cost_per_person": max(base, 50),
+        "suggested_duration": duration,
+        "tags": tags[:3],
+    }
+
+
+def _build_budget_stay_plan_payload(params, message):
+    input_params = params if isinstance(params, dict) else {}
+    working = dict(input_params)
+
+    total_budget = _to_int(working.get("total_budget"), default=0)
+    if total_budget <= 0:
+        total_budget = _to_int(working.get("budget"), default=0)
+        if total_budget > 0:
+            working["total_budget"] = total_budget
+
+    duration_days = _to_int(working.get("duration_days"), default=0)
+    if duration_days <= 0:
+        nights = _to_int(working.get("nights"), default=0)
+        if nights > 0:
+            duration_days = max(1, nights)
+            working["duration_days"] = duration_days
+    if duration_days <= 0:
+        duration_days = 2
+        working["duration_days"] = duration_days
+        working["_assumed_duration_days"] = True
+
+    party_type = str(working.get("party_type") or "").strip().lower()
+    guests = _to_int(working.get("guests"), default=0)
+    group_size = _to_int(working.get("group_size"), default=0)
+    if guests > 0 and group_size <= 0:
+        group_size = guests
+    if group_size <= 0:
+        inferred_party_sizes = {"solo": 1, "couple": 2, "family": 4, "group": 5}
+        group_size = inferred_party_sizes.get(party_type, 2)
+        working["_assumed_group_size"] = True
+    working["group_size"] = group_size
+
+    if not party_type:
+        if group_size <= 1:
+            party_type = "solo"
+        elif group_size == 2:
+            party_type = "couple"
+        elif group_size <= 4:
+            party_type = "family"
+        else:
+            party_type = "group"
+    working["party_type"] = party_type
+
+    accommodation_needed = working.get("accommodation_needed")
+    if accommodation_needed is None:
+        accommodation_needed = True
+    accommodation_needed = bool(accommodation_needed)
+    working["accommodation_needed"] = accommodation_needed
+
+    activity_mix = str(working.get("activity_mix") or "").strip().lower() or "mixed"
+    spending_style = str(working.get("spending_style") or "").strip().lower() or "mid"
+    location = str(working.get("location") or "Bayawan City").strip() or "Bayawan City"
+
+    need_slot, question = _next_stay_planning_clarifying_question(working)
+    if need_slot:
+        return {
+            "needs_clarification": True,
+            "missing_slot": need_slot,
+            "question": question,
+            "params": working,
+        }
+
+    total_budget = _to_int(working.get("total_budget"), default=0)
+    if total_budget <= 0:
+        return {
+            "needs_clarification": True,
+            "missing_slot": "total_budget",
+            "question": "Could you share your total budget in PHP so I can draft a realistic stay plan?",
+            "params": working,
+        }
+    minimum_practical_budget = max(1200 * max(duration_days, 1), 2000)
+    if total_budget < minimum_practical_budget:
+        return {
+            "needs_clarification": False,
+            "params": working,
+            "reply": (
+                f"PHP {total_budget:,} may be too low for a full {duration_days}-day stay with tours. "
+                "I can show a very budget-focused option, or you may increase the budget slightly."
+            ),
+            "quick_replies": [
+                "show a very budget-focused option",
+                f"budget {minimum_practical_budget}",
+                "show available tours",
+            ],
+            "plan_signature": f"low-budget-warning|{total_budget}|{duration_days}",
+        }
+
+    accom_share = Decimal("0.45") if accommodation_needed else Decimal("0.00")
+    activity_share = Decimal("0.40") if accommodation_needed else Decimal("0.75")
+    flex_share = Decimal("1.00") - accom_share - activity_share
+
+    if spending_style in {"budget", "low"}:
+        accom_share = Decimal("0.35") if accommodation_needed else Decimal("0.00")
+        activity_share = Decimal("0.45") if accommodation_needed else Decimal("0.78")
+        flex_share = Decimal("1.00") - accom_share - activity_share
+    elif spending_style in {"premium", "high"}:
+        accom_share = Decimal("0.55") if accommodation_needed else Decimal("0.00")
+        activity_share = Decimal("0.32") if accommodation_needed else Decimal("0.68")
+        flex_share = Decimal("1.00") - accom_share - activity_share
+
+    total_budget_dec = Decimal(total_budget)
+    accommodation_budget_total = (total_budget_dec * accom_share).quantize(Decimal("1"))
+    activity_budget_total = (total_budget_dec * activity_share).quantize(Decimal("1"))
+    flex_budget_total = max((total_budget_dec * flex_share).quantize(Decimal("1")), Decimal("0"))
+
+    nightly_budget = Decimal("0")
+    if accommodation_needed and duration_days > 0:
+        nightly_budget = (accommodation_budget_total / Decimal(max(duration_days, 1))).quantize(Decimal("1"))
+
+    accommodation_rows = []
+    if accommodation_needed:
+        room_qs = (
+            _approved_room_queryset()
+            .filter(status="AVAILABLE", current_availability__gte=1)
+            .filter(person_limit__gte=max(group_size, 1))
+            .order_by("price_per_night", "room_id")
+        )
+        if location:
+            room_qs = room_qs.filter(accommodation__location__icontains=location.split(",")[0].strip())
+        if nightly_budget > 0:
+            filtered = room_qs.filter(price_per_night__lte=nightly_budget)
+            room_qs = filtered if filtered.exists() else room_qs.filter(price_per_night__lte=(nightly_budget * Decimal("1.25")))
+
+        for room in list(room_qs[:12]):
+            accom_name = str(getattr(room.accommodation, "company_name", "") or "").strip()
+            room_name = str(getattr(room, "room_name", "") or "").strip()
+            accom_location = str(getattr(room.accommodation, "location", "") or "").strip()
+            if not _is_clean_public_record(accom_name, room_name, accom_location):
+                continue
+            if not accom_name or not room_name:
+                continue
+            link, label = _build_accommodation_official_link(room=room)
+            accommodation_rows.append(
+                {
+                    "name": accom_name,
+                    "type": str(getattr(room.accommodation, "company_type", "") or "").strip(),
+                    "location": accom_location,
+                    "description": str(getattr(room.accommodation, "description", "") or "").strip(),
+                    "room_name": room_name,
+                    "price_per_night": Decimal(str(getattr(room, "price_per_night", "0") or "0")),
+                    "capacity": _to_int(getattr(room, "person_limit", 0), default=0),
+                    "official_link": link,
+                    "official_label": label,
+                }
+            )
+            if len(accommodation_rows) >= 3:
+                break
+
+    tour_rows = []
+    now = timezone.now()
+    schedule_qs = (
+        Tour_Schedule.objects.select_related("tour")
+        .filter(tour__publication_status="published", end_time__gte=now)
+        .exclude(status="cancelled")
+        .order_by("start_time")
+    )
+    for sched in list(schedule_qs[:24]):
+        tour_name = str(getattr(sched.tour, "tour_name", "") or "").strip()
+        sched_id = str(getattr(sched, "sched_id", "") or "").strip()
+        tour_desc = str(getattr(sched.tour, "description", "") or "").strip()
+        if not _is_clean_public_record(tour_name, sched_id, tour_desc):
+            continue
+        if not tour_name or not sched_id:
+            continue
+        admission_sum = (
+            Admission_Rates.objects.filter(tour_id=sched.tour).aggregate(total=Sum("price")).get("total")
+            or Decimal("0")
+        )
+        estimated_per_person = Decimal(str(sched.price or 0)) + Decimal(str(admission_sum or 0))
+        estimated_total = (estimated_per_person * Decimal(max(group_size, 1))).quantize(Decimal("1"))
+        if estimated_total <= activity_budget_total * Decimal("1.15"):
+            tour_rows.append(
+                {
+                    "tour_name": tour_name,
+                    "sched_id": sched_id,
+                    "description": tour_desc,
+                    "duration_days": _to_int(getattr(sched, "duration_days", 1), default=1),
+                    "estimated_per_person": estimated_per_person.quantize(Decimal("1")),
+                    "estimated_total": estimated_total,
+                }
+            )
+        if len(tour_rows) >= 3:
+            break
+
+    lines = [
+        _pick_response_variant(
+            [
+                f"Here's a simple {duration_days}-day Bayawan plan for around PHP {total_budget:,}.",
+                f"Here's a quick plan for your Bayawan stay at around PHP {total_budget:,} for {duration_days} day(s).",
+                f"This is a practical {duration_days}-day Bayawan setup around PHP {total_budget:,}.",
+            ],
+            seed_text=f"{message}|plan-intro-v2",
+        )
+    ]
+
+    assumption_parts = []
+    if bool(working.get("_assumed_duration_days")):
+        assumption_parts.append(f"{duration_days} days")
+    if bool(working.get("_assumed_group_size")):
+        assumption_parts.append(f"{group_size} travelers")
+    if assumption_parts:
+        lines.append(f"Assuming {', '.join(assumption_parts)}.")
+
+    lines.extend(
+        [
+            "",
+            "Budget plan:",
+            f"- Stay: {'~PHP ' + format(int(nightly_budget), ',') + '/night' if accommodation_needed else 'not included'}",
+            f"- Tours: ~PHP {int(activity_budget_total):,} total",
+            f"- Food and transport: ~PHP {int(flex_budget_total):,} buffer",
+        ]
+    )
+
+    lines.append("")
+    lines.append("Accommodations (top matches):")
+    if accommodation_rows:
+        for idx, item in enumerate(accommodation_rows[:3], 1):
+            fit_reason = _planning_fit_reason_for_accommodation(
+                item,
+                nightly_budget=nightly_budget,
+                group_size=group_size,
+                party_type=party_type,
+                user_location=location,
+            )
+            lines.append(f"{idx}. {item['name']} - {item['room_name']}")
+            lines.append(f"   - PHP {int(item['price_per_night']):,}/night | up to {item['capacity']} guests")
+            lines.append(f"   - {item['location'] or 'Bayawan'}")
+            lines.append(f"   - Why it fits: {fit_reason}")
+    else:
+        lines.append("- I don't have exact matches yet, but I can show the closest options.")
+
+    lines.append("")
+    lines.append("Tours (top matches):")
+    if tour_rows:
+        for idx, item in enumerate(tour_rows[:3], 1):
+            fit_reason = _planning_fit_reason_for_tour(
+                item,
+                activity_budget_total=activity_budget_total,
+                duration_days=duration_days,
+            )
+            lines.append(f"{idx}. {item['tour_name']}")
+            lines.append(f"   - PHP {int(item['estimated_per_person']):,}/person | {item['duration_days']} day(s)")
+            lines.append(f"   - Why it fits: {fit_reason}")
+    else:
+        lines.append("- I don't have exact matches yet, but here are the closest options.")
+
+    lines.extend(
+        [
+            "",
+            _pick_response_variant(
+                [
+                    "Want me to adjust this plan or show booking links?",
+                    "I can refine this plan further if you want.",
+                    "Need me to tweak this or pull official booking links?",
+                ],
+                seed_text=f"{message}|plan-next-v2",
+            ),
+        ]
+    )
+
+    quick_replies = [
+        "adjust to budget version",
+        "make it family-friendly",
+        "show available tours",
+        "show accommodation recommendations",
+    ]
+
+    payload = {
+        "needs_clarification": False,
+        "params": working,
+        "reply": "\n".join(lines),
+        "quick_replies": quick_replies,
+        "plan_signature": _build_stay_plan_signature(working, accommodation_rows, tour_rows),
+    }
+    if accommodation_rows and accommodation_rows[0].get("official_link"):
+        payload["billing_link"] = str(accommodation_rows[0].get("official_link"))
+        payload["billing_link_label"] = str(
+            accommodation_rows[0].get("official_label") or "Open Official Link"
+        )
+    return payload
 
 
 def _extract_tour_timeframe_hint(message):
@@ -1811,8 +2992,15 @@ def _build_personalization_defaults(params, baseline):
     defaults = {}
 
     budget = _to_int(params.get("budget"), default=0)
-    if budget <= 0 and _to_int(baseline.get("typical_budget"), default=0) > 0:
-        defaults["budget"] = _to_int(baseline.get("typical_budget"), default=0)
+    prefer_low_price = _to_bool(params.get("prefer_low_price"), default=False)
+    if budget <= 0:
+        if prefer_low_price:
+            defaults["budget"] = 1500
+        else:
+            baseline_budget = _to_int(baseline.get("typical_budget"), default=0)
+            if baseline_budget > 0:
+                # Keep fallback realistic for Bayawan hotel/inn prototype ranges.
+                defaults["budget"] = max(1200, min(baseline_budget, 2500))
 
     company_type = str(params.get("company_type") or "").strip().lower()
     baseline_type = str(baseline.get("common_company_type") or "").strip().lower()
@@ -1847,7 +3035,7 @@ def _build_personalization_offer_text(defaults, baseline):
     if not parts:
         return ""
 
-    basis_text = "I can speed up your booking search with suggested defaults"
+    basis_text = "If you'd like, I can narrow this down with a quick default setup"
     defaults_text = ", ".join(parts)
     return _template_personalization_offer_text(basis_text, defaults_text)
 
@@ -1870,6 +3058,36 @@ def _to_decimal(value, default=Decimal("0")):
         return default
 
 
+def _safe_file_url(file_field):
+    if not file_field:
+        return ""
+    try:
+        return str(file_field.url or "").strip()
+    except Exception:
+        return ""
+
+
+def _parse_compact_number(raw_value):
+    """
+    Parse compact numeric chat inputs (e.g. '8000', '8,000', '8k').
+    Returns int or None when invalid.
+    """
+    value = str(raw_value or "").strip().lower().replace(",", "")
+    if not value:
+        return None
+    multiplier = 1
+    if value.endswith("k"):
+        multiplier = 1000
+        value = value[:-1].strip()
+    try:
+        parsed = Decimal(value)
+    except Exception:
+        return None
+    if parsed < 0:
+        return None
+    return int(parsed * multiplier)
+
+
 def _resolve_guests(params):
     guests = _to_int(params.get("guests"), default=0)
     if guests > 0:
@@ -1881,6 +3099,71 @@ def _resolve_guests(params):
     return total if total > 0 else 0
 
 
+def _looks_like_debug_or_test_record(value):
+    text = str(value or "").strip().lower()
+    if not text:
+        return False
+    return bool(
+        re.search(
+            r"\b(debug|prototype|placeholder|dummy|test(?:\s|$)|dbg\d*)\b",
+            text,
+            flags=re.IGNORECASE,
+        )
+    )
+
+
+def _is_clean_public_record(*values):
+    for value in values:
+        if _looks_like_debug_or_test_record(value):
+            return False
+    return True
+
+
+def _planning_fit_reason_for_accommodation(item, nightly_budget, group_size, party_type, user_location):
+    price = _to_int(item.get("price_per_night"), default=0)
+    capacity = _to_int(item.get("capacity"), default=0)
+    location = str(item.get("location") or "").strip().lower()
+    location_hint = str(user_location or "").strip().lower()
+
+    if nightly_budget > 0 and price > 0 and price <= nightly_budget:
+        return "within budget"
+    if party_type == "family" and capacity >= 4:
+        return "good for families"
+    if group_size > 0 and capacity >= group_size:
+        return "matches your group size"
+    if location_hint and location and location_hint.split(",")[0].strip() in location:
+        return "near your location"
+    return "popular choice"
+
+
+def _planning_fit_reason_for_tour(item, activity_budget_total, duration_days):
+    estimated_total = _to_int(item.get("estimated_total"), default=0)
+    per_person = _to_int(item.get("estimated_per_person"), default=0)
+    tour_days = _to_int(item.get("duration_days"), default=0)
+
+    if activity_budget_total > 0 and estimated_total > 0 and estimated_total <= _to_int(activity_budget_total, default=0):
+        return "within budget"
+    if duration_days > 0 and tour_days > 0 and tour_days <= duration_days:
+        return "short duration and fits your time"
+    if per_person > 0 and per_person <= 1200:
+        return "budget-friendly"
+    return "popular choice"
+
+
+def _build_stay_plan_signature(params, accommodation_rows, tour_rows):
+    parts = [
+        str(_to_int((params or {}).get("total_budget"), default=0)),
+        str(_to_int((params or {}).get("duration_days"), default=0)),
+        str(_to_int((params or {}).get("group_size"), default=0)),
+        str((params or {}).get("party_type") or "").strip().lower(),
+        str((params or {}).get("spending_style") or "").strip().lower(),
+        str((params or {}).get("activity_mix") or "").strip().lower(),
+        ",".join(str((row or {}).get("name") or "").strip().lower() for row in (accommodation_rows or [])[:3]),
+        ",".join(str((row or {}).get("tour_name") or "").strip().lower() for row in (tour_rows or [])[:3]),
+    ]
+    return "|".join(parts)
+
+
 def _compose_accommodation_context_summary(params):
     if not isinstance(params, dict):
         return ""
@@ -1889,18 +3172,15 @@ def _compose_accommodation_context_summary(params):
     if company_type in ("hotel", "inn"):
         parts.append(company_type)
     elif company_type == "either":
-        parts.append("hotel/inn")
+        parts.append("hotel or inn")
 
     location = str(params.get("location") or "").strip()
-    location_anchor = str(params.get("location_anchor") or "").strip()
     if location:
         parts.append(f"near {location}")
-    if location_anchor:
-        parts.append(f"anchored to map place: {location_anchor}")
 
     guests = _to_int(params.get("guests"), default=0)
     if guests > 0:
-        parts.append(f"for {guests} guest(s)")
+        parts.append(f"for {guests} guest{'s' if guests != 1 else ''}")
 
     budget = _to_int(params.get("budget"), default=0)
     if budget > 0:
@@ -1911,6 +3191,9 @@ def _compose_accommodation_context_summary(params):
     preference_tags = params.get("preference_tags") if isinstance(params.get("preference_tags"), list) else []
     if preference_tags:
         parts.append(f"with preferences: {', '.join(str(tag) for tag in preference_tags[:3])}")
+    room_type = str(params.get("room_type") or "").strip()
+    if room_type:
+        parts.append(f"room type: {room_type}")
 
     check_in = str(params.get("check_in") or "").strip()
     check_out = str(params.get("check_out") or "").strip()
@@ -1954,114 +3237,153 @@ def _inject_recommendation_context(response_payload, params=None, default_summar
 
 
 def _resolve_accommodation_result_limit(params):
-    requested = _to_int((params or {}).get("result_limit"), default=3)
+    requested = _to_int((params or {}).get("result_limit"), default=5)
     if requested <= 0:
-        requested = 3
+        requested = 5
     return max(1, min(requested, 10))
 
 
 def _get_recommendations(params):
-    results = recommend_tours(params, limit=3)
+    try:
+        results = recommend_tours(params, limit=3)
+    except Exception:
+        results = []
     timeframe_hint = str((params or {}).get("tour_timeframe_hint") or "").strip()
+    filtered_results = []
+    for item in results:
+        title = str(getattr(item, "title", "") or "").strip()
+        subtitle = str(getattr(item, "subtitle", "") or "").strip()
+        if not title or not subtitle:
+            continue
+        if not _is_clean_public_record(title, subtitle):
+            continue
+        filtered_results.append(item)
+    results = filtered_results[:3]
     if not results:
-        guests = _resolve_guests(params)
-        budget = _to_int(params.get("budget"), default=0)
-        pref_type = str(params.get("tour_type") or params.get("preferred_type") or "").strip()
-        known_bits = []
-        if guests > 0:
-            known_bits.append(f"guests: {guests}")
-        if budget > 0:
-            known_bits.append(f"budget: PHP {budget}")
-        if pref_type:
-            known_bits.append(f"tour type: {pref_type}")
-        known_text = (
-            f"Thank you. I have recorded the following details: {'; '.join(known_bits)}.\n"
-            if known_bits else ""
+        now = timezone.now()
+        public_schedule_qs = (
+            Tour_Schedule.objects.select_related("tour")
+            .filter(tour__publication_status="published", end_time__gte=now)
+            .exclude(status="cancelled")
+            .order_by("start_time")
         )
-        no_match_text = (
-            "I could not find a strong tour match at this time. "
-            "You may try increasing your budget, changing the tour type, or sharing a preferred destination."
-        )
-        if timeframe_hint:
-            no_match_text = (
-                f"For {timeframe_hint}, I could not find a strong currently available tour match at this time. "
-                "You may try a broader timeframe, increasing your budget, changing the tour type, or sharing a preferred destination."
+        fallback_rows = []
+        for sched in list(public_schedule_qs[:8]):
+            tour_obj = getattr(sched, "tour", None)
+            title = str(getattr(tour_obj, "tour_name", "") or "").strip()
+            sched_id = str(getattr(sched, "sched_id", "") or "").strip()
+            if not title or not sched_id:
+                continue
+            if not _is_clean_public_record(title, sched_id, str(getattr(tour_obj, "description", "") or "")):
+                continue
+            price_text = f"PHP {Decimal(str(getattr(sched, 'price', 0) or 0)).quantize(Decimal('1')):,.0f} per guest"
+            duration_days = _to_int(getattr(sched, "duration_days", 1), default=1)
+            subtitle = f"{price_text} | {duration_days} day(s)"
+            fallback_rows.append(
+                SimpleNamespace(
+                    score=0.0,
+                    title=title,
+                    subtitle=subtitle,
+                    meta={"sched_id": sched_id},
+                )
             )
-        return (f"{known_text}{no_match_text}"), []
+            if len(fallback_rows) >= 3:
+                break
+        if fallback_rows:
+            results = fallback_rows
+        else:
+            guests = _resolve_guests(params)
+            budget = _to_int(params.get("budget"), default=0)
+            pref_type = str(params.get("tour_type") or params.get("preferred_type") or "").strip()
+            known_bits = []
+            if guests > 0:
+                known_bits.append(f"guests: {guests}")
+            if budget > 0:
+                known_bits.append(f"budget: PHP {budget}")
+            if pref_type:
+                known_bits.append(f"tour type: {pref_type}")
+            known_text = (
+                f"Thank you. I have recorded the following details: {'; '.join(known_bits)}.\n"
+                if known_bits else ""
+            )
+            no_match_text = (
+                "No tours are available right now."
+            )
+            if timeframe_hint:
+                no_match_text = (
+                    f"For {timeframe_hint}, no tours are currently available."
+                )
+            return (f"{known_text}{no_match_text}"), []
 
-    lines = []
-    if timeframe_hint:
-        lines.append(
-            f"You asked about {timeframe_hint}. Here are currently available tours that may match your timeframe."
-        )
-    lines.append("Top recommendations for you (hybrid score-based ranking):")
-    lines.append("Here are currently available tours you may like:")
+    intro = (
+        f"For {timeframe_hint}, I found these available tour packages you can check."
+        if timeframe_hint
+        else "I found these available tour packages you can check."
+    )
     items_payload = []
-    any_strong_preference_match = False
-    has_requested_preference = False
     for idx, item in enumerate(results, 1):
-        lines.append(f"{idx}. {item.title} | {item.subtitle}")
         meta = item.meta if isinstance(item.meta, dict) else {}
-        requested_tags = {
-            str(tag).strip().lower()
-            for tag in (meta.get("requested_tour_preferences") or [])
-            if str(tag).strip()
-        }
-        detected_tags = {
-            str(tag).strip().lower()
-            for tag in (meta.get("detected_tour_tags") or [])
-            if str(tag).strip()
-        }
-        matched_tags = sorted(requested_tags.intersection(detected_tags))
-        matched_tokens = [
-            str(token).strip().lower()
-            for token in (meta.get("matched_preference_tokens") or [])
-            if str(token).strip()
-        ]
-        requested_tokens = [
-            str(token).strip().lower()
-            for token in (meta.get("requested_preference_tokens") or [])
-            if str(token).strip()
-        ]
-        tag_match_ratio = float(meta.get("tag_match_ratio") or 0.0)
-        token_match_ratio = float(meta.get("token_match_ratio") or 0.0)
-        if requested_tags or requested_tokens:
-            has_requested_preference = True
-        if tag_match_ratio > 0 or token_match_ratio > 0:
-            any_strong_preference_match = True
-        if matched_tags:
-            lines.append(f"   Match: {', '.join(matched_tags)}")
-        elif matched_tokens:
-            lines.append(f"   Match: {', '.join(matched_tokens)}")
-        elif requested_tags or requested_tokens:
-            lines.append("   Match: closest overall fit (no exact preference keyword match)")
+        sched_id = str(meta.get("sched_id") or "").strip()
+        schedule = None
+        if sched_id:
+            schedule = (
+                Tour_Schedule.objects.select_related("tour")
+                .filter(sched_id__iexact=sched_id, tour__publication_status="published")
+                .exclude(status="cancelled")
+                .first()
+            )
+        if schedule is None:
+            schedule = (
+                Tour_Schedule.objects.select_related("tour")
+                .filter(tour__tour_name__icontains=str(item.title or "").strip(), tour__publication_status="published")
+                .exclude(status="cancelled")
+                .order_by("start_time")
+                .first()
+            )
+        if schedule is not None:
+            card = _build_tour_card_trace(SimpleNamespace(build_absolute_uri=lambda x: x), schedule)
+            if card:
+                card["rank"] = idx
+                card["score"] = round(float(item.score), 6)
+                card["meta"] = meta
+                items_payload.append(card)
+                continue
         items_payload.append(
             {
+                "kind": "tour",
                 "rank": idx,
-                "title": item.title,
-                "subtitle": item.subtitle,
+                "title": str(item.title or "").strip(),
+                "subtitle": str(item.subtitle or "").strip(),
+                "description": "You can view schedules first or start a booking request.",
                 "score": round(float(item.score), 6),
                 "meta": meta,
             }
         )
-    if has_requested_preference and not any_strong_preference_match:
-        unavailable_titles = get_unavailable_tour_matches(params, limit=2)
-        if unavailable_titles:
-            lines.append(
-                "Note: Matching tour(s) found but currently without upcoming schedules: "
-                + ", ".join(unavailable_titles)
-                + "."
-            )
-        else:
-            lines.append(
-                "Note: A matching tour title may exist in the system, but only tours with upcoming schedules are shown in this list."
-            )
-    return "\n".join(lines), items_payload
+    return intro, items_payload
 
 
 def _get_accommodation_recommendations(params):
     limit = _resolve_accommodation_result_limit(params)
-    results, diagnostics = recommend_accommodations_with_diagnostics(params, limit=limit)
+    evaluation_limit = max(limit, 8)
+    results, diagnostics = recommend_accommodations_with_diagnostics(params, limit=evaluation_limit)
+    filtered_results = []
+    for item in results:
+        title = str(getattr(item, "title", "") or "").strip()
+        subtitle = str(getattr(item, "subtitle", "") or "").strip()
+        meta = item.meta if isinstance(item.meta, dict) else {}
+        if not title or not subtitle:
+            continue
+        if not _is_clean_public_record(
+            title,
+            subtitle,
+            meta.get("room_id"),
+            meta.get("accom_id"),
+            meta.get("location"),
+            meta.get("description"),
+        ):
+            continue
+        filtered_results.append(item)
+    results = filtered_results
     context_summary = _compose_accommodation_context_summary(params)
     requested_amenities = []
     if isinstance(params, dict):
@@ -2070,6 +3392,116 @@ def _get_accommodation_recommendations(params):
             requested_amenities = [str(v).strip().lower() for v in amenity_raw if str(v).strip()]
         elif str(amenity_raw or "").strip():
             requested_amenities = [str(v).strip().lower() for v in re.split(r"[;,]", str(amenity_raw)) if str(v).strip()]
+    requested_budget = _to_decimal(params.get("budget"), default=Decimal("0"))
+    requested_budget_min = _to_decimal(params.get("budget_min"), default=Decimal("0"))
+    requested_guests = _to_int(params.get("guests"), default=0)
+    requested_company_type = str(params.get("company_type") or "").strip().lower()
+    requested_room_type = str(params.get("room_type") or "").strip().lower()
+    requested_location = str(params.get("location") or "").strip()
+
+    def _item_price(candidate):
+        meta = candidate.meta if isinstance(candidate.meta, dict) else {}
+        return _to_decimal(meta.get("price_per_night"), default=Decimal("0"))
+
+    budget_filtered_count = 0
+    if requested_budget > 0 and results:
+        in_budget = []
+        above_budget = []
+        for item in results:
+            item_price = _item_price(item)
+            if item_price > 0 and item_price <= requested_budget:
+                in_budget.append(item)
+            else:
+                above_budget.append(item)
+        if in_budget:
+            results = in_budget
+            budget_filtered_count = len(in_budget)
+        else:
+            results = above_budget
+            budget_filtered_count = 0
+
+    target_visible = max(3, min(limit, 5))
+
+    def _build_supplemental_results(existing_items, needed):
+        if needed <= 0:
+            return []
+        existing_room_ids = set()
+        for existing in existing_items:
+            meta = existing.meta if isinstance(getattr(existing, "meta", None), dict) else {}
+            room_id = _to_int(meta.get("room_id"), default=0)
+            if room_id > 0:
+                existing_room_ids.add(room_id)
+
+        location_hint = str(params.get("location") or "").strip()
+        company_type = str(params.get("company_type") or "").strip().lower()
+        qs = _approved_room_queryset().filter(status="AVAILABLE", current_availability__gte=1)
+        if location_hint:
+            qs = qs.filter(accommodation__location__icontains=location_hint)
+        if requested_guests > 0:
+            qs = qs.filter(person_limit__gte=requested_guests)
+
+        in_budget_qs = qs
+        if requested_budget > 0:
+            in_budget_qs = qs.filter(price_per_night__lte=requested_budget)
+            if in_budget_qs.exists():
+                qs = in_budget_qs
+
+        supplemental = []
+        for room in qs.order_by("price_per_night", "room_id"):
+            if len(supplemental) >= needed:
+                break
+            if room.room_id in existing_room_ids:
+                continue
+            accom = room.accommodation
+            if not _is_clean_public_record(
+                getattr(accom, "company_name", ""),
+                getattr(room, "room_name", ""),
+                getattr(accom, "location", ""),
+                getattr(accom, "description", ""),
+            ):
+                continue
+            accom_type = str(getattr(accom, "company_type", "") or "").strip().lower()
+            reason_label = "Closest available option"
+            if company_type == "hotel" and "inn" in accom_type:
+                reason_label = "Inn option in your area"
+            elif company_type == "inn" and "hotel" in accom_type:
+                reason_label = "Hotel option in your area"
+
+            subtitle = (
+                f"{str(getattr(accom, 'location', '') or '').strip()} | "
+                f"PHP {str(getattr(room, 'price_per_night', '') or '').strip()}/night | "
+                f"up to {_to_int(getattr(room, 'person_limit', 0), default=0)} guests"
+            )
+            supplemental.append(
+                SimpleNamespace(
+                    score=0.0,
+                    title=f"{str(getattr(accom, 'company_name', '') or '').strip()} - {str(getattr(room, 'room_name', '') or '').strip()}",
+                    subtitle=subtitle,
+                    meta={
+                        "room_id": room.room_id,
+                        "accom_id": room.accommodation_id,
+                        "location": str(getattr(accom, "location", "") or "").strip(),
+                        "price_per_night": str(getattr(room, "price_per_night", "") or "").strip(),
+                        "person_limit": _to_int(getattr(room, "person_limit", 0), default=0),
+                        "description": str(getattr(accom, "description", "") or "").strip(),
+                        "phone_number": str(getattr(accom, "phone_number", "") or "").strip(),
+                        "email_address": str(getattr(accom, "email_address", "") or "").strip(),
+                        "official_booking_url": str(getattr(accom, "official_booking_url", "") or "").strip(),
+                        "official_contact_url": str(getattr(accom, "official_contact_url", "") or "").strip(),
+                        "profile_image_url": _safe_file_url(getattr(accom, "profile_picture", None)),
+                        "supplemental_visibility": True,
+                        "supplemental_reason": reason_label,
+                    },
+                )
+            )
+        return supplemental
+
+    if len(results) < target_visible:
+        supplement = _build_supplemental_results(results, target_visible - len(results))
+        if supplement:
+            results = list(results) + supplement
+
+    results = results[:target_visible]
     if not results:
         no_match_reasons = diagnostics.get("no_match_reasons") or []
         suggested_budget_min = diagnostics.get("suggested_budget_min")
@@ -2080,64 +3512,43 @@ def _get_accommodation_recommendations(params):
         location_anchor = str(params.get("location_anchor") or "").strip()
         location_scope_note = str(params.get("location_scope_note") or "").strip()
 
-        known_text = _format_known_accommodation_details(
-            company_type=company_type,
-            location=location,
-            budget=budget,
-            guests=guests,
-        )
-
         lines = []
-        if context_summary:
-            lines.append(f"I checked available rooms {context_summary}.")
-        if known_text:
-            lines.append(f"Recorded details: {known_text}.")
-        lines.append("I could not find a strong hotel/inn match at this time.")
-        if location_anchor:
-            lines.append(
-                f"I used '{location_anchor}' as your map anchor (city-proper coverage) and checked accommodation records."
-            )
-        if location_scope_note:
-            lines.append(location_scope_note)
-        if requested_amenities:
-            lines.append(
-                "I also applied your amenity request "
-                f"({', '.join(sorted(set(requested_amenities))[:5])}) where searchable details were available."
-            )
-            lines.append(
-                "If exact amenity metadata is incomplete for some listings, results may be based on partial keyword matches."
-            )
+        requested_type = company_type if company_type in ("hotel", "inn") else "hotel/inn"
+        location_label = location.title() if location else "your preferred area"
+        budget_label = f"under PHP {int(budget):,}" if budget > 0 else "within your budget"
+        guest_label = f"for {guests} guest{'s' if guests != 1 else ''}" if guests > 0 else ""
+        lines.append(
+            f"I couldn't find an exact {requested_type} match in {location_label} {budget_label}{(' ' + guest_label) if guest_label else ''}."
+        )
         quick_replies = []
         if "budget_too_low" in no_match_reasons and suggested_budget_min:
             min_budget_value = Decimal(str(suggested_budget_min))
             quick_replies.append(f"budget {int(min_budget_value)}")
-            quick_replies.append("broaden location")
+            quick_replies.append("show nearest available options")
             quick_replies.append("include both hotel and inn")
-            if location and budget > 0:
-                lines.append(
-                    f"No rooms in {location.title()} are available under PHP {budget:.2f}. "
-                    f"Cheapest matching option starts at PHP {min_budget_value:.2f}. "
-                    f"Would you like to use PHP {min_budget_value:.0f} as your budget?"
-                )
-            else:
-                lines.append(
-                    f"Cheapest matching option starts at PHP {min_budget_value:.2f}. "
-                    f"Would you like to use PHP {min_budget_value:.0f} as your budget?"
-                )
+            lines.append("You can try:")
+            lines.append(f"- increase your budget to around PHP {int(min_budget_value):,}")
+            lines.append("- check the nearest available options")
+            lines.append("- include both hotel and inn")
         elif "location_too_narrow" in no_match_reasons:
-            lines.append(
-                "I found options outside your current location filter. "
-                "If you want, send: broaden location"
-            )
+            lines.append("You can try:")
+            lines.append("- broaden to nearby barangays")
+            lines.append("- include both hotel and inn")
             quick_replies.append("broaden location")
             quick_replies.append("include both hotel and inn")
         elif "type_too_narrow" in no_match_reasons:
-            lines.append(
-                "I found options under a different accommodation type. "
-                "If you want, send: include both hotel and inn"
-            )
+            lines.append("You can try:")
+            lines.append("- switch to either hotel or inn")
+            lines.append("- view the nearest available stays")
             quick_replies.append("include both hotel and inn")
-            quick_replies.append("broaden location")
+            quick_replies.append("show nearest available options")
+        else:
+            lines.append("You can try:")
+            lines.append("- increasing your budget slightly")
+            lines.append("- switching hotel/inn type")
+            lines.append("- checking nearby barangays")
+            quick_replies.append("show nearest available options")
+            quick_replies.append("include both hotel and inn")
 
         if not quick_replies:
             quick_replies.append("show default hotel suggestions")
@@ -2148,51 +3559,112 @@ def _get_accommodation_recommendations(params):
             "suggested_budget_min": suggested_budget_min,
             "fallback_applied": diagnostics.get("fallback_applied", "none"),
             "quick_replies": quick_replies,
+            "display_mode": "accommodation_list",
+            "parsed_context": {
+                "location": requested_location,
+                "budget": float(requested_budget or 0),
+                "budget_min": float(requested_budget_min or 0),
+                "guests": requested_guests,
+                "company_type": requested_company_type,
+                "room_type": requested_room_type,
+            },
         }
 
-    lines = ["Top hotel/inn recommendations for you (CNN + Decision Tree):"]
-    location_anchor = str(params.get("location_anchor") or "").strip()
-    location_scope_note = str(params.get("location_scope_note") or "").strip()
-    if location_anchor:
-        lines.insert(
-            0,
-            f"Using map anchor: {location_anchor} (city-proper map coverage).",
+    if _should_use_accommodation_first_view(params):
+        accommodation_reply, accommodation_items = _build_accommodation_first_payload(
+            results,
+            params,
+            limit=target_visible,
         )
-    if location_scope_note:
-        lines.insert(0, location_scope_note)
+        if accommodation_items:
+            return accommodation_reply, accommodation_items, {
+                "fallback_applied": diagnostics.get("fallback_applied", "none"),
+                "view_mode": "accommodation_first",
+                "display_mode": "accommodation_list",
+                "parsed_context": {
+                    "location": requested_location,
+                    "budget": float(requested_budget or 0),
+                    "budget_min": float(requested_budget_min or 0),
+                    "guests": requested_guests,
+                    "company_type": requested_company_type,
+                    "room_type": requested_room_type,
+                },
+            }
+
+    lines = []
     fallback_applied = str(diagnostics.get("fallback_applied") or "none").strip().lower()
-    if fallback_applied in ("relaxed_type", "relaxed_location", "relaxed_location_and_type"):
-        fallback_map = {
-            "relaxed_type": "I broadened accommodation type to include both hotels and inns so you can still see viable options.",
-            "relaxed_location": "I broadened the location filter so you can still see viable options near your target area.",
-            "relaxed_location_and_type": "I broadened both type and location filters to return viable options from current records.",
-        }
-        lines.insert(0, fallback_map.get(fallback_applied, "I broadened filters to return viable options."))
+    has_only_above_budget = requested_budget > 0 and budget_filtered_count == 0
+
+    if has_only_above_budget:
+        requested_type = str(params.get("company_type") or "").strip().lower()
+        requested_type_label = requested_type if requested_type in ("hotel", "inn") else "hotel/inn"
+        preferred_area = str(params.get("location") or "").strip()
+        location_part = f" in {preferred_area.title()}" if preferred_area else ""
+        guest_part = (
+            f" for {requested_guests} guest{'s' if requested_guests != 1 else ''}"
+            if requested_guests > 0
+            else ""
+        )
+        lines.append(
+            f"I couldn't find {requested_type_label} options{location_part}{guest_part} under PHP {int(requested_budget):,} per night."
+        )
+        lines.append("Here are the closest available options above your budget:")
+    else:
+        lines.append(
+            _pick_response_variant(
+                [
+                    "Here are some approved stays you can explore:",
+                    "I found a few approved stays that match your request:",
+                    "These approved stays should work well for your trip:",
+                ],
+                seed_text=f"{params}|accom-intro-v3",
+            )
+        )
     if context_summary:
-        lines.insert(0, f"I found {len(results)} option(s) based on your request {context_summary}.")
+        lines.append(f"Filters applied: {context_summary}.")
+
     items_payload = []
-    amenity_confident_match = False
     for idx, item in enumerate(results, 1):
         item_meta = item.meta if isinstance(item.meta, dict) else {}
         room_id = item_meta.get("room_id")
         room_id_label = f" | Room ID: {room_id}" if room_id not in (None, "") else ""
         trace = item_meta.get("trace") if isinstance(item_meta.get("trace"), dict) else {}
         reasons = trace.get("reasons") if isinstance(trace.get("reasons"), list) else []
-        lowered_reasons = [str(r or "").strip().lower() for r in reasons]
-        if any(
-            ("amenity" in r and "partial" not in r and "no amenity" not in r)
-            or "wifi" in r
-            or "aircon" in r
-            for r in lowered_reasons
-        ):
-            amenity_confident_match = True
         match_score = trace.get("match_score")
         match_strength = str(trace.get("match_strength") or "").strip()
-        lines.append(f"{idx}. {item.title}{room_id_label} | {item.subtitle}")
-        if match_strength:
-            lines.append(f"   Match: {match_strength}")
-        if reasons:
-            lines.append(f"   Key reason: {str(reasons[0])}")
+        price_per_night = _to_decimal(item_meta.get("price_per_night"), default=Decimal("0"))
+        person_limit = _to_int(item_meta.get("person_limit"), default=0)
+        preferred_location = str(params.get("location") or "").strip().lower()
+        item_location = str(item_meta.get("location") or "").strip().lower()
+        is_above_budget = requested_budget > 0 and price_per_night > requested_budget and price_per_night > 0
+
+        concise_reasons = []
+        supplemental_reason = str(item_meta.get("supplemental_reason") or "").strip()
+        if supplemental_reason:
+            concise_reasons.append(supplemental_reason)
+        if requested_budget > 0 and price_per_night > 0 and price_per_night <= requested_budget:
+            concise_reasons.append("Within your budget")
+        elif requested_budget > 0 and is_above_budget:
+            concise_reasons.append("One of the closest available options above your budget")
+        if requested_guests > 0 and person_limit >= requested_guests:
+            concise_reasons.append(f"Good for {requested_guests} guests")
+        if preferred_location and item_location and preferred_location in item_location:
+            concise_reasons.append(f"In {str(item_meta.get('location') or '').strip()}, which matches your preferred area")
+        if not concise_reasons and person_limit > 0:
+            concise_reasons.append("Suitable for a short stay")
+        concise_reasons = concise_reasons[:3]
+
+        title_text = str(item.title or "").strip()
+        subtitle_text = str(item.subtitle or "").strip()
+        lines.append(f"{idx}. {title_text}{room_id_label}")
+        if subtitle_text and _normalize_chat_text(subtitle_text) != _normalize_chat_text(title_text):
+            lines.append(f"   - {subtitle_text}")
+        for concise_reason in concise_reasons:
+            lines.append(f"   - Why it fits: {concise_reason}")
+        if is_above_budget:
+            lines.append(
+                f"   - Budget note: PHP {int(price_per_night):,}/night (above your PHP {int(requested_budget):,} budget)."
+            )
         items_payload.append(
             {
                 "rank": idx,
@@ -2202,6 +3674,22 @@ def _get_accommodation_recommendations(params):
                 "ranking_score": round(float(item.score), 6),
                 "room_id": item_meta.get("room_id"),
                 "accom_id": item_meta.get("accom_id"),
+                "location": str(item_meta.get("location") or ""),
+                "price_per_night": str(item_meta.get("price_per_night") or ""),
+                "person_limit": _to_int(item_meta.get("person_limit"), default=0),
+                "description": str(item_meta.get("description") or ""),
+                "phone_number": str(item_meta.get("phone_number") or ""),
+                "email_address": str(item_meta.get("email_address") or ""),
+                "official_booking_url": str(item_meta.get("official_booking_url") or ""),
+                "official_contact_url": str(item_meta.get("official_contact_url") or ""),
+                "profile_image_url": str(item_meta.get("profile_image_url") or ""),
+                "why_fits": concise_reasons,
+                "above_budget": bool(is_above_budget),
+                "budget_note": (
+                    f"Above budget by PHP {int(max(price_per_night - requested_budget, Decimal('0'))):,}"
+                    if is_above_budget
+                    else ""
+                ),
                 "match_score": match_score,
                 "match_strength": match_strength,
                 "decision_tree_score": trace.get("decision_tree_score"),
@@ -2211,14 +3699,29 @@ def _get_accommodation_recommendations(params):
                 "meta": item_meta,
             }
         )
-    if requested_amenities and not amenity_confident_match:
-        lines.append(
-            "I considered your amenity request, but some listings have limited amenity details, "
-            "so results may be based more strongly on budget, location, and guest fit."
+    lines.append(
+        _pick_response_variant(
+            [
+                "Want me to refine these options or open official pages?",
+                "I can narrow these further if you want.",
+                "Need help comparing these or opening official links?",
+            ],
+            seed_text=f"{params}|accom-next-v3",
         )
-    lines.append("Reply with: compare top 3 or why option <number>.")
+    )
     return "\n".join(lines), items_payload, {
         "fallback_applied": diagnostics.get("fallback_applied", "none"),
+        "fallback_reason": diagnostics.get("fallback_reason", ""),
+        "fallback_reason_codes": diagnostics.get("fallback_reason_codes", []),
+        "display_mode": "room_list",
+        "parsed_context": {
+            "location": requested_location,
+            "budget": float(requested_budget or 0),
+            "budget_min": float(requested_budget_min or 0),
+            "guests": requested_guests,
+            "company_type": requested_company_type,
+            "room_type": requested_room_type,
+        },
     }
 
 
@@ -2236,12 +3739,392 @@ def _safe_get_accommodation_recommendations(params):
         }
 
 
+def _should_use_accommodation_first_view(params):
+    if not isinstance(params, dict):
+        return True
+    if _to_bool(params.get("force_room_cards"), default=False):
+        return False
+    if _to_bool(params.get("explicit_room_listing"), default=False):
+        return False
+    # Default policy for guest accommodation search:
+    # show accommodation-level cards first unless the user explicitly asks for rooms.
+    return True
+
+
+def _build_accommodation_first_payload(results, params, *, limit=3):
+    grouped = {}
+    for item in results:
+        if item is None:
+            continue
+        item_meta = item.meta if isinstance(item.meta, dict) else {}
+        accom_id = _to_int(item_meta.get("accom_id"), default=0)
+        if accom_id <= 0:
+            continue
+        title_text = str(getattr(item, "title", "") or "").strip()
+        accommodation_name = str(title_text.split(" - ")[0] or "").strip() or "Accommodation"
+        location = str(item_meta.get("location") or "").strip()
+        price = _to_decimal(item_meta.get("price_per_night"), default=Decimal("0"))
+        capacity = _to_int(item_meta.get("person_limit"), default=0)
+        grouped.setdefault(
+            accom_id,
+            {
+                "accom_id": accom_id,
+                "accommodation_name": accommodation_name,
+                "location": location,
+                "description": str(item_meta.get("description") or "").strip(),
+                "profile_image_url": str(item_meta.get("profile_image_url") or "").strip(),
+                "official_booking_url": str(item_meta.get("official_booking_url") or "").strip(),
+                "official_contact_url": str(item_meta.get("official_contact_url") or "").strip(),
+                "min_price": price if price > 0 else Decimal("0"),
+                "max_capacity": capacity,
+            },
+        )
+        bucket = grouped[accom_id]
+        if price > 0 and (bucket["min_price"] <= 0 or price < bucket["min_price"]):
+            bucket["min_price"] = price
+        if capacity > bucket["max_capacity"]:
+            bucket["max_capacity"] = capacity
+        if not bucket["location"] and location:
+            bucket["location"] = location
+        if not bucket["description"] and str(item_meta.get("description") or "").strip():
+            bucket["description"] = str(item_meta.get("description") or "").strip()
+        if not bucket["profile_image_url"] and str(item_meta.get("profile_image_url") or "").strip():
+            bucket["profile_image_url"] = str(item_meta.get("profile_image_url") or "").strip()
+
+    rows = list(grouped.values())[: max(1, min(int(limit), 5))]
+    if not rows:
+        return "", []
+
+    lines = ["Here are approved accommodations you can explore:"]
+    if str(params.get("location") or "").strip():
+        lines.append(f"Area: {str(params.get('location') or '').strip().title()}")
+
+    payload = []
+    requested_room_hint = str(params.get("room_type") or "").strip().lower() if isinstance(params, dict) else ""
+    for index, row in enumerate(rows, 1):
+        price_label = (
+            f"From PHP {int(row['min_price']):,}/night" if row["min_price"] > 0 else "Rate to be confirmed"
+        )
+        capacity_label = (
+            f"Up to {row['max_capacity']} guests" if _to_int(row["max_capacity"], default=0) > 0 else "Capacity to be confirmed"
+        )
+        lines.append(f"{index}. {row['accommodation_name']}")
+        lines.append(f"   - {row['location']}")
+        lines.append(f"   - {price_label} | {capacity_label}")
+        payload.append(
+            {
+                "rank": index,
+                "item_type": "accommodation",
+                "kind": "accommodation",
+                "title": row["accommodation_name"],
+                "accommodation_name": row["accommodation_name"],
+                "subtitle": f"{row['location']} | {price_label}",
+                "accom_id": row["accom_id"],
+                "room_id": None,
+                "location": row["location"],
+                "price_per_night": str(row["min_price"]) if row["min_price"] > 0 else "",
+                "person_limit": _to_int(row["max_capacity"], default=0),
+                "description": row["description"],
+                "profile_image_url": row["profile_image_url"],
+                "official_booking_url": row["official_booking_url"],
+                "official_contact_url": row["official_contact_url"],
+                "why_fits": ["Approved accommodation option"],
+            }
+        )
+        if requested_room_hint and index <= len(results):
+            best_item = results[index - 1]
+            best_meta = best_item.meta if isinstance(getattr(best_item, "meta", None), dict) else {}
+            best_room_name = str(best_meta.get("room_name") or "").strip()
+            if best_room_name:
+                payload[-1]["why_fits"] = [
+                    f"Has a {best_room_name} matching your room-type request"
+                ]
+    lines.append("You can open details or select Show Rooms to choose a room.")
+    return "\n".join(lines), payload
+
+
+def _resolve_room_image_url_for_chat(room):
+    if room is None:
+        return ""
+    for field_name in ("image", "room_image", "profile_picture", "photo", "cover_image"):
+        candidate = getattr(room, field_name, None)
+        if not candidate:
+            continue
+        file_url = _safe_file_url(candidate)
+        if file_url:
+            return file_url
+        if isinstance(candidate, str):
+            candidate_url = str(candidate or "").strip()
+            if candidate_url:
+                return candidate_url
+    accom = getattr(room, "accommodation", None)
+    return _safe_file_url(getattr(accom, "profile_picture", None))
+
+
+def _resolve_accommodation_by_name(accommodation_name):
+    raw_name = str(accommodation_name or "").strip()
+    if not raw_name:
+        return None, []
+    qs = _approved_accommodation_queryset()
+    exact = qs.filter(company_name__iexact=raw_name).order_by("company_name").first()
+    if exact is not None:
+        return exact, [str(getattr(exact, "company_name", "") or "").strip()]
+
+    contains_qs = qs.filter(company_name__icontains=raw_name).order_by("company_name")
+    contains_rows = list(contains_qs[:6])
+    if len(contains_rows) == 1:
+        return contains_rows[0], [str(getattr(contains_rows[0], "company_name", "") or "").strip()]
+    if len(contains_rows) > 1:
+        names = [str(getattr(row, "company_name", "") or "").strip() for row in contains_rows if row is not None]
+        return None, [name for name in names if name]
+
+    all_names = [
+        str(value or "").strip()
+        for value in qs.values_list("company_name", flat=True)
+        if str(value or "").strip()
+    ]
+    if not all_names:
+        return None, []
+    close = get_close_matches(raw_name, all_names, n=3, cutoff=0.72)
+    if len(close) == 1:
+        chosen = qs.filter(company_name__iexact=close[0]).order_by("company_name").first()
+        return chosen, [str(close[0])]
+    return None, close
+
+
+def _extract_accommodation_name_for_room_listing(message, cached_rows, state_params=None):
+    text = str(message or "").strip()
+    if not text:
+        if isinstance(state_params, dict):
+            return str(state_params.get("selected_accommodation_name") or state_params.get("accom_name") or "").strip()
+        return ""
+    normalized_text = _normalize_chat_text(text)
+
+    # Prefer exact mention of a known approved accommodation name in the message.
+    known_names = [
+        str(value or "").strip()
+        for value in _approved_accommodation_queryset().values_list("company_name", flat=True)
+        if str(value or "").strip()
+    ]
+    if known_names:
+        matched = []
+        for name in known_names:
+            if _normalize_chat_text(name) and _normalize_chat_text(name) in normalized_text:
+                matched.append(name)
+        if matched:
+            matched.sort(key=len, reverse=True)
+            return matched[0]
+
+    patterns = [
+        r"\brooms?\s+for\s+(.+)$",
+        r"\bin\s+(.+)$",
+    ]
+    for pattern in patterns:
+        match = re.search(pattern, text, flags=re.IGNORECASE)
+        if match:
+            candidate = str(match.group(1) or "").strip(" .,!?:;")
+            if candidate:
+                return candidate
+
+    if isinstance(state_params, dict):
+        selected_name = str(
+            state_params.get("selected_accommodation_name")
+            or state_params.get("accom_name")
+            or ""
+        ).strip()
+        if selected_name:
+            return selected_name
+
+    unique_names = []
+    for row in cached_rows or []:
+        if not isinstance(row, dict):
+            continue
+        name = str(row.get("accommodation_name") or "").strip()
+        if not name:
+            title = str(row.get("title") or "").strip()
+            name = str(title.split(" - ")[0] or "").strip()
+        if name and name not in unique_names:
+            unique_names.append(name)
+    if len(unique_names) == 1:
+        return unique_names[0]
+    return ""
+
+
+def _build_room_listing_response_for_accommodation(accommodation_name, *, limit=5):
+    accom_name = str(accommodation_name or "").strip()
+    if not accom_name:
+        return {
+            "fulfillmentText": "Which accommodation do you want to check rooms for?",
+            "quick_replies": ["show approved accommodations in bayawan"],
+            "needs_clarification": True,
+            "missing_slot": "accommodation_name",
+        }
+    selected_accommodation, accommodation_choices = _resolve_accommodation_by_name(accom_name)
+    if selected_accommodation is None:
+        if len(accommodation_choices) > 1:
+            choice_list = [str(v) for v in accommodation_choices[:3] if str(v).strip()]
+            return {
+                "fulfillmentText": f"Which accommodation do you mean: {', '.join(choice_list)}?",
+                "quick_replies": choice_list,
+                "needs_clarification": True,
+                "missing_slot": "accommodation_name",
+            }
+        return {
+            "fulfillmentText": f"I couldn't find {accom_name} in approved accommodation listings yet.",
+            "quick_replies": ["show approved accommodations in bayawan"],
+            "needs_clarification": True,
+            "missing_slot": "accommodation_name",
+        }
+    rooms = list(
+        _approved_room_queryset()
+        .filter(accommodation=selected_accommodation)
+        .filter(status="AVAILABLE")
+        .order_by("price_per_night", "room_name")[: max(1, min(int(limit), 6))]
+    )
+    if not rooms:
+        return {
+            "fulfillmentText": f"I couldn't find available rooms for {selected_accommodation.company_name} right now.",
+            "quick_replies": ["show approved accommodations in bayawan"],
+        }
+
+    lines = [f"Here are available rooms for {selected_accommodation.company_name}:"]
+    trace = []
+    for index, room in enumerate(rooms, 1):
+        accom = room.accommodation
+        lines.append(
+            f"{index}. {accom.company_name} - {room.room_name}\n"
+            f"   - PHP {room.price_per_night}/night | up to {room.person_limit} guests"
+        )
+        trace.append(
+            {
+                "rank": index,
+                "item_type": "room",
+                "kind": "room",
+                "title": f"{accom.company_name} - {room.room_name}",
+                "accommodation_name": str(accom.company_name or "").strip(),
+                "subtitle": f"{accom.location} | PHP {room.price_per_night}/night | up to {room.person_limit} guests",
+                "room_id": room.room_id,
+                "accom_id": room.accommodation_id,
+                "location": str(accom.location or "").strip(),
+                "price_per_night": str(room.price_per_night),
+                "person_limit": _to_int(room.person_limit, default=0),
+                "description": str(accom.description or "").strip(),
+                "profile_image_url": _resolve_room_image_url_for_chat(room),
+                "official_booking_url": str(getattr(accom, "official_booking_url", "") or "").strip(),
+                "official_contact_url": str(getattr(accom, "official_contact_url", "") or "").strip(),
+                "why_fits": ["Matches your selected accommodation"],
+            }
+        )
+    lines.append("Choose a room or ask me to create a booking preview.")
+    return {
+        "fulfillmentText": "\n".join(lines),
+        "recommendation_trace": trace,
+        "selected_accommodation_id": _to_int(getattr(selected_accommodation, "accom_id", 0), default=0),
+        "selected_accommodation_name": str(getattr(selected_accommodation, "company_name", "") or "").strip(),
+        "quick_replies": ["create booking preview"],
+    }
+
+
+def _is_broad_accommodation_discovery_query(message, params=None):
+    text = _normalize_chat_text(message)
+    params = params if isinstance(params, dict) else {}
+    if not text:
+        return False
+    has_accommodation_scope = bool(
+        re.search(r"\b(hotel|hotels|inn|inns|accommodation|accommodations|stay|stays|place to stay)\b", text)
+    )
+    if not has_accommodation_scope:
+        return False
+    if _is_accommodation_room_listing_command(text):
+        return False
+    if _to_int(params.get("guests"), default=0) > 0:
+        return False
+    if _to_decimal(params.get("budget"), default=Decimal("0")) > 0:
+        return False
+    if str(params.get("room_name") or params.get("room_reference") or "").strip():
+        return False
+    if re.search(r"\b(room|rooms?|under|below|budget|cheap|cheaper|affordable|for\s+\d+\s*(guest|guests|adult|adults|pax))\b", text):
+        return False
+    return True
+
+
+def _build_broad_accommodation_discovery_response(params=None, *, limit=5):
+    params = params if isinstance(params, dict) else {}
+    location = str(params.get("location") or "").strip()
+    company_type = str(params.get("company_type") or "").strip().lower()
+
+    qs = _approved_accommodation_queryset().order_by("company_name")
+    if company_type in {"hotel", "inn"}:
+        qs = qs.filter(company_type__icontains=company_type)
+    if location:
+        qs = qs.filter(location__icontains=location)
+
+    accommodations = list(qs[: max(3, min(int(limit), 8))])
+    if not accommodations:
+        location_part = f" in {location}" if location else ""
+        return {
+            "fulfillmentText": f"I couldn't find approved accommodations{location_part} right now.",
+            "quick_replies": ["show approved accommodations in bayawan"],
+            "needs_clarification": True,
+        }
+
+    lines = ["Here are approved accommodations you can check out:"]
+    trace = []
+    for idx, accom in enumerate(accommodations, 1):
+        room_qs = (
+            _approved_room_queryset()
+            .filter(accommodation=accom, status="AVAILABLE", current_availability__gte=1)
+            .order_by("price_per_night", "room_name")
+        )
+        first_room = room_qs.first()
+        starting_rate = _to_decimal(getattr(first_room, "price_per_night", 0), default=Decimal("0")) if first_room else Decimal("0")
+        max_capacity = _to_int(getattr(first_room, "person_limit", 0), default=0) if first_room else 0
+        subtitle_parts = [str(getattr(accom, "location", "") or "").strip()]
+        if starting_rate > 0:
+            subtitle_parts.append(f"from PHP {starting_rate}/night")
+        if max_capacity > 0:
+            subtitle_parts.append(f"up to {max_capacity} guests")
+        subtitle = " | ".join(part for part in subtitle_parts if part)
+        lines.append(f"{idx}. {accom.company_name}\n   - {subtitle}")
+        why = []
+        if location:
+            why.append("Matches your preferred area")
+        if company_type in {"hotel", "inn"}:
+            why.append(f"{company_type.title()} option")
+        if not why:
+            why.append("Approved accommodation option")
+        trace.append(
+            {
+                "rank": idx,
+                "item_type": "accommodation",
+                "kind": "accommodation",
+                "title": str(getattr(accom, "company_name", "") or "").strip(),
+                "subtitle": subtitle,
+                "accommodation_name": str(getattr(accom, "company_name", "") or "").strip(),
+                "accom_id": _to_int(getattr(accom, "accom_id", 0), default=0),
+                "location": str(getattr(accom, "location", "") or "").strip(),
+                "price_per_night": str(starting_rate) if starting_rate > 0 else "",
+                "person_limit": max_capacity,
+                "description": str(getattr(accom, "description", "") or "").strip(),
+                "profile_image_url": _safe_file_url(getattr(accom, "profile_picture", None)),
+                "official_booking_url": str(getattr(accom, "official_booking_url", "") or "").strip(),
+                "official_contact_url": str(getattr(accom, "official_contact_url", "") or "").strip(),
+                "why_fits": why[:2],
+            }
+        )
+    quick = [f"show rooms for {str(getattr(a, 'company_name', '') or '').strip()}" for a in accommodations[:3]]
+    return {
+        "fulfillmentText": "\n".join(lines),
+        "recommendation_trace": trace,
+        "quick_replies": quick,
+    }
+
+
 def _get_default_accommodation_suggestions(limit=3):
     room_qs = (
-        Room.objects.select_related("accommodation")
+        _approved_room_queryset()
         .filter(status="AVAILABLE")
         .filter(current_availability__gte=1)
-        .filter(accommodation__approval_status="accepted")
         .filter(
             Q(accommodation__company_type__icontains="hotel") |
             Q(accommodation__company_type__icontains="inn")
@@ -2253,10 +4136,9 @@ def _get_default_accommodation_suggestions(limit=3):
     # Fallback to any available accommodation rooms if no hotel/inn tag matches in DB.
     if not rooms:
         rooms = list(
-            Room.objects.select_related("accommodation")
+            _approved_room_queryset()
             .filter(status="AVAILABLE")
             .filter(current_availability__gte=1)
-            .filter(accommodation__approval_status="accepted")
             .order_by("?")[:limit]
         )
 
@@ -2266,39 +4148,71 @@ def _get_default_accommodation_suggestions(limit=3):
             "Please try again later or ask for a specific hotel/room."
         )
 
+    grouped = {}
+    for room in rooms:
+        accom = room.accommodation
+        if not _is_clean_public_record(
+            getattr(accom, "company_name", ""),
+            getattr(room, "room_name", ""),
+            getattr(accom, "location", ""),
+            getattr(accom, "description", ""),
+        ):
+            continue
+        accom_id = _to_int(room.accommodation_id, default=0)
+        if accom_id <= 0:
+            continue
+        current_price = _to_decimal(getattr(room, "price_per_night", 0), default=Decimal("0"))
+        grouped.setdefault(
+            accom_id,
+            {
+                "accom": accom,
+                "min_price": current_price if current_price > 0 else Decimal("0"),
+                "max_capacity": _to_int(getattr(room, "person_limit", 0), default=0),
+            },
+        )
+        bucket = grouped[accom_id]
+        if current_price > 0 and (bucket["min_price"] <= 0 or current_price < bucket["min_price"]):
+            bucket["min_price"] = current_price
+        if _to_int(getattr(room, "person_limit", 0), default=0) > bucket["max_capacity"]:
+            bucket["max_capacity"] = _to_int(getattr(room, "person_limit", 0), default=0)
+
+    accommodation_rows = list(grouped.values())[: max(1, min(int(limit), 5))]
+    if not accommodation_rows:
+        return (
+            "I don't have available hotel/inn room records to suggest yet. "
+            "Please try again later or ask for a specific hotel/room."
+        )
+
     lines = ["Accommodation recommendations (suggested stays):"]
     suggestion_items = []
-    for idx, room in enumerate(rooms, 1):
-        accom = room.accommodation
-        subtitle = (
-            f"{accom.location} | PHP {room.price_per_night} per night "
-            f"| up to {room.person_limit} guests"
+    for idx, row in enumerate(accommodation_rows, 1):
+        accom = row["accom"]
+        price_text = (
+            f"From PHP {int(row['min_price']):,}/night" if row["min_price"] > 0 else "Rate to be confirmed"
         )
-        lines.append(f"{idx}. {accom.company_name} - {room.room_name} | {subtitle}")
+        lines.append(f"{idx}. {accom.company_name} | {accom.location} | {price_text}")
         suggestion_items.append(
             {
                 "rank": idx,
-                "title": f"{accom.company_name} - {room.room_name}",
-                "subtitle": subtitle,
-                "room_id": room.room_id,
-                "accom_id": room.accommodation_id,
+                "item_type": "accommodation",
+                "kind": "accommodation",
+                "title": str(accom.company_name or "").strip(),
+                "accommodation_name": str(accom.company_name or "").strip(),
+                "subtitle": f"{accom.location} | {price_text}",
+                "room_id": None,
+                "accom_id": accom.accom_id,
+                "official_booking_url": str(getattr(accom, "official_booking_url", "") or "").strip(),
+                "official_contact_url": str(getattr(accom, "official_contact_url", "") or "").strip(),
+                "profile_image_url": _safe_file_url(getattr(accom, "profile_picture", None)),
+                "description": str(getattr(accom, "description", "") or "").strip(),
                 "match_strength": "Suggested",
-                "price_per_night": str(room.price_per_night),
-                "person_limit": room.person_limit,
-                "location": accom.location,
-                "reasons": [
-                    f"Capacity: up to {room.person_limit} guests",
-                    f"Current availability: {room.current_availability}",
-                    "Balanced option for common short-stay needs",
-                ],
+                "price_per_night": str(row["min_price"]) if row["min_price"] > 0 else "",
+                "person_limit": row["max_capacity"],
+                "location": str(accom.location or "").strip(),
+                "why_fits": ["Approved accommodation option"],
             }
         )
-    lines.append(
-        "To book, send: book room <room_id> for <guests> guests from <YYYY-MM-DD> to <YYYY-MM-DD>."
-    )
-    lines.append(
-        "Example: book room 12 for 2 guests from 2026-03-10 to 2026-03-12."
-    )
+    lines.append("Select one to view rooms.")
     return "\n".join(lines), suggestion_items
 
 
@@ -2344,73 +4258,6 @@ def _calculate_billing(params):
     )
 
 
-def _calculate_accommodation_billing(params):
-    raw_room_id = params.get("room_id")
-    room_id = _to_int(raw_room_id, default=0)
-    if room_id <= 0:
-        room_id = None
-    check_in = _normalize_iso_date(params.get("check_in"))
-    check_out = _normalize_iso_date(params.get("check_out"))
-    nights = _to_int(params.get("nights"), default=0)
-
-    room = None
-    if room_id:
-        room = (
-            Room.objects.select_related("accommodation")
-            .filter(room_id=room_id, status="AVAILABLE", accommodation__approval_status="accepted")
-            .first()
-        )
-    if room is None and params.get("accom_name"):
-        room = (
-            Room.objects.select_related("accommodation")
-            .filter(
-                status="AVAILABLE",
-                accommodation__approval_status="accepted",
-                accommodation__company_name__icontains=params.get("accom_name"),
-            )
-            .first()
-        )
-
-    if room is None:
-        return "I couldn't find that room. Please provide a valid room ID or accommodation name."
-
-    guests = _resolve_guests(params)
-    if guests <= 0:
-        return (
-            f"Before I calculate billing for {room.accommodation.company_name} - {room.room_name}, "
-            "please provide the number of guests (example: 2 guests)."
-        )
-
-    if check_in and check_out:
-        try:
-            from datetime import datetime
-            check_in_dt = datetime.strptime(check_in, "%Y-%m-%d").date()
-            check_out_dt = datetime.strptime(check_out, "%Y-%m-%d").date()
-            total = calculate_accommodation_billing(room, check_in_dt, check_out_dt)
-            nights = max((check_out_dt - check_in_dt).days, 1)
-        except Exception:
-            return "Please provide dates in YYYY-MM-DD format for check-in and check-out."
-    else:
-        nights = max(nights, 1)
-        total = Decimal(room.price_per_night) * Decimal(nights)
-
-    lgu_payment_note = (
-        "Payment is securely processed through the LGU Tourism Office system."
-        if str(getattr(settings, "TOURISM_OFFICE_BILLING_URL", "") or os.getenv("TOURISM_OFFICE_BILLING_URL", "")).strip()
-        else "Payment processing is handled by the LGU Tourism Office system."
-    )
-
-    return (
-        f"Billing Summary for {room.accommodation.company_name} - {room.room_name}:\n"
-        f"Guests: {guests}\n"
-        f"Nights: {nights}\n"
-        f"Rate: PHP {room.price_per_night} per night\n"
-        f"Total amount due: PHP {total:.2f}\n"
-        f"Payment Note: {lgu_payment_note}\n"
-        "Next Step: Complete booking first to proceed to payment."
-    )
-
-
 def _build_find_another_accommodation_prompt(params):
     if not isinstance(params, dict):
         return "find another hotel"
@@ -2438,44 +4285,26 @@ def _build_find_another_accommodation_prompt(params):
     return prompt if prompt else "find another hotel"
 
 
-def _build_book_from_billing_prompt(room, params):
-    room_id = getattr(room, "room_id", "")
-    guests = _resolve_guests(params)
-    check_in = _normalize_iso_date(params.get("check_in"))
-    check_out = _normalize_iso_date(params.get("check_out"))
-
-    if check_in and check_out:
-        if guests > 0:
-            return f"book room {room_id} for {guests} guests from {check_in} to {check_out}"
-        return f"book room {room_id} from {check_in} to {check_out}"
-    if guests > 0:
-        return f"book room {room_id} for {guests} guests"
-    return f"book room {room_id}"
-
-
-def _build_booking_receipt_text(*, booking_id, hotel_name, room_name, room_id, check_in, check_out, nights, guests, rate, total):
-    return (
-        "IBAYAW TOUR - ACCOMMODATION BOOKING RECEIPT\n"
-        "-------------------------------------------\n"
-        f"Booking ID: #{booking_id}\n"
-        f"Hotel/Inn: {hotel_name}\n"
-        f"Room: {room_name} (Room {room_id})\n"
-        f"Check-in: {check_in}\n"
-        f"Check-out: {check_out}\n"
-        f"Nights: {nights}\n"
-        f"Guests: {guests}\n"
-        f"Rate per night: PHP {rate:.2f}\n"
-        f"Estimated Total: PHP {total:.2f}\n"
-        "Booking Status: Pending\n"
-        "Payment Status: Unpaid\n"
-        "\n"
-        "Payment and verification are processed through the LGU Tourism Office system."
-    )
-
-
 def _sanitize_quick_replies(items, *, limit=4):
     if not isinstance(items, list):
         return []
+    blocked_values = {
+        "show available hotels and inns",
+        "show default hotel suggestions",
+        "show more hotels/inns",
+        "why option 1",
+        "how do i contact this property",
+        "compare top 3",
+        "adjust to budget version",
+        "family-friendly",
+        "show tours",
+        "view accommodation links",
+        "official booking links",
+        "nearby dining too",
+        "modify booking preview",
+        "call accommodation",
+        "email accommodation",
+    }
     normalized = []
     for item in items:
         if isinstance(item, dict):
@@ -2483,32 +4312,109 @@ def _sanitize_quick_replies(items, *, limit=4):
             if not value:
                 continue
             label = str(item.get("label") or value).strip() or value
+            if value.lower() in blocked_values or label.lower() in {
+                "call accommodation",
+                "email accommodation",
+            }:
+                continue
             normalized.append({"label": label[:80], "value": value[:300]})
             continue
 
         value = str(item or "").strip()
-        if value:
+        if value and value.lower() not in blocked_values:
             normalized.append(value[:300])
     return normalized[:limit]
 
 
+def _normalize_chat_recommendation_trace(items):
+    if not isinstance(items, list):
+        return []
+    normalized_items = []
+    for raw in items[:10]:
+        if not isinstance(raw, dict):
+            continue
+        item = dict(raw)
+        kind = str(item.get("kind") or item.get("item_type") or "").strip().lower()
+        title = str(item.get("title") or "").strip()
+        accom_name = str(item.get("accommodation_name") or "").strip()
+        if not accom_name and title and " - " in title:
+            accom_name = str(title.split(" - ")[0] or "").strip()
+        if not accom_name and title:
+            accom_name = title
+        if kind not in {"accommodation", "room", "tour", "tour_schedule"}:
+            kind = "room" if _to_int(item.get("room_id"), default=0) > 0 else "accommodation"
+
+        accom_id = _to_int(item.get("accom_id") or item.get("accommodation_id"), default=0)
+        detail_url = str(item.get("detail_url") or "").strip()
+        if not detail_url and kind in {"accommodation", "room"} and accom_id > 0:
+            try:
+                detail_url = reverse("accommodation_detail_page", kwargs={"accom_id": accom_id})
+            except Exception:
+                detail_url = f"/guest_app/accommodation/{accom_id}/"
+        if not detail_url and kind in {"tour", "tour_schedule"}:
+            tour_id = str(item.get("tour_id") or "").strip()
+            sched_id = str(item.get("sched_id") or "").strip()
+            if tour_id:
+                try:
+                    detail_url = reverse("guest_book", kwargs={"tour_id": tour_id})
+                except Exception:
+                    detail_url = f"/guest_book/{tour_id}/"
+                if sched_id:
+                    detail_url = f"{detail_url}?sched_id={sched_id}"
+
+        official_booking = str(item.get("official_booking_url") or item.get("official_url") or "").strip()
+        official_contact = str(item.get("official_contact_url") or item.get("facebook_url") or "").strip()
+        official_url = ""
+        facebook_url = ""
+        for candidate in (official_booking, official_contact):
+            if not candidate:
+                continue
+            if "facebook.com" in candidate.lower():
+                if not facebook_url:
+                    facebook_url = candidate
+            elif not official_url:
+                official_url = candidate
+
+        item["kind"] = kind
+        if kind in {"accommodation", "room"}:
+            item["accommodation_name"] = accom_name
+        if detail_url:
+            item["detail_url"] = detail_url
+        if official_url and kind in {"accommodation", "room"}:
+            item["official_url"] = official_url
+        if facebook_url and kind in {"accommodation", "room"}:
+            item["facebook_url"] = facebook_url
+        description = str(item.get("description") or "").strip()
+        if description:
+            item["description"] = description[:160]
+        normalized_items.append(item)
+    return normalized_items
+
+
 def _find_accommodation_room(params):
     room_id = params.get("room_id")
+    selected_room_id = _to_int(params.get("selected_room_id"), default=0)
+    selected_accommodation_id = _to_int(params.get("selected_accommodation_id"), default=0)
     guests = _resolve_guests(params)
     budget = _to_decimal(params.get("budget"), default=None)
     location = str(params.get("location") or "").strip()
     accom_name = str(params.get("accom_name") or params.get("hotel_name") or "").strip()
 
-    qs = Room.objects.select_related("accommodation").filter(
-        status="AVAILABLE",
-        accommodation__approval_status="accepted",
-    )
+    qs = _approved_room_queryset().filter(status="AVAILABLE")
+
+    if selected_room_id > 0:
+        chosen = qs.filter(room_id=selected_room_id).first()
+        if chosen is not None:
+            return chosen
 
     if room_id not in ("", None):
         try:
             return qs.filter(room_id=int(room_id)).first()
         except (TypeError, ValueError):
             pass
+
+    if selected_accommodation_id > 0:
+        qs = qs.filter(accommodation_id=selected_accommodation_id)
 
     if guests > 0:
         qs = qs.filter(person_limit__gte=guests)
@@ -2522,416 +4428,692 @@ def _find_accommodation_room(params):
     return qs.order_by("price_per_night", "room_id").first()
 
 
-def _build_accommodation_billing_link(request, room, check_in, check_out, num_guests, booking_id=None):
-    external_billing_url = str(
-        getattr(settings, "TOURISM_OFFICE_BILLING_URL", "") or os.getenv("TOURISM_OFFICE_BILLING_URL", "")
+def _extract_preview_accommodation_name(message):
+    text = _normalize_chat_text(message)
+    if not text:
+        return ""
+    patterns = [
+        r"\b(?:create|make|prepare)?\s*(?:a\s+)?(?:booking\s+preview|preview\s+cost|booking\s+draft)\s+for\s+([a-z0-9][a-z0-9\s&\-\']{2,80})\b",
+        r"\bhow much if i stay at\s+([a-z0-9][a-z0-9\s&\-\']{2,80})\b",
+        r"\bestimate my stay at\s+([a-z0-9][a-z0-9\s&\-\']{2,80})\b",
+        r"\bpreview cost for\s+([a-z0-9][a-z0-9\s&\-\']{2,80})\b",
+        r"\bhow to book\s+([a-z0-9][a-z0-9\s&\-\']{2,80})\b",
+    ]
+    for pattern in patterns:
+        match = re.search(pattern, text, flags=re.IGNORECASE)
+        if not match:
+            continue
+        candidate = " ".join(str(match.group(1) or "").split()).strip(" .,!?")
+        if re.fullmatch(r"room\s+[a-z0-9\-]+", candidate, flags=re.IGNORECASE):
+            continue
+        if candidate and candidate not in {"this hotel", "this room", "that one", "first one"}:
+            return candidate
+    return ""
+
+
+def _resolve_preview_room_selection(*, params=None, message="", cached_rows=None):
+    params = params if isinstance(params, dict) else {}
+    cached_rows = cached_rows if isinstance(cached_rows, list) else []
+    normalized_message = _normalize_chat_text(message)
+    selected_room_id = _to_int(params.get("selected_room_id"), default=0)
+    selected_accommodation_name_hint = str(params.get("selected_accommodation_name") or "").strip()
+    guests = _resolve_guests(params)
+    budget = _to_decimal(params.get("budget"), default=Decimal("0"))
+
+    explicit_name = str(
+        params.get("accom_name")
+        or params.get("hotel_name")
+        or ""
     ).strip()
+    if explicit_name and re.fullmatch(r"room\s+[a-z0-9\-]+", explicit_name, flags=re.IGNORECASE):
+        explicit_name = ""
+    if not explicit_name:
+        explicit_name = _extract_preview_accommodation_name(message)
+    if not explicit_name and selected_accommodation_name_hint:
+        explicit_name = selected_accommodation_name_hint
 
-    if external_billing_url:
-        query = {
-            "room_id": getattr(room, "room_id", ""),
-            "hotel": getattr(getattr(room, "accommodation", None), "company_name", ""),
-            "check_in": check_in,
-            "check_out": check_out,
-            "num_guests": num_guests,
-            "from_chatbot": 1,
-        }
-        if booking_id:
-            query["booking_id"] = booking_id
-        separator = "&" if "?" in external_billing_url else "?"
-        return f"{external_billing_url}{separator}{urlencode(query)}"
+    if explicit_name:
+        explicit_room_hint = str(params.get("room_name") or params.get("room_reference") or "").strip()
+        chosen_accommodation, candidate_names = _resolve_accommodation_by_name(explicit_name)
+        if chosen_accommodation is None:
+            def _norm_for_match(value):
+                return " ".join(re.sub(r"[^a-z0-9]+", " ", str(value or "").lower()).split())
 
-    base_path = reverse("accommodation_page")
-    query = {
-        "room_id": getattr(room, "room_id", ""),
-        "check_in": check_in,
-        "check_out": check_out,
-        "num_guests": num_guests,
-        "from_chatbot": 1,
-        "focus": "booking",
-    }
-    if booking_id:
-        query["booking_id"] = booking_id
-    relative_url = f"{base_path}?{urlencode(query)}"
-    relative_url = f"{relative_url}#bookingForm"
-    return request.build_absolute_uri(relative_url) if hasattr(request, "build_absolute_uri") else relative_url
-
-
-def _book_accommodation_from_chat(request, params, *, commit=True):
-    room_id_raw = params.get("room_id")
-    accom_name_raw = str(params.get("accom_name") or "").strip()
-
-    if room_id_raw not in ("", None):
-        try:
-            int(str(room_id_raw).strip())
-        except (TypeError, ValueError):
+            all_names = [
+                str(v or "").strip()
+                for v in _approved_accommodation_queryset().values_list("company_name", flat=True)
+                if str(v or "").strip()
+            ]
+            explicit_lower = explicit_name.lower()
+            explicit_norm = _norm_for_match(explicit_name)
+            for known_name in sorted(all_names, key=len, reverse=True):
+                name_lower = known_name.lower()
+                name_norm = _norm_for_match(known_name)
+                if (
+                    explicit_lower == name_lower
+                    or explicit_lower.startswith(f"{name_lower} ")
+                    or (name_norm and (explicit_norm == name_norm or explicit_norm.startswith(f"{name_norm} ") or f" {name_norm} " in f" {explicit_norm} "))
+                ):
+                    chosen_accommodation = (
+                        _approved_accommodation_queryset()
+                        .filter(company_name__iexact=known_name)
+                        .order_by("company_name")
+                        .first()
+                    )
+                    if chosen_accommodation is not None:
+                        candidate_names = [known_name]
+                        if not explicit_room_hint:
+                            trailing = re.sub(re.escape(known_name), "", explicit_name, count=1, flags=re.IGNORECASE).strip(" -,:;")
+                            if trailing and trailing.lower() not in {"room", "hotel", "inn", "accommodation"}:
+                                explicit_room_hint = trailing
+                    break
+        if chosen_accommodation is None:
+            if len(candidate_names) > 1:
+                return {
+                    "room": None,
+                    "source": "explicit_name",
+                    "ambiguous_names": candidate_names[:3],
+                    "requested_name": explicit_name,
+                }
             return {
-                "reply": (
-                    f"I received room ID '{room_id_raw}', but it should be numeric. "
-                    "Please send a number like: room 12."
-                ),
-                "room_id": None,
-                "accom_id": None,
+                "room": None,
+                "source": "explicit_name",
+                "not_found_name": explicit_name,
             }
-    elif not accom_name_raw:
+
+        chosen_name = str(getattr(chosen_accommodation, "company_name", "") or "").strip()
+        if not explicit_room_hint and chosen_name:
+            normalized_full = _normalize_chat_text(explicit_name)
+            room_name_candidates = [
+                str(v or "").strip()
+                for v in (
+                    _approved_room_queryset()
+                    .filter(accommodation=chosen_accommodation, status="AVAILABLE")
+                    .values_list("room_name", flat=True)
+                )
+                if str(v or "").strip()
+            ]
+            for room_name_candidate in sorted(room_name_candidates, key=len, reverse=True):
+                if _normalize_chat_text(room_name_candidate) and _normalize_chat_text(room_name_candidate) in normalized_full:
+                    explicit_room_hint = room_name_candidate
+                    break
+        # Handle phrases like "create booking preview for Hotel Maefinn Standard Room".
+        if not explicit_room_hint and chosen_name:
+            lowered_explicit = explicit_name.lower()
+            lowered_chosen = chosen_name.lower()
+            if lowered_explicit.startswith(lowered_chosen):
+                trailing = explicit_name[len(chosen_name):].strip(" -,:;")
+                if trailing and trailing.lower() not in {"room", "hotel", "inn", "accommodation"}:
+                    explicit_room_hint = trailing
+        if not explicit_room_hint and chosen_name:
+            raw_message = str(message or "").strip()
+            command_match = re.search(
+                r"\b(?:create|make|prepare)?\s*(?:a\s+)?(?:booking\s+preview|preview\s+cost|booking\s+draft)\s+for\s+(.+)$",
+                raw_message,
+                flags=re.IGNORECASE,
+            )
+            if command_match:
+                tail = str(command_match.group(1) or "").strip(" .,!?:;")
+                if tail:
+                    # Remove the selected accommodation prefix from the command tail,
+                    # supporting common dash variants between names.
+                    name_pattern = re.escape(chosen_name).replace(r"\-", r"[\-–—]").replace("–", r"[\-–—]").replace("—", r"[\-–—]")
+                    reduced = re.sub(rf"^\s*{name_pattern}\s*", "", tail, count=1, flags=re.IGNORECASE).strip(" -,:;")
+                    if not reduced:
+                        norm_tail = _normalize_chat_text(tail)
+                        norm_name = _normalize_chat_text(chosen_name)
+                        if norm_tail.startswith(norm_name):
+                            reduced = norm_tail[len(norm_name):].strip(" -,:;")
+                    if reduced and reduced.lower() not in {"room", "hotel", "inn", "accommodation"}:
+                        explicit_room_hint = reduced
+        if not explicit_room_hint:
+            message_candidate = str(message or "").strip()
+            normalized_candidate = _normalize_chat_text(message_candidate)
+            is_likely_detail_turn = bool(
+                normalized_candidate
+                and not re.search(r"\b(yes|no|confirm|proceed|okay|ok)\b", normalized_candidate)
+                and not re.search(r"\b\d+\s*(guest|guests|adult|adults|pax|night|nights)\b", normalized_candidate)
+                and not re.search(r"\b(jan|january|feb|february|mar|march|apr|april|may|jun|june|jul|july|aug|august|sep|sept|september|oct|october|nov|november|dec|december)\b", normalized_candidate)
+            )
+            if is_likely_detail_turn:
+                cleaned = re.sub(r"^(room|show details for|details of)\s+", "", message_candidate, flags=re.IGNORECASE).strip(" .,!?:;")
+                normalized_cleaned = _normalize_chat_text(cleaned)
+                normalized_chosen = _normalize_chat_text(chosen_name)
+                if cleaned and normalized_cleaned != normalized_chosen and normalized_chosen not in normalized_cleaned:
+                    explicit_room_hint = cleaned
+
+        room_qs = _approved_room_queryset().filter(
+            accommodation=chosen_accommodation,
+            status="AVAILABLE",
+        )
+        if selected_room_id > 0 and not explicit_room_hint:
+            selected_room = (
+                _approved_room_queryset()
+                .select_related("accommodation")
+                .filter(
+                    room_id=selected_room_id,
+                    accommodation=chosen_accommodation,
+                    status="AVAILABLE",
+                )
+                .first()
+            )
+            if selected_room is not None:
+                return {
+                    "room": selected_room,
+                    "source": "selected_room",
+                    "selected_accommodation_id": _to_int(getattr(chosen_accommodation, "accom_id", 0), default=0),
+                    "selected_accommodation_name": chosen_name,
+                }
+        if explicit_room_hint:
+            refined_qs = room_qs.filter(room_name__icontains=explicit_room_hint)
+            if not refined_qs.exists():
+                hint_tokens = [
+                    token for token in re.split(r"[\s,\-_/]+", explicit_room_hint)
+                    if len(token) >= 3 and token.lower() not in {"room", "hotel", "inn", "accommodation"}
+                ]
+                for token in hint_tokens:
+                    refined_qs = refined_qs.filter(room_name__icontains=token) if refined_qs.exists() else room_qs.filter(room_name__icontains=token)
+            if refined_qs.exists():
+                room_qs = refined_qs
+            else:
+                room_choices = [
+                    str(v or "").strip()
+                    for v in (
+                        _approved_room_queryset()
+                        .filter(accommodation=chosen_accommodation, status="AVAILABLE")
+                        .order_by("price_per_night", "room_name")
+                        .values_list("room_name", flat=True)[:5]
+                    )
+                    if str(v or "").strip()
+                ]
+                return {
+                    "room": None,
+                    "source": "explicit_name",
+                    "not_found_room_ref": explicit_room_hint,
+                    "selected_accommodation_id": _to_int(getattr(chosen_accommodation, "accom_id", 0), default=0),
+                    "selected_accommodation_name": chosen_name,
+                    "room_choices": room_choices,
+                }
+
+        if selected_room_id <= 0 and not explicit_room_hint:
+            room_choices = [
+                str(v or "").strip()
+                for v in (
+                    _approved_room_queryset()
+                    .filter(accommodation=chosen_accommodation, status="AVAILABLE")
+                    .order_by("price_per_night", "room_name")
+                    .values_list("room_name", flat=True)[:5]
+                )
+                if str(v or "").strip()
+            ]
+            return {
+                "room": None,
+                "source": "explicit_name",
+                "needs_room_selection": True,
+                "selected_accommodation_id": _to_int(getattr(chosen_accommodation, "accom_id", 0), default=0),
+                "selected_accommodation_name": chosen_name,
+                "room_choices": room_choices,
+            }
+
+        if guests > 0:
+            room_qs = room_qs.filter(person_limit__gte=guests)
+        priced_qs = room_qs
+        if budget > 0:
+            priced_qs = room_qs.filter(price_per_night__lte=budget)
+            if priced_qs.exists():
+                room_qs = priced_qs
+        chosen_room = room_qs.order_by("price_per_night", "room_id").first()
+        if chosen_room is None:
+            chosen_room = (
+                _approved_room_queryset()
+                .filter(accommodation=chosen_accommodation, status="AVAILABLE")
+                .order_by("price_per_night", "room_id")
+                .first()
+            )
         return {
-            "reply": (
-                "I can proceed with booking once you provide a room reference.\n"
-                "Send either a room ID or a clearer room/hotel detail.\n"
-                "Example: book room 12 for 2 guests from 2026-03-10 to 2026-03-12."
-            ),
-            "room_id": None,
-            "accom_id": None,
+            "room": chosen_room,
+            "source": "explicit_name",
+            "selected_accommodation_id": _to_int(getattr(chosen_accommodation, "accom_id", 0), default=0),
+            "selected_accommodation_name": chosen_name,
         }
 
-    room = _find_accommodation_room(params)
-    if room is None:
+    selected_accommodation_id = _to_int(params.get("selected_accommodation_id"), default=0)
+    selected_accommodation_name = selected_accommodation_name_hint
+    selected_accommodation = None
+    if selected_accommodation_id > 0:
+        selected_accommodation = (
+            _approved_accommodation_queryset()
+            .filter(accom_id=selected_accommodation_id)
+            .order_by("company_name")
+            .first()
+        )
+    if selected_accommodation is None and selected_accommodation_name:
+        selected_accommodation, _ = _resolve_accommodation_by_name(selected_accommodation_name)
+
+    if selected_accommodation is not None:
+        room_qs = _approved_room_queryset().filter(
+            accommodation=selected_accommodation,
+            status="AVAILABLE",
+        )
+        explicit_room_hint = str(params.get("room_name") or params.get("room_reference") or "").strip()
+        if not explicit_room_hint:
+            message_candidate = str(message or "").strip()
+            normalized_candidate = _normalize_chat_text(message_candidate)
+            is_likely_detail_turn = bool(
+                normalized_candidate
+                and not re.search(r"\b(yes|no|confirm|proceed|okay|ok)\b", normalized_candidate)
+                and not re.search(r"\b\d+\s*(guest|guests|adult|adults|pax|night|nights)\b", normalized_candidate)
+                and not re.search(r"\b(jan|january|feb|february|mar|march|apr|april|may|jun|june|jul|july|aug|august|sep|sept|september|oct|october|nov|november|dec|december)\b", normalized_candidate)
+            )
+            if is_likely_detail_turn:
+                cleaned = re.sub(r"^(room|show details for|details of)\s+", "", message_candidate, flags=re.IGNORECASE).strip(" .,!?:;")
+                if cleaned:
+                    explicit_room_hint = cleaned
+
+        if explicit_room_hint:
+            refined_qs = room_qs.filter(room_name__icontains=explicit_room_hint)
+            if not refined_qs.exists():
+                hint_tokens = [
+                    token for token in re.split(r"[\s,\-_/]+", explicit_room_hint)
+                    if len(token) >= 3 and token.lower() not in {"room", "hotel", "inn", "accommodation"}
+                ]
+                token_qs = room_qs
+                for token in hint_tokens:
+                    token_qs = token_qs.filter(room_name__icontains=token)
+                if token_qs.exists():
+                    refined_qs = token_qs
+            if refined_qs.exists():
+                chosen_room = refined_qs.order_by("price_per_night", "room_name", "room_id").first()
+                return {
+                    "room": chosen_room,
+                    "source": "selected_accommodation",
+                    "selected_accommodation_id": _to_int(getattr(selected_accommodation, "accom_id", 0), default=0),
+                    "selected_accommodation_name": str(getattr(selected_accommodation, "company_name", "") or "").strip(),
+                }
+            room_choices = [
+                str(v or "").strip()
+                for v in room_qs.order_by("price_per_night", "room_name").values_list("room_name", flat=True)[:5]
+                if str(v or "").strip()
+            ]
+            return {
+                "room": None,
+                "source": "selected_accommodation",
+                "not_found_room_ref": explicit_room_hint,
+                "selected_accommodation_id": _to_int(getattr(selected_accommodation, "accom_id", 0), default=0),
+                "selected_accommodation_name": str(getattr(selected_accommodation, "company_name", "") or "").strip(),
+                "room_choices": room_choices,
+            }
+        if selected_room_id > 0:
+            selected_room = (
+                _approved_room_queryset()
+                .select_related("accommodation")
+                .filter(room_id=selected_room_id, accommodation=selected_accommodation)
+                .first()
+            )
+            if selected_room is not None:
+                return {
+                    "room": selected_room,
+                    "source": "selected_room",
+                    "selected_accommodation_id": _to_int(getattr(selected_accommodation, "accom_id", 0), default=0),
+                    "selected_accommodation_name": str(getattr(selected_accommodation, "company_name", "") or "").strip(),
+                }
+
+    raw_room_ref = str(params.get("room_id") or "").strip()
+    if raw_room_ref and selected_room_id <= 0:
+        # UI/UX rule: keep room IDs internal; ask users to choose by room type/accommodation.
         return {
-            "reply": (
-                "I couldn’t map that booking request to a valid room yet.\n"
-                "Please provide a room ID or clearer hotel details.\n"
-                "Example: book room 12 for 2 guests from 2026-03-10 to 2026-03-12."
-            ),
-            "room_id": None,
-            "accom_id": None,
+            "room": None,
+            "source": "explicit_room_id",
+            "not_found_room_ref": raw_room_ref,
         }
 
+    selection_index = _extract_numeric_option_index(message)
+    if selection_index <= 0:
+        if re.search(r"\bfirst( one| option)?\b", normalized_message):
+            selection_index = 1
+        elif re.search(r"\bsecond( one| option)?\b", normalized_message):
+            selection_index = 2
+        elif re.search(r"\bthird( one| option)?\b", normalized_message):
+            selection_index = 3
+
+    use_last_card_context = bool(
+        re.search(r"\b(this|that)\s+(hotel|room|accommodation)\b", normalized_message)
+        or selection_index > 0
+        or _contains_any_phrase(normalized_message, ("that one", "this one", "i want this room", "i want this hotel"))
+    )
+    if use_last_card_context and cached_rows:
+        resolved_room_id = _resolve_accommodation_room_from_selection(cached_rows, selection_index or 1)
+        if resolved_room_id > 0:
+            chosen_room = (
+                _approved_room_queryset()
+                .select_related("accommodation")
+                .filter(room_id=resolved_room_id)
+                .first()
+            )
+            if chosen_room is not None:
+                return {
+                    "room": chosen_room,
+                    "source": "last_card",
+                    "selected_accommodation_name": str(getattr(chosen_room.accommodation, "company_name", "") or "").strip(),
+                }
+
+    fallback_room = _find_accommodation_room(params)
+    if fallback_room is not None:
+        return {
+            "room": fallback_room,
+            "source": "fallback",
+            "selected_accommodation_name": str(getattr(fallback_room.accommodation, "company_name", "") or "").strip(),
+        }
+    return {"room": None, "source": "none"}
+
+
+def _clear_invalid_preview_context(chat_state):
+    state = dict(chat_state) if isinstance(chat_state, dict) else {}
+    state.pop("pending_booking", None)
+    params = state.get("params") if isinstance(state.get("params"), dict) else {}
+    if isinstance(params, dict):
+        cleaned = dict(params)
+        for key in (
+            "selected_room_id",
+            "selected_room_name",
+            "selected_accommodation_id",
+            "selected_accommodation_name",
+            "room_id",
+            "accom_name",
+            "hotel_name",
+            "nightly_rate",
+            "selection_source",
+        ):
+            cleaned.pop(key, None)
+        state["params"] = cleaned
+    return state
+
+
+def _build_accommodation_link_actions(room=None, row_meta=None, max_actions=3):
+    accom = getattr(room, "accommodation", None) if room is not None else None
+
+    booking_url = str(getattr(accom, "official_booking_url", "") or "").strip()
+    contact_url = str(getattr(accom, "official_contact_url", "") or "").strip()
+    email_value = str(getattr(accom, "email_address", "") or "").strip()
+    phone_value = str(getattr(accom, "phone_number", "") or "").strip()
+
+    if isinstance(row_meta, dict):
+        booking_url = booking_url or str(row_meta.get("official_booking_url") or "").strip()
+        contact_url = contact_url or str(row_meta.get("official_contact_url") or "").strip()
+        email_value = email_value or str(row_meta.get("email_address") or "").strip()
+        phone_value = phone_value or str(row_meta.get("phone_number") or "").strip()
+
+    accom_name = ""
+    if accom is not None:
+        accom_name = str(getattr(accom, "company_name", "") or "").strip()
+    if not accom_name and isinstance(row_meta, dict):
+        title_text = str(row_meta.get("title") or row_meta.get("company_name") or "").strip()
+        if title_text:
+            accom_name = title_text.split(" - ")[0].strip()
+    short_name = accom_name[:40] if accom_name else "Accommodation"
+
+    actions = []
+    seen_urls = set()
+
+    def _push(url, label):
+        cleaned = str(url or "").strip()
+        if not cleaned:
+            return
+        dedupe_key = cleaned.lower()
+        if dedupe_key in seen_urls:
+            return
+        seen_urls.add(dedupe_key)
+        actions.append({"url": cleaned, "label": str(label or "Visit Official Page").strip()})
+
+    if booking_url:
+        if "facebook.com" in booking_url.lower():
+            _push(booking_url, "View Facebook")
+        else:
+            _push(booking_url, "Open Official Page")
+    if contact_url:
+        if "facebook.com" in contact_url.lower():
+            _push(contact_url, "View Facebook")
+        else:
+            _push(contact_url, "Open Official Page")
+
+    return actions[:max_actions]
+
+
+def _build_accommodation_official_link(room=None, row_meta=None):
+    actions = _build_accommodation_link_actions(room=room, row_meta=row_meta, max_actions=1)
+    if actions:
+        first = actions[0] if isinstance(actions[0], dict) else {}
+        return str(first.get("url") or ""), str(first.get("label") or "Visit Official Page")
+    return "", ""
+
+
+def _is_accommodation_preview_command(message):
+    text = _normalize_chat_text(message)
+    if not text:
+        return False
+    if _contains_any_phrase(
+        text,
+        (
+            "create booking preview",
+            "booking preview",
+            "booking draft",
+            "estimated booking summary",
+            "preview cost",
+            "estimate my stay",
+            "calculate my hotel stay",
+            "how much if i stay here",
+            "how much for 2 nights",
+            "how much for may",
+            "i want this room",
+            "can i book this accommodation",
+            "modify booking preview",
+        ),
+    ):
+        return True
+    return bool(
+        re.search(
+            r"\b(book|reserve|proceed with)\b.*\b(hotel|inn|accommodation|room)\b",
+            text,
+            flags=re.IGNORECASE,
+        )
+    )
+
+
+def _is_open_official_page_request(message):
+    text = _normalize_chat_text(message)
+    if not text:
+        return False
+    return _contains_any_phrase(
+        text,
+        (
+            "open official page",
+            "official page",
+            "open booking page",
+            "continue to official",
+            "continue to official booking page",
+            "continue booking outside",
+            "book directly with hotel",
+            "open facebook page",
+            "call accommodation",
+            "email accommodation",
+            "contact accommodation",
+            "call hotel",
+            "email hotel",
+        ),
+    )
+
+
+def _is_preview_confirmation_message(message):
+    text = _normalize_chat_text(message)
+    if not text:
+        return False
+    return text in {"yes", "confirm", "proceed", "okay", "ok", "go ahead"}
+
+
+def _is_accommodation_how_to_book_request(message):
+    text = _normalize_chat_text(message)
+    if not text:
+        return False
+    return bool(
+        re.search(
+            r"\bhow\s+to\s+book\b.*\b(hotel|inn|accommodation|room)\b",
+            text,
+            flags=re.IGNORECASE,
+        )
+    )
+
+
+def _format_preview_date(date_value):
+    raw = str(date_value or "").strip()
+    if not raw:
+        return ""
+    normalized = _normalize_iso_date(raw)
+    if not normalized:
+        return raw
+    try:
+        return datetime.strptime(normalized, "%Y-%m-%d").strftime("%b %d, %Y")
+    except Exception:
+        return normalized
+
+
+def _build_accommodation_preview_response(*, room=None, params=None):
+    params = params if isinstance(params, dict) else {}
+    guests = _to_int(params.get("guests"), default=0)
     check_in = str(params.get("check_in") or "").strip()
     check_out = str(params.get("check_out") or "").strip()
-    num_guests = _resolve_guests(params)
+    nights = _to_int(params.get("nights"), default=0)
+    if check_in and check_out:
+        try:
+            in_date = datetime.strptime(_normalize_iso_date(check_in), "%Y-%m-%d").date()
+            out_date = datetime.strptime(_normalize_iso_date(check_out), "%Y-%m-%d").date()
+            delta_nights = (out_date - in_date).days
+            if delta_nights > 0:
+                nights = delta_nights
+        except Exception:
+            pass
 
-    if num_guests <= 0:
-        known_bits = [f"room: {room.accommodation.company_name} - {room.room_name} (Room {room.room_id})"]
-        if check_in:
-            known_bits.append(f"check-in: {check_in}")
-        if check_out:
-            known_bits.append(f"check-out: {check_out}")
-        return {
-            "reply": (
-                "I can prepare your booking request, but I still need the number of guests.\n\n"
-                "Details received:\n"
-                + "\n".join(f"- {item}" for item in known_bits)
-                + "\n\nNext step:\n"
-                "Please send the guest count (example: 2 guests)."
-            ),
-            "room_id": room.room_id,
-            "accom_id": getattr(room.accommodation, "accom_id", None),
-            "requires_confirmation": False,
-            "missing_slot": "guests",
-            "prepared_params": {
-                "room_id": room.room_id,
-                "check_in": check_in,
-                "check_out": check_out,
-            },
-        }
+    missing_fields = []
+    if guests <= 0:
+        missing_fields.append("guests")
+    if nights <= 0:
+        missing_fields.append("stay_details")
 
-    if not check_in or not check_out:
-        known_bits = [
-            f"room: {room.accommodation.company_name} - {room.room_name} (Room {room.room_id})",
-            f"guests: {num_guests}",
-        ]
-        if check_in and not check_out:
-            ask_line = (
-                f"I already have your check-in date ({check_in}). "
-                "Please provide your check-out date in YYYY-MM-DD format."
-            )
-        elif check_out and not check_in:
-            ask_line = (
-                f"I already have your check-out date ({check_out}). "
-                "Please provide your check-in date in YYYY-MM-DD format."
-            )
+    if room is None:
+        missing_fields.append("room")
+
+    if missing_fields:
+        if "room" in missing_fields:
+            selected_accom_name = str(
+                params.get("selected_accommodation_name")
+                or params.get("accom_name")
+                or params.get("hotel_name")
+                or ""
+            ).strip()
+            selected_accom_id = _to_int(params.get("selected_accommodation_id"), default=0)
+            room_choices = []
+            if selected_accom_id > 0 or selected_accom_name:
+                room_qs = _approved_room_queryset().filter(status="AVAILABLE", current_availability__gte=1)
+                if selected_accom_id > 0:
+                    room_qs = room_qs.filter(accommodation_id=selected_accom_id)
+                elif selected_accom_name:
+                    room_qs = room_qs.filter(accommodation__company_name__icontains=selected_accom_name)
+                room_choices = [
+                    str(v or "").strip()
+                    for v in room_qs.order_by("price_per_night", "room_name").values_list("room_name", flat=True)[:5]
+                    if str(v or "").strip()
+                ]
+            if selected_accom_name:
+                question = f"Which room would you like to preview at {selected_accom_name}?"
+            else:
+                question = "Which room would you like to preview?"
+            replies = room_choices[:4] if room_choices else ["show rooms"]
+        elif "guests" in missing_fields and "stay_details" in missing_fields:
+            question = "I can prepare a booking preview. Please share your check-in/check-out (or nights) and number of guests."
+            replies = []
+        elif "guests" in missing_fields:
+            question = "How many guests should I use for this booking preview?"
+            replies = []
         else:
-            ask_line = (
-                "Please provide both check-in and check-out dates in YYYY-MM-DD format "
-                "(example: 2026-03-10 to 2026-03-12)."
-            )
-        prepared_params = {
-            "room_id": room.room_id,
-            "guests": num_guests,
-        }
-        if check_in:
-            prepared_params["check_in"] = check_in
-        if check_out:
-            prepared_params["check_out"] = check_out
+            question = "Please share your check-in/check-out dates or number of nights for the booking preview."
+            replies = []
         return {
-            "reply": (
-                "I can prepare your booking request. I only need your stay date details.\n\n"
-                "Details received:\n"
-                + "\n".join(f"- {item}" for item in known_bits)
-                + "\n\nNext step:\n"
-                f"{ask_line}"
-            ),
-            "room_id": room.room_id,
-            "accom_id": getattr(room.accommodation, "accom_id", None),
-            "requires_confirmation": False,
-            "missing_slot": "stay_details",
-            "prepared_params": prepared_params,
+            "ready": False,
+            "question": question,
+            "quick_replies": replies,
+            "missing_fields": missing_fields,
         }
 
-    try:
-        check_in_dt = datetime.strptime(check_in, "%Y-%m-%d").date()
-        check_out_dt = datetime.strptime(check_out, "%Y-%m-%d").date()
-    except Exception:
-        return {
-            "reply": (
-                "I couldn’t read the dates you sent.\n"
-                "Please use YYYY-MM-DD format for both check-in and check-out "
-                "(example: 2026-03-10 to 2026-03-12)."
-            ),
-            "room_id": room.room_id,
-            "accom_id": getattr(room.accommodation, "accom_id", None),
-            "requires_confirmation": False,
-            "missing_slot": "stay_details",
-            "prepared_params": {
-                "room_id": room.room_id,
-                "guests": num_guests,
-            },
-        }
-
-    if check_out_dt <= check_in_dt:
-        return {
-            "reply": (
-                f"I received check-in {check_in_dt.isoformat()} and check-out {check_out_dt.isoformat()}.\n"
-                "Check-out must be later than check-in. Please send updated dates."
-            ),
-            "room_id": room.room_id,
-            "accom_id": getattr(room.accommodation, "accom_id", None),
-            "requires_confirmation": False,
-            "missing_slot": "stay_details",
-            "prepared_params": {
-                "room_id": room.room_id,
-                "guests": num_guests,
-            },
-        }
-
-    if room.person_limit and num_guests > room.person_limit:
-        return {
-            "reply": (
-                f"I found a capacity mismatch: you requested {num_guests} guest(s), "
-                f"but this room allows up to {room.person_limit}.\n"
-                "Please reduce guests or choose another room."
-            ),
-            "room_id": room.room_id,
-            "accom_id": getattr(room.accommodation, "accom_id", None),
-        }
-
-    total = calculate_accommodation_billing(room, check_in_dt, check_out_dt)
-    nights = max((check_out_dt - check_in_dt).days, 1)
-
-    booking = None
-    booking_error = None
-    if commit:
-        user = getattr(request, "user", None)
-        if user and getattr(user, "is_authenticated", False):
-            try:
-                booking, booking_error = create_accommodation_booking_with_integrity(
-                    guest=user,
-                    room=room,
-                    check_in=check_in_dt,
-                    check_out=check_out_dt,
-                    num_guests=num_guests,
-                    total_amount=total,
-                    status="pending",
-                    companions=[],
+    rate = _to_decimal(getattr(room, "price_per_night", 0), default=Decimal("0"))
+    capacity = _to_int(getattr(room, "person_limit", 0), default=0)
+    if capacity > 0 and guests > capacity:
+        same_accom_alternatives = [
+            str(v or "").strip()
+            for v in (
+                _approved_room_queryset()
+                .filter(
+                    accommodation_id=_to_int(getattr(room, "accommodation_id", 0), default=0),
+                    status="AVAILABLE",
+                    current_availability__gte=1,
+                    person_limit__gte=guests,
                 )
-            except Exception:
-                booking = None
-                booking_error = "booking_error"
-
-    if booking_error == "room_unavailable":
+                .exclude(room_id=getattr(room, "room_id", 0))
+                .order_by("price_per_night", "room_name")
+                .values_list("room_name", flat=True)[:4]
+            )
+            if str(v or "").strip()
+        ]
         return {
-            "reply": (
-                "This room is no longer available for booking right now "
-                "(status/approval/availability changed).\n"
-                "Please choose another room."
+            "ready": False,
+            "question": (
+                f"This room fits up to {capacity} guest{'s' if capacity != 1 else ''}. "
+                + (
+                    f"Other rooms in {getattr(getattr(room, 'accommodation', None), 'company_name', 'this accommodation')} may fit {guests} guests."
+                    if same_accom_alternatives
+                    else "Please reduce guest count or choose another room."
+                )
             ),
-            "room_id": getattr(room, "room_id", None),
-            "accom_id": getattr(getattr(room, "accommodation", None), "accom_id", None),
-        }
-    if booking_error == "date_overlap":
-        return {
-            "reply": (
-                "That room already has a booking overlap for the dates you selected.\n"
-                "Please choose different dates or another room."
-            ),
-            "room_id": getattr(room, "room_id", None),
-            "accom_id": getattr(getattr(room, "accommodation", None), "accom_id", None),
+            "quick_replies": same_accom_alternatives,
+            "missing_fields": ["guests"],
         }
 
-    billing_link = _build_accommodation_billing_link(
-        request=request,
-        room=room,
-        check_in=check_in_dt.isoformat(),
-        check_out=check_out_dt.isoformat(),
-        num_guests=num_guests,
-        booking_id=getattr(booking, "booking_id", None),
-    )
-
-    if booking and commit:
-        header = "Booking Receipt / Summary (Accommodation)"
-        booking_line = f"Booking ID: #{booking.booking_id}"
-        status_line = f"Booking Status: {booking.status.title()}"
-    elif commit:
-        header = "Booking Summary (Draft - not yet saved)"
-        booking_line = "Booking ID: Not created (please log in if needed)"
-        status_line = "Booking Status: Draft"
+    if rate <= 0:
+        estimated_total = Decimal("0")
     else:
-        header = "Booking Draft (Not yet saved)"
-        booking_line = "Booking ID: Pending confirmation"
-        status_line = "Booking Status: Awaiting confirmation"
+        estimated_total = (rate * Decimal(max(nights, 1))).quantize(Decimal("1"))
 
-    external_billing_configured = bool(
-        str(getattr(settings, "TOURISM_OFFICE_BILLING_URL", "") or os.getenv("TOURISM_OFFICE_BILLING_URL", "")).strip()
+    accommodation_name = str(getattr(getattr(room, "accommodation", None), "company_name", "") or "").strip()
+    room_name = str(getattr(room, "room_name", "") or "").strip()
+    stay_label = (
+        f"{_format_preview_date(check_in)} to {_format_preview_date(check_out)}"
+        if check_in and check_out
+        else f"{max(nights, 1)} night(s)"
     )
+    summary_lines = [
+        "Here is your estimated accommodation booking preview:",
+        "",
+        f"Accommodation: {accommodation_name}",
+        f"Room: {room_name}",
+        f"Guests: {guests}",
+        f"Stay: {stay_label}",
+        f"Nights: {max(nights, 1)}",
+        f"Rate: PHP {int(rate):,}/night" if rate > 0 else "Rate: To be confirmed",
+        f"Estimated Total: PHP {int(estimated_total):,}" if estimated_total > 0 else "Estimated Total: To be confirmed",
+        "",
+        (
+            "This is only a booking preview. Your accommodation is not reserved yet. "
+            "To complete the actual booking, continue through the accommodation's official page or contact channels."
+        ),
+    ]
 
-    reply = (
-        f"{header}\n"
-        f"{booking_line}\n"
-        f"Hotel: {room.accommodation.company_name}\n"
-        f"Room: {room.room_name} (Room {room.room_id})\n"
-        f"Check-in: {check_in_dt.isoformat()}\n"
-        f"Check-out: {check_out_dt.isoformat()}\n"
-        f"Nights: {nights}\n"
-        f"Guests: {num_guests}\n"
-        f"Rate per night: PHP {room.price_per_night:.2f}\n"
-        f"Estimated Total: PHP {total:.2f}\n"
-        f"{status_line}\n"
-        "Payment Status: Unpaid\n" + (
-            (
-                f"Estimated total: PHP {total:.2f} for {nights} nights.\n"
-                "Please confirm this booking to continue to billing."
-            )
-            if not commit
-            else (
-                "Your booking has been successfully created.\n"
-                +
-                (
-                    "Billing / Payment Link: use the button/link provided in the chat."
-                    if external_billing_configured
-                    else "Billing Link: use the button/link provided in the chat to continue in-system billing details."
-                )
-            )
-        )
-    )
-
-    receipt_text = ""
-    receipt_filename = ""
-    if booking and commit:
-        receipt_text = _build_booking_receipt_text(
-            booking_id=booking.booking_id,
-            hotel_name=room.accommodation.company_name,
-            room_name=room.room_name,
-            room_id=room.room_id,
-            check_in=check_in_dt.isoformat(),
-            check_out=check_out_dt.isoformat(),
-            nights=nights,
-            guests=num_guests,
-            rate=Decimal(str(room.price_per_night)),
-            total=Decimal(str(total)),
-        )
-        receipt_filename = f"ibayaw_booking_receipt_{booking.booking_id}.png"
-
+    link_actions = _build_accommodation_link_actions(room=room, max_actions=4)
     return {
-        "reply": reply,
-        "billing_link": billing_link if commit else "",
-        "billing_link_label": (
-            "Proceed to LGU Payment"
-            if booking and commit and external_billing_configured
-            else "Open Billing Details"
-        ),
-        "booking_id": getattr(booking, "booking_id", None),
-        "booking_status": (
-            getattr(booking, "status", "draft" if booking is None else "")
-            if commit
-            else "awaiting_confirmation"
-        ),
-        "room_id": getattr(room, "room_id", None),
-        "accom_id": getattr(getattr(room, "accommodation", None), "accom_id", None),
-        "requires_confirmation": (not commit),
-        "prepared_params": {
-            "room_id": getattr(room, "room_id", None),
-            "check_in": check_in_dt.isoformat(),
-            "check_out": check_out_dt.isoformat(),
-            "guests": num_guests,
-        },
-        "receipt_text": receipt_text,
-        "receipt_filename": receipt_filename,
-        "quick_replies": (
-            (
-                ["view my accommodation bookings"]
-                if booking and commit
-                else ["Yes", "No"]
-            )
-            if (booking and commit) or (not commit)
-            else []
-        ),
+        "ready": True,
+        "text": "\n".join(summary_lines),
+        "quick_replies": [],
+        "link_actions": link_actions,
+        "billing_link": str(link_actions[0].get("url") or "") if link_actions else "",
+        "billing_link_label": str(link_actions[0].get("label") or "Continue to Official Booking Page") if link_actions else "",
     }
-
-
-def _safe_log_chat_booking_linkage(request, message_text, params, booking_result):
-    try:
-        user = getattr(request, "user", None)
-        if not user or not getattr(user, "is_authenticated", False):
-            return
-
-        if not isinstance(booking_result, dict):
-            return
-
-        room_id = booking_result.get("room_id")
-        accom_id = booking_result.get("accom_id")
-        booking_id = booking_result.get("booking_id")
-        booking_status = booking_result.get("booking_status") or (
-            "booked" if booking_id else "draft_or_not_created"
-        )
-        billing_link = booking_result.get("billing_link") or ""
-
-        session_key = ""
-        if hasattr(request, "session"):
-            session_key = request.session.session_key or ""
-
-        item_ref_parts = []
-        if room_id:
-            item_ref_parts.append(f"room:{room_id}")
-        if accom_id:
-            item_ref_parts.append(f"accom:{accom_id}")
-        if booking_id:
-            item_ref_parts.append(f"booking:{booking_id}")
-        item_ref = "|".join(item_ref_parts) or "chat:accommodation_booking_attempt"
-
-        RecommendationEvent.objects.create(
-            user=user,
-            event_type="book",
-            item_ref=item_ref,
-            session_id=session_key,
-            data_source=_resolve_data_source(request=request),
-        )
-
-        _safe_log_recommendation_result_with_metadata(
-            request,
-            "book_accommodation",
-            booking_result.get("reply", ""),
-            params if isinstance(params, dict) else {},
-            message_text=message_text,
-            recommended_items=[
-                {
-                    "type": "booking_outcome",
-                    "room_id": room_id,
-                    "accom_id": accom_id,
-                    "booking_id": booking_id,
-                    "booking_status": booking_status,
-                    "billing_link": billing_link,
-                }
-            ],
-            booking_linkage={
-                "room_id": room_id,
-                "accom_id": accom_id,
-                "booking_id": booking_id,
-                "booking_status": booking_status,
-                "billing_link": billing_link,
-            },
-        )
-    except Exception:
-        pass
 
 
 def _extract_params_with_confidence(message):
@@ -2962,19 +5144,55 @@ def _extract_params_with_confidence(message):
         "poblacion": "poblacion",
         "bayawan": "bayawan",
         "bayawan city": "bayawan city",
+        "bayawan city proper": "poblacion",
+        "city proper": "poblacion",
         "villareal": "villareal",
         "villarreal": "villareal",
         "suba": "suba",
+        "suba barangay": "suba",
+        "barangay suba": "suba",
+        "brgy suba": "suba",
+        "poblacion barangay": "poblacion",
+        "barangay poblacion": "poblacion",
+        "brgy poblacion": "poblacion",
     }
     map_location_anchor = ""
 
-    def _resolve_location_value(raw_location):
+    def _normalize_location_alias_text(raw_location):
         candidate = " ".join(str(raw_location or "").split()).strip().lower()
-        candidate = re.sub(r"^the\s+", "", candidate)
+        candidate = re.sub(r"[^a-z0-9\s]", " ", candidate)
+        candidate = " ".join(candidate.split())
+        candidate = re.sub(r"^the\s+", "", candidate).strip()
+        if candidate.startswith("barangay "):
+            candidate = candidate.replace("barangay ", "", 1).strip()
+        elif candidate.startswith("brgy "):
+            candidate = candidate.replace("brgy ", "", 1).strip()
+        if candidate.endswith(" barangay"):
+            candidate = candidate[: -len(" barangay")].strip()
+        elif candidate.endswith(" brgy"):
+            candidate = candidate[: -len(" brgy")].strip()
+        if candidate in ("city proper", "bayawan city proper"):
+            return "poblacion"
+        return candidate
+
+    def _resolve_location_value(raw_location):
+        candidate = _normalize_location_alias_text(raw_location)
         if not candidate:
             return ""
         if candidate in known_location_map:
             return known_location_map.get(candidate, candidate)
+        # Prefer specific location aliases embedded in longer phrases
+        # (e.g., "suba bayawan", "mabini street in suba").
+        embedded_aliases = [
+            alias
+            for alias in known_location_map.keys()
+            if alias
+            and alias in candidate
+            and alias not in {"bayawan", "bayawan city", "city proper", "terminal", "terminal area"}
+        ]
+        if embedded_aliases:
+            embedded_aliases.sort(key=len, reverse=True)
+            return known_location_map.get(embedded_aliases[0], embedded_aliases[0])
         alias_place_match = _match_map_reference_place(candidate)
         if alias_place_match:
             return _map_place_to_location_hint(alias_place_match.get("name"))
@@ -3061,6 +5279,55 @@ def _extract_params_with_confidence(message):
             return None
         return int(parsed * multiplier)
 
+    def _infer_budget_range_from_keywords(raw_text):
+        """
+        Map qualitative budget words to thesis-safe numeric ranges.
+        Returns dict keys compatible with recommender filters:
+        - cheap/affordable => budget <= 1500
+        - mid/moderate => 1500 <= budget <= 2500
+        - expensive => budget >= 2501
+        """
+        normalized = str(raw_text or "").strip().lower()
+        if not normalized:
+            return {}
+
+        cheap_markers = (
+            "cheap",
+            "affordable",
+            "budget-friendly",
+            "budget friendly",
+            "low budget",
+            "economical",
+            "barato",
+            "mas mura",
+            "mura",
+        )
+        mid_markers = (
+            "mid",
+            "mid range",
+            "mid-range",
+            "moderate",
+            "moderately priced",
+            "sakto lang",
+            "katamtaman",
+        )
+        expensive_markers = (
+            "expensive",
+            "high-end",
+            "high end",
+            "premium",
+            "luxury",
+            "mahal",
+        )
+
+        if any(token in normalized for token in cheap_markers):
+            return {"budget": 1500}
+        if any(token in normalized for token in mid_markers):
+            return {"budget_min": 1500, "budget": 2500}
+        if any(token in normalized for token in expensive_markers):
+            return {"budget_min": 2501}
+        return {}
+
     # Extract schedule ID like Sched00001.
     sched_match = re.search(r"(sched\d+)", text, flags=re.IGNORECASE)
     if sched_match:
@@ -3070,6 +5337,18 @@ def _extract_params_with_confidence(message):
     guest_match = re.search(r"(\d+)\s*(guest|guests|people|person|pax|bisita|katao|ka\s*bisita)", text)
     if guest_match:
         params["guests"] = int(guest_match.group(1))
+        params["group_size"] = int(guest_match.group(1))
+
+    if re.search(r"\bsolo\b|\balone\b", text):
+        params["party_type"] = "solo"
+        params.setdefault("group_size", 1)
+    elif re.search(r"\bcouple\b|\bpartner\b|\bfor two\b", text):
+        params["party_type"] = "couple"
+        params.setdefault("group_size", 2)
+    elif re.search(r"\bfamily\b|\bkids\b|\bchildren\b", text):
+        params["party_type"] = "family"
+    elif re.search(r"\bgroup\b|\bteam\b|\bfriends\b", text):
+        params["party_type"] = "group"
 
     # Extract requested recommendation list size (e.g., "give 10 inns available", "top 5 hotels").
     list_size_match = re.search(
@@ -3086,7 +5365,17 @@ def _extract_params_with_confidence(message):
     # - budget 1.5k
     # - under/below/less than 2000
     budget_match = re.search(
-        r"(?:budget|under|below|less than)\s*[:\-]?\s*([0-9][0-9,]*(?:\.[0-9]+)?k?)",
+        r"(?:budget(?:\s+(?:around|about|approx(?:imately)?))?|under|below|less than|max|up to|not more than|no more than)\s*[:\-]?\s*(?:php|peso|pesos)?\s*([0-9][0-9,]*(?:\.[0-9]+)?k?)",
+        text,
+        flags=re.IGNORECASE,
+    )
+    around_budget_match = re.search(
+        r"\b(?:around|about|approx(?:imately)?)\s*(?:php|peso|pesos)?\s*([0-9][0-9,]*(?:\.[0-9]+)?k?)\b",
+        text,
+        flags=re.IGNORECASE,
+    )
+    budget_range_match = re.search(
+        r"\b(?:around|about|between)?\s*([0-9][0-9,]*(?:\.[0-9]+)?k?)\s*(?:to|-)\s*([0-9][0-9,]*(?:\.[0-9]+)?k?)\b",
         text,
         flags=re.IGNORECASE,
     )
@@ -3095,7 +5384,15 @@ def _extract_params_with_confidence(message):
         text,
         flags=re.IGNORECASE,
     )
-    if budget_match:
+    if budget_range_match:
+        low_value = _parse_compact_number(budget_range_match.group(1))
+        high_value = _parse_compact_number(budget_range_match.group(2))
+        if low_value is not None and high_value is not None and high_value > 0:
+            lower = min(low_value, high_value)
+            upper = max(low_value, high_value)
+            params["budget_min"] = lower
+            params["budget"] = upper
+    elif budget_match:
         budget_value = _parse_compact_number(budget_match.group(1))
         if budget_value is not None:
             if "total" in text and not re.search(r"(per\s*night|nightly|/night)", text):
@@ -3110,6 +5407,29 @@ def _extract_params_with_confidence(message):
         budget_value = _parse_compact_number(budget_tail_match.group(1))
         if budget_value is not None:
             params["budget"] = budget_value
+    elif around_budget_match:
+        budget_value = _parse_compact_number(around_budget_match.group(1))
+        if budget_value is not None:
+            params["budget"] = budget_value
+
+    total_budget_match = re.search(
+        r"\b(?:what can i do with|i have|with|around|about|total budget(?: is| of)?|budget for (?:the )?(?:trip|stay))\s*"
+        r"(?:php|peso|pesos)?\s*([0-9][0-9,]*(?:\.[0-9]+)?k?)\b",
+        text,
+        flags=re.IGNORECASE,
+    )
+    if total_budget_match:
+        total_budget_value = _parse_compact_number(total_budget_match.group(1))
+        if total_budget_value is not None:
+            params["total_budget"] = total_budget_value
+
+    if (
+        _is_stay_planning_request(text)
+        and _to_int(params.get("total_budget"), default=0) <= 0
+        and _to_int(params.get("budget"), default=0) > 0
+        and not re.search(r"(per\s*night|nightly|/night)", text)
+    ):
+        params["total_budget"] = _to_int(params.get("budget"), default=0)
     # Numeric-only fallback is handled contextually in the main chat flow
     # to avoid misreading guest-count replies as budget.
 
@@ -3125,6 +5445,31 @@ def _extract_params_with_confidence(message):
     ):
         params["clear_budget"] = True
         params["budget"] = 0
+        params.pop("budget_min", None)
+
+    # Keyword-only budget inference (only when explicit numeric budget is not present).
+    if (
+        _to_int(params.get("budget"), default=0) <= 0
+        and _to_int(params.get("budget_min"), default=0) <= 0
+        and not _to_bool(params.get("clear_budget"), default=False)
+    ):
+        inferred = _infer_budget_range_from_keywords(text)
+        if inferred:
+            if _to_int(inferred.get("budget_min"), default=0) > 0:
+                params["budget_min"] = _to_int(inferred.get("budget_min"), default=0)
+            if _to_int(inferred.get("budget"), default=0) > 0:
+                params["budget"] = _to_int(inferred.get("budget"), default=0)
+
+    # Keep backward-compatible behavior for plain numeric messages
+    # (e.g., "1500" => budget=1500).
+    if (
+        numeric_only
+        and _to_int(params.get("budget"), default=0) <= 0
+        and not _to_bool(params.get("clear_budget"), default=False)
+    ):
+        compact = _parse_compact_number(numeric_only.group(1))
+        if compact is not None and compact > 0:
+            params["budget"] = compact
 
     # Extract duration from "<n> day(s)".
     duration_match = re.search(r"(\d+)\s*day", text)
@@ -3136,17 +5481,45 @@ def _extract_params_with_confidence(message):
     if nights_match:
         params["nights"] = int(nights_match.group(1))
 
+    if re.search(r"\b(no accommodation|without accommodation|day trip only|no hotel needed)\b", text):
+        params["accommodation_needed"] = False
+    elif re.search(r"\b(need accommodation|with accommodation|need hotel|need inn|need a room)\b", text):
+        params["accommodation_needed"] = True
+
+    if re.search(r"\b(tour only|tours only)\b", text):
+        params["activity_mix"] = "tour"
+    elif re.search(r"\b(spots only|attractions only|tourist spots only)\b", text):
+        params["activity_mix"] = "spot"
+    elif re.search(r"\b(mixed|combination|both tours and spots|hotel and places)\b", text):
+        params["activity_mix"] = "mixed"
+
+    if re.search(r"\b(adventure|adventurous|hike|trail|outdoor)\b", text):
+        params["experience_style"] = "adventure"
+    elif re.search(r"\b(relax|relaxing|chill|peaceful|calm)\b", text):
+        params["experience_style"] = "relaxing"
+    elif re.search(r"\b(culture|cultural|heritage|history|museum)\b", text):
+        params["experience_style"] = "culture"
+    elif re.search(r"\b(family-friendly|family|kids)\b", text):
+        params["experience_style"] = "family"
+
+    if re.search(r"\b(cheap|cheaper|affordable|budget|tipid|barato|lower budget|less expensive)\b", text):
+        params["spending_style"] = "budget"
+    elif re.search(r"\b(premium|luxury|high-end|high end)\b", text):
+        params["spending_style"] = "premium"
+    elif re.search(r"\b(mid-range|mid range|moderate)\b", text):
+        params["spending_style"] = "mid"
+
     # Extract location from phrases like "in bayawan", "near terminal", "around poblacion".
     # Stop before common trailing constraint phrases so we don't swallow guests/budget text.
     loc_match = re.search(
-        r"\b(in|near|around|sa)\s+([a-z\s]+?)(?=\s+(?:for|under|below|budget|with|from)\b|$)",
+        r"\b(in|near|around|sa|at)\s+([a-z\s]+?)(?=\s+(?:for|under|below|budget|with|from)\b|$)",
         text,
     )
     if loc_match:
         loc_prefix = str(loc_match.group(1) or "").strip()
         raw_location = " ".join(loc_match.group(2).split()).strip()
         if raw_location:
-            if loc_prefix in ("near", "around") and _is_generic_terminal_reference(raw_location):
+            if loc_prefix in ("near", "around", "at") and _is_generic_terminal_reference(raw_location):
                 _set_terminal_clarification(raw_location)
                 raw_location = ""
         if raw_location:
@@ -3155,7 +5528,7 @@ def _extract_params_with_confidence(message):
                 params["location"] = normalized_location
                 # Prevent stale anchor carry-over when location changed without a map anchor.
                 params["clear_location_anchor"] = True
-                if loc_prefix in ("near", "around"):
+                if loc_prefix in ("near", "around", "at"):
                     place_matches = _match_map_reference_places(raw_location, limit=4)
                     if not place_matches:
                         place_matches = _match_map_reference_places(normalized_location, limit=4)
@@ -3242,6 +5615,17 @@ def _extract_params_with_confidence(message):
         if room_token:
             params["room_id"] = room_token
 
+    # Capture room-type intent without forcing room-card display immediately.
+    requested_room_tokens = []
+    for token in (
+        "standard", "deluxe", "family", "double", "twin", "suite",
+        "queen", "king", "villa", "matrimonial", "single",
+    ):
+        if re.search(rf"\b{re.escape(token)}\b", text, flags=re.IGNORECASE):
+            requested_room_tokens.append(token)
+    if requested_room_tokens:
+        params["room_type"] = " ".join(requested_room_tokens[:2])
+
     # Extract check-in/check-out dates:
     # - YYYY-M-D / YYYY-MM-DD
     # - Month DD, YYYY (e.g., March 27, 2026)
@@ -3251,7 +5635,7 @@ def _extract_params_with_confidence(message):
         r"jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)"
     )
     raw_date_matches = re.findall(
-        rf"(\d{{4}}-\d{{1,2}}-\d{{1,2}}|{month_regex}\s+\d{{1,2}}(?:,\s*\d{{4}}|\s+\d{{4}}))",
+        rf"(\d{{4}}-\d{{1,2}}-\d{{1,2}}|{month_regex}\s+\d{{1,2}}(?:,\s*\d{{4}}|\s+\d{{4}})?)",
         text,
         flags=re.IGNORECASE,
     )
@@ -3260,11 +5644,50 @@ def _extract_params_with_confidence(message):
     if len(date_matches) >= 2:
         params["check_in"] = date_matches[0]
         params["check_out"] = date_matches[1]
-    elif len(raw_date_matches) == 1:
+    elif len(date_matches) == 1:
+        params["check_in"] = date_matches[0]
+
+    # Parse conversational month-day ranges without repeating month/year:
+    # - "May 10 to 12"
+    # - "May 10 to May 12"
+    # - "May 10 - May 12"
+    short_month_range = re.search(
+        r"\b"
+        r"(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|"
+        r"sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\s+(\d{1,2})"
+        r"\s*(?:-|to)\s*"
+        r"(?:(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|"
+        r"sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\s+)?(\d{1,2})"
+        r"(?:,\s*(20\d{2}))?\b",
+        text,
+        flags=re.IGNORECASE,
+    )
+    if short_month_range:
+        month_a = str(short_month_range.group(1) or "").strip()
+        day_a = str(short_month_range.group(2) or "").strip()
+        month_b = str(short_month_range.group(3) or "").strip() or month_a
+        day_b = str(short_month_range.group(4) or "").strip()
+        year_token = str(short_month_range.group(5) or "").strip()
+        if not year_token:
+            year_token = str(timezone.localdate().year)
+        start_raw = f"{month_a} {day_a}, {year_token}"
+        end_raw = f"{month_b} {day_b}, {year_token}"
+        start_iso = _normalize_iso_date(start_raw)
+        end_iso = _normalize_iso_date(end_raw)
+        if start_iso and end_iso:
+            params["check_in"] = start_iso
+            params["check_out"] = end_iso
+
+    if (
+        params.get("check_in")
+        and not params.get("check_out")
+        and _to_int(params.get("nights"), default=0) <= 0
+        and len(date_matches) == 1
+    ):
         _set_clarification(
             "date_range",
-            "Please provide both check-in and check-out dates (YYYY-MM-DD or Month DD, YYYY).",
-            penalty=0.35,
+            "Please provide check-out date or number of nights for your stay preview.",
+            penalty=0.25,
         )
 
     # Detect month-day ranges without year and ask for clarification instead of guessing.
@@ -3310,6 +5733,22 @@ def _extract_params_with_confidence(message):
             flags=re.IGNORECASE,
         ):
             params.setdefault("accom_name", name_candidate)
+
+    preview_name_match = re.search(
+        r"\b(?:create|make|prepare)?\s*(?:a\s+)?(?:booking\s+preview|preview\s+cost|booking\s+draft)\s+for\s+([a-z0-9][a-z0-9\s\-&']{2,80})\b",
+        text,
+        flags=re.IGNORECASE,
+    )
+    if not preview_name_match:
+        preview_name_match = re.search(
+            r"\b(?:estimate my stay|how much if i stay at)\s+([a-z0-9][a-z0-9\s\-&']{2,80})\b",
+            text,
+            flags=re.IGNORECASE,
+        )
+    if preview_name_match:
+        preview_candidate = " ".join(str(preview_name_match.group(1) or "").split()).strip(" .,!?")
+        if preview_candidate and preview_candidate not in {"this hotel", "this room", "that one", "first one"}:
+            params["accom_name"] = preview_candidate
 
     # Respect explicit accommodation type words in the user's prompt.
     if "inn" in text and "hotel" not in text:
@@ -3370,6 +5809,7 @@ def _extract_params_with_confidence(message):
         r"(?:tell me about|information about|info about|details about)\s+([a-z0-9\s\-'&]+)",
         r"(?:operating hours for|opening hours for|contact for)\s+([a-z0-9\s\-'&]+)",
         r"(?:where is)\s+([a-z0-9\s\-'&]+)",
+        r"(?:how far is|how long to|get to|go to)\s+([a-z0-9\s\-'&]+?)(?:\s+from\b|$)",
     ]
     for matcher in tourism_query_matchers:
         m = re.search(matcher, text, flags=re.IGNORECASE)
@@ -3379,6 +5819,12 @@ def _extract_params_with_confidence(message):
         if candidate:
             params["tourism_query"] = candidate
             break
+
+    origin_match = re.search(r"\bfrom\s+([a-z0-9\s\-'&]+)", text, flags=re.IGNORECASE)
+    if origin_match:
+        origin_value = " ".join(str(origin_match.group(1) or "").split()).strip(" .,!?:;")
+        if origin_value:
+            params["origin_hint"] = origin_value
 
     # Amenity keyword extraction for accommodation refinement prompts like "with pool".
     known_amenities = (
@@ -3429,6 +5875,25 @@ def _extract_params_with_confidence(message):
     if re.search(r"\b(broaden|expand)\s+(filters|search|scope)\b", text):
         params["broaden_location"] = True
         params["broaden_company_type"] = True
+
+    # Keep specific barangay/street intent when generic "bayawan" is also present.
+    normalized_loc = str(params.get("location") or "").strip().lower()
+    if normalized_loc in {"bayawan", "bayawan city", "terminal area", ""}:
+        specificity_hints = (
+            ("peping gamo", "tinago"),
+            ("j p rizal", "suba"),
+            ("jp rizal", "suba"),
+            ("mabini", "suba"),
+            ("suba", "suba"),
+            ("tinago", "tinago"),
+            ("poblacion", "poblacion"),
+            ("villareal", "villareal"),
+            ("villarreal", "villareal"),
+        )
+        for token, target in specificity_hints:
+            if token in text:
+                params["location"] = target
+                break
 
     return {
         "params": params,
@@ -3526,7 +5991,7 @@ def _extract_preference_profile_with_gemini(text):
     if not api_key:
         return {"preference_tags": [], "prefer_low_price": False}
 
-    model = str(os.getenv("GEMINI_MODEL", "gemini-1.5-flash") or "").strip() or "gemini-1.5-flash"
+    model = str(os.getenv("GEMINI_MODEL", "gemini-2.5-flash-lite") or "").strip() or "gemini-2.5-flash-lite"
     prompt = (
         "Extract accommodation preference intent from user text.\n"
         "Return JSON only with keys:\n"
@@ -3562,6 +6027,14 @@ def _extract_preference_profile_with_gemini(text):
 
 def _intent_from_message(message):
     text = (message or "").lower()
+    if _is_stay_planning_request(text):
+        return "plan_bayawan_stay"
+    if _is_travel_guidance_request(text):
+        return "travel_guidance"
+    if _is_reporting_summary_request(text):
+        return "reporting_summary"
+    if _is_dining_query(text):
+        return "get_tourism_information"
     recommendation_keywords = [
         "recommend", "suggest", "show", "find", "looking for", "search",
         "best place", "where should i go", "saan magandang", "saan maganda", "gumala",
@@ -3621,7 +6094,7 @@ def _intent_from_message(message):
     ):
         return "get_accommodation_recommendation"
     if any(keyword in text for keyword in booking_keywords) and any(keyword in text for keyword in accommodation_keywords):
-        return "book_accommodation"
+        return "get_accommodation_recommendation"
     if any(keyword in text for keyword in billing_keywords):
         if any(keyword in text for keyword in accommodation_keywords):
             return "calculate_accommodation_billing"
@@ -3630,7 +6103,26 @@ def _intent_from_message(message):
         return "get_accommodation_recommendation"
     if any(keyword in text for keyword in tourism_info_keywords):
         return "get_tourism_information"
+    if _looks_like_tour_request(text):
+        return "get_recommendation"
     return "get_recommendation"
+
+
+def _is_dining_query(message):
+    text = _normalize_chat_text(message)
+    if not text:
+        return False
+    markers = (
+        "where can i eat",
+        "where to eat",
+        "food spots",
+        "dining",
+        "restaurant",
+        "restaurants",
+        "kainan",
+        "pagkaon",
+    )
+    return any(marker in text for marker in markers)
 
 
 def _extract_tourism_search_tokens(message):
@@ -3684,6 +6176,17 @@ def _get_tourism_information(params, user_message):
         if direct_qs.exists():
             qs = direct_qs
 
+    if not tourism_query and _is_dining_query(user_message):
+        dining_qs = qs.filter(
+            Q(spot_name__icontains="restaurant")
+            | Q(description__icontains="restaurant")
+            | Q(description__icontains="food")
+            | Q(description__icontains="dining")
+            | Q(description__icontains="eat")
+        )
+        if dining_qs.exists():
+            qs = dining_qs
+
     if not tourism_query:
         tokens = _extract_tourism_search_tokens(user_message)
         if tokens:
@@ -3716,6 +6219,235 @@ def _get_tourism_information(params, user_message):
         if row.description:
             lines.append(f"   Description: {row.description}")
     return "\n".join(lines)
+
+
+def _extract_origin_hint(message):
+    text = _normalize_chat_text(message)
+    if not text:
+        return {"type": "unknown", "value": ""}
+    if any(token in text for token in ("from another country", "international", "from abroad", "outside the philippines")):
+        return {"type": "international", "value": "outside the Philippines"}
+    from_match = re.search(r"\bfrom\s+([a-z][a-z\s]{2,50})", text)
+    if from_match:
+        origin_value = " ".join(str(from_match.group(1) or "").split()).strip()
+        if origin_value:
+            if (
+                "bayawan" in origin_value
+                or "city center" in origin_value
+                or "downtown" in origin_value
+                or "poblacion" in origin_value
+                or "suba" in origin_value
+            ):
+                return {"type": "local", "value": origin_value}
+            if "manila" in origin_value:
+                return {"type": "domestic_far", "value": "Manila"}
+            if any(city in origin_value for city in ("cebu", "davao", "iloilo", "bacolod", "dumaguete", "cagayan de oro")):
+                return {"type": "domestic_far", "value": origin_value.title()}
+            return {"type": "domestic_far", "value": origin_value.title()}
+    return {"type": "unknown", "value": ""}
+
+
+def _coords_from_map_match(raw_value):
+    match = _match_map_reference_place(raw_value)
+    if not isinstance(match, dict):
+        return {"lat": None, "lng": None, "anchor": ""}
+    lat_val = _safe_float(match.get("lat"))
+    lng_val = _safe_float(match.get("lng"))
+    anchor_name = str(match.get("name") or "").strip()
+    if (lat_val is None or lng_val is None) and anchor_name:
+        anchor_norm = _normalize_chat_text(anchor_name)
+        for entry in _load_map_reference_place_entries():
+            if _normalize_chat_text(entry.get("name")) == anchor_norm:
+                lat_val = _safe_float(entry.get("lat"), default=lat_val)
+                lng_val = _safe_float(entry.get("lng"), default=lng_val)
+                break
+    return {
+        "lat": lat_val,
+        "lng": lng_val,
+        "anchor": anchor_name,
+    }
+
+
+def _resolve_destination_for_travel(message, params):
+    params = params if isinstance(params, dict) else {}
+    normalized_message = _normalize_chat_text(message)
+    accom_name = str(params.get("accom_name") or params.get("hotel_name") or "").strip()
+    tourism_query = str(params.get("tourism_query") or "").strip()
+    location = str(params.get("location") or "").strip()
+
+    if accom_name:
+        qs = _approved_accommodation_queryset().filter(company_name__icontains=accom_name).order_by("company_name")
+        accom = qs.first()
+        if accom is not None:
+            coord = _coords_from_map_match(str(getattr(accom, "company_name", "") or "") or str(getattr(accom, "location", "") or ""))
+            link, label = _build_accommodation_official_link(row_meta={
+                "official_booking_url": str(getattr(accom, "official_booking_url", "") or "").strip(),
+                "official_contact_url": str(getattr(accom, "official_contact_url", "") or "").strip(),
+            })
+            return {
+                "kind": "accommodation",
+                "name": str(accom.company_name or "").strip(),
+                "location": str(accom.location or "").strip(),
+                "lat": coord.get("lat"),
+                "lng": coord.get("lng"),
+                "anchor": coord.get("anchor"),
+                "link": link,
+                "link_label": label or "Visit Official Page",
+            }
+
+    for accom in _approved_accommodation_queryset().order_by("company_name")[:40]:
+        accom_name_norm = _normalize_chat_text(getattr(accom, "company_name", ""))
+        if accom_name_norm and (accom_name_norm in normalized_message or normalized_message in accom_name_norm):
+            coord = _coords_from_map_match(str(accom.company_name or "") or str(accom.location or ""))
+            link, label = _build_accommodation_official_link(row_meta={
+                "official_booking_url": str(getattr(accom, "official_booking_url", "") or "").strip(),
+                "official_contact_url": str(getattr(accom, "official_contact_url", "") or "").strip(),
+            })
+            return {
+                "kind": "accommodation",
+                "name": str(accom.company_name or "").strip(),
+                "location": str(accom.location or "").strip(),
+                "lat": coord.get("lat"),
+                "lng": coord.get("lng"),
+                "anchor": coord.get("anchor"),
+                "link": link,
+                "link_label": label or "Visit Official Page",
+            }
+
+    if tourism_query:
+        tourism_row = TourismInformation.objects.published().filter(
+            Q(spot_name__icontains=tourism_query) | Q(location__icontains=tourism_query)
+        ).order_by("spot_name").first()
+    else:
+        tourism_row = TourismInformation.objects.published().filter(
+            Q(spot_name__icontains=normalized_message) | Q(location__icontains=normalized_message)
+        ).order_by("spot_name").first()
+    if tourism_row is not None:
+        coord = _coords_from_map_match(str(getattr(tourism_row, "spot_name", "") or "") or str(getattr(tourism_row, "location", "") or ""))
+        return {
+            "kind": "tourist_spot",
+            "name": str(tourism_row.spot_name or "").strip(),
+            "location": str(tourism_row.location or "").strip(),
+            "lat": coord.get("lat"),
+            "lng": coord.get("lng"),
+            "anchor": coord.get("anchor"),
+            "link": "",
+            "link_label": "",
+        }
+
+    location_candidate = tourism_query or message or location
+    coord = _coords_from_map_match(location_candidate)
+    if coord.get("anchor"):
+        return {
+            "kind": "place",
+            "name": coord.get("anchor"),
+            "location": str(location or "Bayawan City").strip(),
+            "lat": coord.get("lat"),
+            "lng": coord.get("lng"),
+            "anchor": coord.get("anchor"),
+            "link": "",
+            "link_label": "",
+        }
+    return {"kind": "", "name": "", "location": location, "lat": None, "lng": None, "anchor": "", "link": "", "link_label": ""}
+
+
+def _build_travel_guidance_payload(message, params, client_location):
+    destination = _resolve_destination_for_travel(message, params)
+    origin_hint = _extract_origin_hint(message)
+    lines = []
+    quick_replies = [
+        "How far is this from me?",
+        "I'm from Manila, how do I get there?",
+        "Open map",
+    ]
+    action_link = ""
+    action_label = ""
+
+    destination_name = str(destination.get("name") or "that destination").strip() or "that destination"
+    destination_location = str(destination.get("location") or "Bayawan").strip() or "Bayawan"
+    lines.append(
+        _pick_response_variant(
+            [
+                f"Sure, here’s a simple travel guide to {destination_name}.",
+                f"Happy to help. Here’s the best practical guidance to reach {destination_name}.",
+                f"Got it. Here’s a clear step-by-step guide to get to {destination_name}.",
+            ],
+            seed_text=str(message or ""),
+        )
+    )
+
+    if origin_hint.get("type") == "international":
+        lines.append(
+            "If you're coming from outside the Philippines, the practical route is: fly into a major Philippine gateway, then connect to Negros Oriental (usually via Dumaguete or nearby hubs), and continue by land to Bayawan."
+        )
+        lines.append(
+            "After arriving in Bayawan, local transport (tricycle, multicab, or hired vehicle) can take you to your destination."
+        )
+        lines.append("Typical travel flow: International origin -> Manila/Cebu -> Dumaguete -> Bus/van to Bayawan.")
+    elif origin_hint.get("type") == "domestic_far":
+        origin_name = str(origin_hint.get("value") or "your city").strip()
+        if "manila" in origin_name.lower():
+            lines.append("From Manila, a practical route is: Manila -> Dumaguete (flight) -> Bayawan (bus/van).")
+            lines.append("Approximate overall travel time is often around 6 to 10 hours, depending on transfers.")
+        else:
+            lines.append(
+                f"From {origin_name}, a typical route is to travel to Negros Oriental (often via Dumaguete or nearby hubs), then continue by land to Bayawan."
+            )
+        lines.append("Once you're in Bayawan, local transport can take you to the exact destination.")
+
+    origin_lat = _safe_float(client_location.get("latitude")) if isinstance(client_location, dict) else None
+    origin_lng = _safe_float(client_location.get("longitude")) if isinstance(client_location, dict) else None
+    dest_lat = _safe_float(destination.get("lat"))
+    dest_lng = _safe_float(destination.get("lng"))
+    distance_km = None
+    eta_minutes = None
+
+    if origin_lat is not None and origin_lng is not None and dest_lat is not None and dest_lng is not None:
+        distance_km = _haversine_km(origin_lat, origin_lng, dest_lat, dest_lng)
+        eta_minutes = _estimate_travel_minutes(distance_km)
+        lines.append(
+            f"From your current location to {destination_name}, the estimated distance is about {distance_km:.1f} km."
+        )
+        if eta_minutes >= 60:
+            eta_hours = eta_minutes / 60.0
+            lines.append(f"Estimated travel time is around {eta_hours:.1f} hour(s), depending on traffic and vehicle.")
+        else:
+            lines.append(f"Estimated travel time is around {eta_minutes} minute(s), depending on traffic and vehicle.")
+        action_link = (
+            "https://www.google.com/maps/dir/?api=1"
+            f"&origin={origin_lat},{origin_lng}"
+            f"&destination={dest_lat},{dest_lng}"
+            "&travelmode=driving"
+        )
+        action_label = f"Open Directions to {destination_name}"
+    else:
+        location_status = str(client_location.get("status") or "").strip().lower() if isinstance(client_location, dict) else ""
+        if location_status == "denied":
+            lines.append(
+                "Location access looks disabled on your side, so I can't compute exact distance from your device yet."
+            )
+        if destination_name:
+            lines.append(
+                f"{destination_name} is in/near {destination_location}. I can give a better distance/time estimate if you allow current-location access or share your starting point."
+            )
+        else:
+            lines.append(
+                "I can guide you better if you tell me your destination (hotel, tourist spot, or tour meeting point) and your origin."
+            )
+
+    if destination.get("kind") == "accommodation" and destination.get("link"):
+        lines.append("For accommodation booking or inquiry, please use the property's official page/contact link.")
+        action_link = action_link or str(destination.get("link"))
+        action_label = action_label or str(destination.get("link_label") or "Visit Official Page")
+
+        lines.append("Travel times are approximate guides and can vary with traffic, weather, and transport availability.")
+
+    return {
+        "reply": "\n".join(lines),
+        "quick_replies": quick_replies,
+        "link": action_link,
+        "link_label": action_label or "Open Map",
+    }
 
 
 def _normalize_intent_label(raw_label):
@@ -3804,9 +6536,213 @@ def _classify_intent_with_text_cnn(message):
     }
 
 
-def _classify_intent_and_extract_params(message):
+def _deterministic_intent_route(*, actor=None, message=""):
+    role = str((actor or {}).get("role") or "").strip().lower()
+    text = _normalize_chat_text(message)
+    if not text:
+        return ""
+
+    if role in {"", "guest"}:
+        if _contains_any_phrase(
+            text,
+            (
+                "i want to go somewhere nice",
+                "where should i go",
+                "any recommendation",
+                "what can i do",
+            ),
+        ):
+            return "clarification"
+        if _is_travel_guidance_request(text):
+            return "travel_guidance"
+        if _is_accommodation_how_to_book_request(text):
+            return "book_accommodation"
+        if _is_accommodation_preview_command(text):
+            return "book_accommodation"
+        if _is_guest_tour_booking_command(text):
+            return "get_recommendation"
+        if re.search(r"\b(show|available|list|display|view)\b.*\b(tour|tours|tour package|tour packages)\b", text):
+            return "get_recommendation"
+        # Deterministic shorthand for accommodation filters like
+        # "suba under 1500" during conversational slot-filling.
+        if (
+            re.search(r"\b(?:under|below|budget)\s*[0-9][0-9,]*(?:\.[0-9]+)?k?\b", text)
+            and re.search(r"\b(?:suba|poblacion|bayawan|villareal|tinago|ubos)\b", text)
+            and not _looks_like_tour_request(text)
+        ):
+            return "get_accommodation_recommendation"
+        if re.search(r"\b(hotel|inn|accommodation|stay|place to stay)\b", text):
+            return "get_accommodation_recommendation"
+        if _is_stay_planning_request(text):
+            return "plan_bayawan_stay"
+        if re.search(r"\bbudget\b\s*[0-9][0-9,]*(?:\.[0-9]+)?k?\b", text):
+            return "plan_bayawan_stay"
+
+    if role == "owner":
+        if _contains_any_phrase(
+            text,
+            (
+                "submit monthly report",
+                "monthly report",
+                "owner report",
+                "owner monthly report",
+            ),
+        ):
+            return "reporting_summary"
+
+    if role == "employee":
+        if _is_employee_assigned_tours_command(text):
+            return "employee_assigned_tours"
+        if _is_employee_open_assignment_command(text):
+            return "employee_open_assignment"
+        if _is_employee_assignment_update_command(text):
+            return "employee_update_assignment"
+
+    if role in {"", "admin"}:
+        if _is_reporting_summary_request(text):
+            return "reporting_summary"
+
+    return ""
+
+
+def _classify_intent_and_extract_params(message, actor=None):
+    deterministic_intent = _deterministic_intent_route(actor=actor, message=message)
+    normalized_text = _normalize_chat_text(message)
+    actor_role = str((actor or {}).get("role") or "guest").strip().lower()
+
+    if (
+        actor_role in {"", "guest"}
+        and deterministic_intent == "clarification"
+        and _contains_any_phrase(
+            normalized_text,
+            (
+                "i want to go somewhere nice",
+                "where should i go",
+                "any recommendation",
+                "what can i do",
+            ),
+        )
+    ):
+        return {
+            "intent": deterministic_intent,
+            "params": {},
+            "source": "deterministic_pre_route",
+            "confidence": 1.0,
+            "needs_clarification": False,
+            "clarification_question": "",
+            "clarification_field": "",
+            "clarification_options": [],
+            "intent_classifier": {
+                "intent": deterministic_intent,
+                "source": "deterministic_pre_route",
+                "confidence": 1.0,
+                "top_3": [],
+                "error": "",
+                "artifact_source": "deterministic_router",
+            },
+        }
+
+    def _fast_extract_accommodation_params(text):
+        fast_params = {}
+        if re.search(r"\bhotel\b", text):
+            fast_params["company_type"] = "hotel"
+        elif re.search(r"\binn\b", text):
+            fast_params["company_type"] = "inn"
+        elif re.search(r"\b(?:accommodation|stay|place to stay)\b", text):
+            fast_params["company_type"] = "either"
+
+        guests_match = re.search(r"\b(\d+)\s*(?:people|person|guest|guests|pax|adult|adults)\b", text)
+        if not guests_match:
+            guests_match = re.search(r"\bfor\s+(\d+)\b", text)
+        if guests_match:
+            guests_val = _to_int(guests_match.group(1), default=0)
+            if guests_val > 0:
+                fast_params["guests"] = guests_val
+                fast_params["group_size"] = guests_val
+
+        budget_match = re.search(
+            r"\b(?:under|below|budget(?:\s+is)?)\s*([0-9][0-9,]*(?:\.[0-9]+)?k?)\b",
+            text,
+            flags=re.IGNORECASE,
+        )
+        if budget_match:
+            parse_compact = globals().get("_parse_compact_number")
+            parsed_budget = (
+                parse_compact(budget_match.group(1))
+                if callable(parse_compact)
+                else _to_int(budget_match.group(1), default=0)
+            )
+            if parsed_budget and parsed_budget > 0:
+                fast_params["budget"] = int(parsed_budget)
+
+        if re.search(r"\b(?:cheap|affordable|budget friendly|budget-friendly)\b", text):
+            fast_params["prefer_low_price"] = True
+
+        location_match = re.search(
+            r"\b(suba|poblacion|bayawan|villareal|tinago|ubos)\b",
+            text,
+            flags=re.IGNORECASE,
+        )
+        if location_match:
+            fast_params["location"] = str(location_match.group(1)).strip().lower()
+        return fast_params
+
+    if (
+        actor_role in {"", "guest"}
+        and deterministic_intent == "get_accommodation_recommendation"
+    ):
+        has_budgetish = bool(
+            re.search(r"\b(?:under|below|budget)\s*[0-9][0-9,]*(?:\.[0-9]+)?k?\b", normalized_text)
+            or re.search(r"\b(?:cheap|affordable)\b", normalized_text)
+        )
+        has_accom_or_loc = bool(
+            re.search(r"\b(hotel|inn|accommodation|stay|place to stay)\b", normalized_text)
+            or re.search(r"\b(suba|poblacion|bayawan|villareal|tinago|ubos)\b", normalized_text)
+        )
+        has_guests = bool(re.search(r"\b\d+\s*(?:people|person|guest|guests|pax|adult|adults)\b", normalized_text))
+        if has_accom_or_loc and (has_budgetish or has_guests):
+            fast_params = _fast_extract_accommodation_params(normalized_text)
+            return {
+                "intent": deterministic_intent,
+                "params": fast_params,
+                "source": "deterministic_pre_route_fast_accommodation",
+                "confidence": 1.0,
+                "needs_clarification": False,
+                "clarification_question": "",
+                "clarification_field": "",
+                "clarification_options": [],
+                "intent_classifier": {
+                    "intent": deterministic_intent,
+                    "source": "deterministic_pre_route_fast_accommodation",
+                    "confidence": 1.0,
+                    "top_3": [],
+                    "error": "",
+                    "artifact_source": "deterministic_router_fast",
+                },
+            }
+
     extracted = _extract_params_with_confidence(message)
     params = extracted.get("params", {}) if isinstance(extracted.get("params"), dict) else {}
+    if deterministic_intent:
+        return {
+            "intent": deterministic_intent,
+            "params": params,
+            "source": "deterministic_pre_route",
+            "confidence": 1.0,
+            "needs_clarification": bool(extracted.get("needs_clarification")),
+            "clarification_question": extracted.get("clarification_question", ""),
+            "clarification_field": extracted.get("clarification_field", ""),
+            "clarification_options": extracted.get("clarification_options", []),
+            "intent_classifier": {
+                "intent": deterministic_intent,
+                "source": "deterministic_pre_route",
+                "confidence": 1.0,
+                "top_3": [],
+                "error": "",
+                "artifact_source": "deterministic_router",
+            },
+        }
+
     cnn_result = _classify_intent_with_text_cnn(message)
 
     if cnn_result.get("intent"):
@@ -3849,10 +6785,10 @@ def _is_my_accommodation_booking_status_command(message):
         "show my hotel bookings",
         "show my inn bookings",
         "show my accommodation bookings",
-        "show accommodation bookings",
+        "show accommodation links",
         "show my room bookings",
         "view my hotel bookings",
-        "view my accommodation bookings",
+        "View accommodation links",
         "view accommodation bookings",
         "check my hotel bookings",
         "check accommodation bookings",
@@ -3886,6 +6822,62 @@ def _is_guest_booking_requirements_command(message):
             "booking requirements",
             "ano kailangan para mag book",
             "unsa kinahanglan para mag book",
+        )
+    )
+
+
+def _is_guest_search_help_command(message):
+    text = str(message or "").strip().lower()
+    if not text:
+        return False
+    return any(
+        phrase in text
+        for phrase in (
+            "how to search hotels",
+            "how to search inns",
+            "how to search hotel",
+            "how to find hotels",
+            "how to find inns",
+            "how to find accommodation",
+            "search hotels and inns",
+            "paano maghanap ng hotel",
+            "unsaon pagpangita og hotel",
+        )
+    )
+
+
+def _is_guest_billing_details_help_command(message):
+    text = str(message or "").strip().lower()
+    if not text:
+        return False
+    return any(
+        phrase in text
+        for phrase in (
+            "billing details",
+            "show billing details",
+            "how to view billing details",
+            "view billing breakdown",
+            "payment breakdown",
+            "detalye sa billing",
+            "detalye ng billing",
+        )
+    )
+
+
+def _is_guest_booking_review_help_command(message):
+    text = str(message or "").strip().lower()
+    if not text:
+        return False
+    return any(
+        phrase in text
+        for phrase in (
+            "how to review my booking",
+            "how do i review my booking",
+            "review my booking",
+            "check my booking details",
+            "view my booking details",
+            "saan makikita booking ko",
+            "asa makita akong booking",
         )
     )
 
@@ -4008,6 +7000,32 @@ def _is_guest_room_availability_command(message):
     )
 
 
+def _is_accommodation_room_listing_command(message):
+    text = str(message or "").strip().lower()
+    if not text:
+        return False
+    direct_phrases = (
+        "show rooms for",
+        "rooms in ",
+        "what rooms do they have",
+        "show available rooms",
+        "show me rooms",
+        "list rooms",
+        "available rooms in",
+        "show rooms",
+        "room options",
+        "select room",
+        "book this room",
+        "book room",
+    )
+    if any(phrase in text for phrase in direct_phrases):
+        return True
+    return bool(
+        re.search(r"\brooms?\b", text)
+        and re.search(r"\b(show|list|view|available|what)\b", text)
+    )
+
+
 def _resolve_relative_stay_window(message):
     text = str(message or "").strip().lower()
     today = timezone.localdate()
@@ -4055,8 +7073,8 @@ def _build_guest_room_availability_summary(message, params):
     location = str((params or {}).get("location") or "").strip()
 
     qs = (
-        Room.objects.select_related("accommodation")
-        .filter(status="AVAILABLE", current_availability__gte=1, accommodation__approval_status="accepted")
+        _approved_room_queryset()
+        .filter(status="AVAILABLE", current_availability__gte=1)
         .filter(
             Q(accommodation__company_type__icontains="hotel")
             | Q(accommodation__company_type__icontains="inn")
@@ -4099,11 +7117,11 @@ def _build_guest_room_availability_summary(message, params):
         lines.append(
             (
                 f"{idx}. {room.accommodation.company_name} - {room.room_name} "
-                f"(Room {room.room_id}) | PHP {room.price_per_night}/night | "
+                f"| PHP {room.price_per_night}/night | "
                 f"up to {room.person_limit} guests"
             )
         )
-    lines.append("Reply with the room number (e.g., 1) or say: book room <id> from <check-in> to <check-out>.")
+    lines.append("Reply with the option number (e.g., 1) or say: create booking preview for this room.")
     return "\n".join(lines)
 
 
@@ -4277,6 +7295,40 @@ def _is_help_or_greeting_command(message):
     )
 
 
+def _is_owner_help_command(message):
+    return _contains_any_phrase(
+        message,
+        (
+            "what can i do here as an owner",
+            "what do i do here",
+            "what do i do here as an owner",
+            "owner help",
+            "help owner",
+            "what can i manage",
+            "what can i do as owner",
+        ),
+    )
+
+
+def _is_owner_manage_links_command(message):
+    return _contains_any_phrase(
+        message,
+        (
+            "update my accommodation links",
+            "update links",
+            "update official page",
+            "update facebook link",
+            "update accommodation images",
+            "update listing links",
+            "update official link",
+            "update booking page",
+            "update external link",
+            "how do i update links",
+            "where do i add photos",
+        ),
+    )
+
+
 def _contains_any_phrase(message, phrases):
     raw_text = str(message or "").strip().lower()
     if not raw_text:
@@ -4312,6 +7364,881 @@ def _contains_any_phrase(message, phrases):
         if len(phrase_tokens) >= 3 and all(token in text_tokens for token in phrase_tokens):
             return True
     return False
+
+
+def _pick_response_variant(options, seed_text=""):
+    choices = [str(opt).strip() for opt in (options or []) if str(opt).strip()]
+    if not choices:
+        return ""
+    seed = str(seed_text or "")
+    digest = hashlib.sha256(seed.encode("utf-8", errors="ignore")).hexdigest()
+    idx = int(digest[:8], 16) % len(choices)
+    return choices[idx]
+
+
+def _normalize_common_chat_typos(message):
+    text = str(message or "").strip()
+    if not text:
+        return text
+    normalized = text
+    typo_map = {
+        r"\breccomend\b": "recommend",
+        r"\brecomend\b": "recommend",
+        r"\baccomodation\b": "accommodation",
+        r"\baccomodations\b": "accommodations",
+        r"\bbookigns\b": "bookings",
+        r"\bwher\b": "where",
+        r"\brestauarant\b": "restaurant",
+        r"\brestarant\b": "restaurant",
+        r"\bhow muchh\b": "how much",
+        r"\btour pakage\b": "tour package",
+    }
+    for pattern, replacement in typo_map.items():
+        normalized = re.sub(pattern, replacement, normalized, flags=re.IGNORECASE)
+    normalized = re.sub(r"\s{2,}", " ", normalized).strip()
+    return normalized
+
+
+def _normalize_button_parity_message(message):
+    text = str(message or "").strip()
+    if not text:
+        return text
+    # Keep explicit room-listing queries intact so they do not get remapped
+    # into broad accommodation discovery commands.
+    if _is_accommodation_room_listing_command(text):
+        return text
+    normalized = _normalize_chat_text(text)
+    if not normalized:
+        return text
+
+    # Preserve constrained accommodation discovery phrasing (location/budget/guests/room cues)
+    # so deterministic recommendation parsing can use the original query details.
+    if re.search(
+        r"\b(barangay|brgy|suba|villareal|poblacion|tinago|ubos|in\s+[a-z]|near|under|below|budget|for\s+\d+\s*(guest|guests|adult|adults|pax)|room|rooms?)\b",
+        normalized,
+        flags=re.IGNORECASE,
+    ):
+        return text
+
+    # Keep button-click and typed-input behavior aligned for common guest phrases.
+    parity_rules = (
+        (
+            r"\b(show|view|check|list)\b.*\b(my\s+)?(tour\s+)?book(?:ing|ings|igns)\b"
+            r"|\bmy tour bookings\b|\bshow my tour bookigns\b",
+            "show my tour bookings",
+        ),
+        (
+            r"\b(show|available|list|display|view)\b.*\b(tours?|tour packages?|packages?)\b"
+            r"|\bwhat tours do you have\b|\btour packages?\b",
+            "show available tours",
+        ),
+        (
+            r"\b(show|recommend|find|suggest)\b.*\b(hotels?|inns?|accommodations?|stays?)\b"
+            r"|\bwhere should i stay\b|\bplaces to stay\b|\bshow approved stays\b",
+            "show accommodation recommendations",
+        ),
+        (
+            r"\b(make|adjust|change|convert)\b.*\bbudget\b"
+            r"|\bmake it cheaper\b|\blower (the )?budget\b|\bsomething cheaper\b|\bcheaper option\b",
+            "adjust to budget version",
+        ),
+        (
+            r"\bfamily version\b|\bfamily[- ]friendly\b|\bgood for kids\b"
+            r"|\btraveling with family\b|\bfor kids\b|\bwith kids\b",
+            "make it family-friendly",
+        ),
+        (
+            r"\bhow far\b.*\bfrom me\b|\bdistance from me\b|\bnear me\b",
+            "how far is this from me?",
+        ),
+        (
+            r"\bwhere can i eat\b|\bwhere to eat\b|\bfood nearby\b|\bnearby food\b|\brestaurants? nearby\b",
+            "where can i eat nearby",
+        ),
+    )
+    for pattern, replacement in parity_rules:
+        if re.search(pattern, normalized, flags=re.IGNORECASE):
+            return replacement
+    return text
+
+
+def _extract_intro_first_name(message):
+    text = str(message or "").strip()
+    if not text:
+        return ""
+    lowered = text.lower()
+    match = re.search(
+        r"\b(?:i am|i'm|im|my name is|this is)\s+([a-z][a-z'\-]{1,30})\b",
+        lowered,
+    )
+    if not match:
+        return ""
+    candidate = str(match.group(1) or "").strip().lower()
+    blocked_tokens = {
+        "from",
+        "in",
+        "near",
+        "bayawan",
+        "manila",
+        "cebu",
+        "dumaguete",
+        "philippines",
+        "today",
+        "here",
+    }
+    if candidate in blocked_tokens:
+        return ""
+    return candidate[:1].upper() + candidate[1:]
+
+
+def _load_social_profile(request):
+    if not hasattr(request, "session"):
+        return {}
+    payload = request.session.get(_CHAT_SOCIAL_SESSION_KEY)
+    return payload if isinstance(payload, dict) else {}
+
+
+def _save_social_profile(request, payload):
+    if not hasattr(request, "session"):
+        return
+    request.session[_CHAT_SOCIAL_SESSION_KEY] = payload if isinstance(payload, dict) else {}
+    request.session.modified = True
+
+
+def _load_assistant_memory(request):
+    if not hasattr(request, "session"):
+        return {}
+    payload = request.session.get(_CHAT_ASSISTANT_MEMORY_SESSION_KEY)
+    return payload if isinstance(payload, dict) else {}
+
+
+def _save_assistant_memory(request, payload):
+    if not hasattr(request, "session"):
+        return
+    request.session[_CHAT_ASSISTANT_MEMORY_SESSION_KEY] = payload if isinstance(payload, dict) else {}
+    request.session.modified = True
+
+
+def _assistant_memory_to_params(memory):
+    source = memory if isinstance(memory, dict) else {}
+    allowed_keys = (
+        "total_budget",
+        "budget",
+        "duration_days",
+        "group_size",
+        "guests",
+        "party_type",
+        "origin_hint",
+        "location",
+        "accommodation_needed",
+        "experience_style",
+        "activity_mix",
+        "spending_style",
+    )
+    params = {}
+    for key in allowed_keys:
+        value = source.get(key)
+        if value in ("", None, []):
+            continue
+        params[key] = value
+    return params
+
+
+def _save_assistant_memory_from_context(request, *, actor, intent, params):
+    if str(actor.get("role") or "").strip().lower() != "guest":
+        return
+    normalized_intent = str(intent or "").strip().lower()
+    if normalized_intent not in _ALLOWED_INTENTS:
+        return
+    payload = _load_assistant_memory(request)
+    if not isinstance(payload, dict):
+        payload = {}
+
+    topic_map = {
+        "plan_bayawan_stay": "planning",
+        "get_recommendation": "tours",
+        "get_accommodation_recommendation": "accommodations",
+        "travel_guidance": "directions",
+        "reporting_summary": "reports",
+        "get_tourism_information": "tourism_info",
+    }
+    active_topic = topic_map.get(normalized_intent)
+    if active_topic:
+        payload["active_topic"] = active_topic
+
+    source_params = params if isinstance(params, dict) else {}
+    remember_keys = (
+        "total_budget",
+        "budget",
+        "duration_days",
+        "group_size",
+        "guests",
+        "party_type",
+        "origin_hint",
+        "location",
+        "accommodation_needed",
+        "experience_style",
+        "activity_mix",
+        "spending_style",
+    )
+    for key in remember_keys:
+        value = source_params.get(key)
+        if value in ("", None, []):
+            continue
+        payload[key] = value
+    payload["last_updated_epoch"] = int(time.time())
+    _save_assistant_memory(request, payload)
+
+
+def _looks_like_assistant_followup(message):
+    text = _normalize_chat_text(message)
+    if not text:
+        return False
+    if re.fullmatch(r"\d+\s*(days?|people|person|pax|guests?)?", text):
+        return True
+    markers = (
+        "make it cheaper",
+        "lower the budget",
+        "budget version",
+        "family version",
+        "for 2 people",
+        "for 3 people",
+        "2 days only",
+        "3 days only",
+        "from manila",
+        "just nearby",
+        "nearby only",
+    )
+    return any(marker in text for marker in markers)
+
+
+def _apply_strict_intent_overrides(*, actor, message, current_intent):
+    role = str((actor or {}).get("role") or "").strip().lower()
+    text = _normalize_chat_text(message)
+    intent = str(current_intent or "").strip().lower()
+
+    if role == "guest":
+        if _is_guest_tour_booking_command(text):
+            return "get_recommendation"
+        if _is_stay_planning_request(text):
+            return "plan_bayawan_stay"
+        if _is_travel_guidance_request(text):
+            return "travel_guidance"
+        if _is_reporting_summary_request(text):
+            return "reporting_summary"
+        if _looks_like_tour_request(text) and re.search(
+            r"\b(show|available|list|display|view|tour|tours|tour package|tour packages)\b",
+            text,
+        ):
+            return "get_recommendation"
+        if _contains_any_phrase(text, ("what can i do there", "things to do there", "what can i do in bayawan", "things to do in bayawan")):
+            return "get_recommendation"
+        if re.search(r"\b(hotel|inn|accommodation|stay|place to stay)\b", text):
+            return "get_accommodation_recommendation"
+        return intent
+
+    if role == "employee":
+        if _is_employee_assigned_tours_command(text):
+            return "employee_assigned_tours"
+        if _is_employee_open_assignment_command(text):
+            return "employee_open_assignment"
+        if _is_employee_assignment_update_command(text):
+            return "employee_update_assignment"
+        return intent
+
+    if role == "owner":
+        if _contains_any_phrase(
+            text,
+            (
+                "submit monthly report",
+                "monthly report",
+                "owner monthly report",
+                "owner report",
+            ),
+        ):
+            return "reporting_summary"
+        if _is_reporting_summary_request(text):
+            return "reporting_summary"
+        return intent
+
+    if role == "admin":
+        if _is_reporting_summary_request(text):
+            return "reporting_summary"
+        return intent
+
+    return intent
+
+
+def _has_strict_intent_signal(*, actor, message):
+    role = str((actor or {}).get("role") or "").strip().lower()
+    text = _normalize_chat_text(message)
+    if not text:
+        return False
+    if role == "guest":
+        if _is_stay_planning_request(text) or _is_travel_guidance_request(text):
+            return True
+        if re.search(r"\b(hotel|inn|accommodation|place to stay|stay)\b", text):
+            return True
+        if re.search(r"\b(show|available|list|view)\b.*\b(tour|tours|tour package|tour packages)\b", text):
+            return True
+        if _is_guest_tour_booking_command(text):
+            return True
+        return False
+    if role == "employee":
+        return (
+            _is_employee_assigned_tours_command(text)
+            or _is_employee_open_assignment_command(text)
+            or _is_employee_assignment_update_command(text)
+        )
+    if role == "owner":
+        return bool(
+            _contains_any_phrase(
+                text,
+                (
+                    "update links",
+                    "update my accommodation links",
+                    "update facebook link",
+                    "update official link",
+                    "submit monthly report",
+                    "owner report",
+                    "owner monthly report",
+                ),
+            )
+        )
+    if role == "admin":
+        return _is_reporting_summary_request(text)
+    return False
+
+
+def _is_explicit_tour_command(message):
+    text = str(message or "").strip().lower()
+    if not text:
+        return False
+    explicit_phrases = (
+        "show available tours",
+        "show tours",
+        "tour packages",
+        "book tour",
+        "book a tour",
+        "show tour schedules",
+        "tour schedules",
+        "available tours",
+        "list tours",
+    )
+    return any(phrase in text for phrase in explicit_phrases)
+
+
+def _looks_like_room_selection_reply(message):
+    text = _normalize_chat_text(message)
+    if not text:
+        return False
+    if _is_explicit_tour_command(text):
+        return False
+    if re.search(r"\b(yes|no|confirm|proceed|okay|ok|cancel)\b", text):
+        return False
+    if re.search(r"\b\d+\s*(guest|guests|adult|adults|pax|night|nights)\b", text):
+        return False
+    if re.search(r"\b(jan|january|feb|february|mar|march|apr|april|may|jun|june|jul|july|aug|august|sep|sept|september|oct|october|nov|november|dec|december)\b", text):
+        return False
+    tokens = [token for token in re.split(r"[\s,._\-]+", text) if token]
+    if not tokens or len(tokens) > 8:
+        return False
+    room_markers = {
+        "room", "suite", "deluxe", "standard", "family", "single", "double",
+        "twin", "queen", "king", "matrimonial", "budget", "triple", "quad",
+    }
+    return any(token in room_markers for token in tokens)
+
+
+def _assistant_display_first_name(actor):
+    if not isinstance(actor, dict):
+        return ""
+    raw = str(actor.get("display_name") or "").strip()
+    if not raw:
+        return ""
+    token = raw.split()[0].strip(" ,.!?")
+    if not token or not re.fullmatch(r"[A-Za-z][A-Za-z\-']{0,24}", token):
+        return ""
+    return token
+
+
+def _assistant_ack_prefix(intent, message, actor=None):
+    normalized_intent = str(intent or "").strip().lower()
+    first_name = _assistant_display_first_name(actor)
+    name_line = ""
+    if first_name and str((actor or {}).get("role") or "").strip().lower() == "guest":
+        name_line = _pick_response_variant(
+            [
+                f"Got it, {first_name}.",
+                f"Sure, {first_name}.",
+                f"Alright, {first_name}.",
+            ],
+            seed_text=f"{message}|ack-name",
+        )
+    if name_line and (len(str(message or "").strip()) % 3 == 0):
+        return name_line
+    if normalized_intent == "plan_bayawan_stay":
+        return _pick_response_variant(
+            [
+                "Got it.",
+                "Sure.",
+                "Alright.",
+            ],
+            seed_text=f"{message}|ack-planning",
+        )
+    if normalized_intent in ("travel_guidance",):
+        return _pick_response_variant(
+            [
+                "Sure, I can help with that.",
+                "Got it, let me guide you.",
+                "No problem, here's a simple guide.",
+            ],
+            seed_text=f"{message}|ack-travel",
+        )
+    if normalized_intent in ("get_accommodation_recommendation", "gethotelrecommendation"):
+        return _pick_response_variant(
+            [
+                "Sure.",
+                "Got it.",
+                "No problem.",
+            ],
+            seed_text=f"{message}|ack-accom",
+        )
+    return _pick_response_variant(
+        [
+            "Sure.",
+            "Got it.",
+            "Alright.",
+        ],
+        seed_text=f"{message}|ack-generic",
+    )
+
+
+def _assistant_next_step_prompt(*, intent, params, memory):
+    normalized_intent = str(intent or "").strip().lower()
+    params = params if isinstance(params, dict) else {}
+    memory = memory if isinstance(memory, dict) else {}
+    if normalized_intent == "plan_bayawan_stay":
+        if _to_int(params.get("total_budget"), default=0) > 0:
+            return _pick_response_variant(
+                [
+                    "Want me to refine this plan or show booking links?",
+                    "I can adjust this further if you want.",
+                    "Need me to tune this for budget, family, or tours?",
+                ],
+                seed_text=f"{params}|next-planning",
+            )
+        return _pick_response_variant(
+            [
+                "Want me to continue this with your budget and trip details?",
+                "I can keep refining this once you share a few more details.",
+                "Need help filling in the missing trip details?",
+            ],
+            seed_text=f"{params}|next-planning-missing",
+        )
+    if normalized_intent == "get_recommendation":
+        return _pick_response_variant(
+            [
+                "Want me to show schedules or guide you to booking?",
+                "Want me to filter these tours by date?",
+                "I can help you choose one if you want.",
+            ],
+            seed_text=f"{params}|next-tours",
+        )
+    if normalized_intent in ("get_accommodation_recommendation", "gethotelrecommendation"):
+        return _pick_response_variant(
+            [
+                "Want me to open the official link for one of these?",
+                "I can refine these options if you want.",
+                "Need official booking or contact links for these?",
+            ],
+            seed_text=f"{params}|next-accom",
+        )
+    if normalized_intent == "travel_guidance":
+        if str(params.get("origin_hint") or memory.get("origin_hint") or "").strip():
+            return _pick_response_variant(
+                [
+                    "Share your exact starting point and I can tighten this route estimate.",
+                    "If you give your exact origin, I can make this guidance more precise.",
+                    "Want me to narrow this using your exact start location?",
+                ],
+                seed_text=f"{params}|next-travel-origin",
+            )
+        return _pick_response_variant(
+            [
+                "Want me to map this from your starting point?",
+                "Share where you're coming from and I'll guide you step by step.",
+                "I can make this more precise once I know your origin.",
+            ],
+            seed_text=f"{params}|next-travel",
+        )
+    if normalized_intent == "get_tourism_information":
+        return _pick_response_variant(
+            [
+                "Want directions from your location too?",
+                "I can also suggest nearby spots if you want.",
+                "Need me to show nearby options next?",
+            ],
+            seed_text=f"{params}|next-tourism-info",
+        )
+    if normalized_intent == "reporting_summary":
+        return _pick_response_variant(
+            [
+                "Want me to summarize a specific month or accommodation?",
+                "I can break this down by period if you want.",
+                "Need a quick comparison across recent months?",
+            ],
+            seed_text=f"{params}|next-reporting",
+        )
+    return ""
+
+
+def _build_contextual_ux_suggestions(*, intent, response_payload, actor_role):
+    normalized_intent = str(intent or "").strip().lower()
+    role = str(actor_role or "").strip().lower()
+    payload = response_payload if isinstance(response_payload, dict) else {}
+    if payload.get("needs_clarification"):
+        return []
+
+    if normalized_intent in ("get_accommodation_recommendation", "gethotelrecommendation"):
+        return []
+
+    if normalized_intent == "plan_bayawan_stay":
+        return [
+            {"label": "Make it cheaper", "value": "adjust to budget version"},
+            {"label": "Family-friendly", "value": "make it family-friendly"},
+            {"label": "Show matching tours", "value": "show available tours"},
+        ]
+
+    if normalized_intent == "travel_guidance":
+        return [
+            {"label": "Estimate travel time", "value": "how many minutes will it take"},
+            {"label": "From my location", "value": "how far is this from me"},
+            {"label": "How do I get there?", "value": "how do i get there"},
+        ]
+
+    if normalized_intent in ("get_tourism_information",):
+        return [
+            {"label": "Nearby places to eat", "value": "where can i eat nearby"},
+            {"label": "Add to trip plan", "value": "add this to my trip plan"},
+            {"label": "Show directions", "value": "how do i get there"},
+        ]
+
+    if normalized_intent in ("get_recommendation", "gettourrecommendation"):
+        return [
+            {"label": "View tour schedules", "value": "show tour schedules"},
+            {"label": "Book a tour", "value": "book tour"},
+            {"label": "Plan my stay", "value": "plan my stay"},
+        ]
+
+    if normalized_intent in ("reporting_summary",) and role in {"admin", "employee", "owner"}:
+        return [
+            {"label": "Latest monthly summary", "value": "show latest monthly report"},
+            {"label": "Per accommodation summary", "value": "show per accommodation report"},
+            {"label": "Tourist influx summary", "value": "show tourist influx summary"},
+        ]
+
+    return []
+
+
+def _inject_contextual_ux_suggestions(response_payload, *, intent, actor_role):
+    if not isinstance(response_payload, dict):
+        return response_payload
+    existing = response_payload.get("quick_replies")
+    if isinstance(existing, list) and len(existing) >= 3:
+        return response_payload
+    contextual = _build_contextual_ux_suggestions(
+        intent=intent,
+        response_payload=response_payload,
+        actor_role=actor_role,
+    )
+    if not contextual:
+        return response_payload
+    response_payload["quick_replies"] = _merge_quick_replies(
+        existing if isinstance(existing, list) else [],
+        contextual,
+        limit=3,
+    )
+    return response_payload
+
+
+def _assistant_followup_bridge(message, memory, intent):
+    text = _normalize_chat_text(message)
+    if not text:
+        return ""
+    active_topic = str((memory or {}).get("active_topic") or "").strip().lower()
+    normalized_intent = str(intent or "").strip().lower()
+    if re.search(r"\b(cheap|cheaper|lower budget|budget version|mas mura|barato)\b", text):
+        return _pick_response_variant(
+            [
+                "Got it. I'll adjust this to a lower-budget version.",
+                "Sure. I'll focus this on more budget-friendly options.",
+                "Alright. I'll make this more affordable.",
+            ],
+            seed_text=f"{message}|followup-cheaper",
+        )
+    if re.search(r"\b(family|family[- ]friendly|kids|children)\b", text):
+        return _pick_response_variant(
+            [
+                "Okay. I'll adjust this for a family setup.",
+                "Got it. I'll make this more family-friendly.",
+                "Sure. I'll prioritize family-friendly options.",
+            ],
+            seed_text=f"{message}|followup-family",
+        )
+    if re.search(r"\b(how far|distance|how many minutes|travel time)\b", text):
+        return _pick_response_variant(
+            [
+                "Got it. Let me check the distance for you.",
+                "Sure. I'll estimate the travel distance and time.",
+                "Alright. I'll map out the distance from your location.",
+            ],
+            seed_text=f"{message}|followup-distance",
+        )
+    if re.search(r"\b(show more|more options|more)\b", text):
+        return _pick_response_variant(
+            [
+                "Sure. Here are more options you can consider.",
+                "Got it. I'll pull more options.",
+                "No problem. Let me show additional options.",
+            ],
+            seed_text=f"{message}|followup-more",
+        )
+    if re.search(r"\b(show tours?|tour packages?)\b", text) and (
+        active_topic in {"planning", "tours"} or normalized_intent in {"plan_bayawan_stay", "get_recommendation"}
+    ):
+        return _pick_response_variant(
+            [
+                "Sure. Here are tours that match your current plan.",
+                "Got it. I'll show tours that fit your setup.",
+                "Alright. Here are tour options for your plan.",
+            ],
+            seed_text=f"{message}|followup-tours",
+        )
+    return ""
+
+
+def _apply_assistant_response_style(*, actor, intent, message, text, params, memory, needs_clarification=False, nlg_source=""):
+    if needs_clarification:
+        clarification = str(text or "").strip()
+        if not clarification:
+            return clarification
+        lowered = clarification.lower()
+        if any(token in lowered for token in ("clarify", "which one", "what", "could you")):
+            return clarification
+        return _pick_response_variant(
+            [
+                "I want to make sure I understood correctly. " + clarification,
+                "Could you clarify what you need help with? " + clarification,
+                "Just to confirm, what would you like help with? " + clarification,
+            ],
+            seed_text=f"{message}|clarification-style",
+        )
+    body = str(text or "").strip()
+    if not body:
+        return body
+    replacements = {
+        "Here are some places you might like based on your preferences:": "I found a few approved accommodations that match your request:",
+        "Please select an option to view room details or to create a booking preview.": "You can view details, check rooms, or create a cost preview.",
+        "I can guide you using the official accommodation pages below.": "You can continue through the accommodation's official page.",
+        "based on currently available hotels/inns (no preference filter yet)": "based on currently available approved accommodations",
+    }
+    for src, dst in replacements.items():
+        body = body.replace(src, dst)
+    # Preserve highly structured backend templates as-is.
+    lowered = body.lower()
+    if any(
+        marker in lowered
+        for marker in (
+            "great. here are the details i have so far:",
+            "booking receipt / summary",
+            "booking draft (not yet saved)",
+        )
+    ):
+        return body
+    normalized_nlg_source = str(nlg_source or "").strip().lower()
+    if normalized_nlg_source in {"openai_nlg", "gemini_nlg", "gemini_nlg_retry"} and "\n" not in body and len(body) <= 220:
+        return body
+
+    followup_line = _assistant_followup_bridge(message, memory, intent)
+    if followup_line and followup_line.lower() not in lowered:
+        body = f"{followup_line}\n{body}"
+        lowered = body.lower()
+
+    has_ack = bool(re.match(r"^(got it|sure|great|thanks|happy to help|sounds good|absolutely)\b", lowered))
+    if not has_ack:
+        ack = _assistant_ack_prefix(intent, message, actor=actor)
+        if "\n" in body:
+            body = f"{ack}\n{body}"
+        else:
+            body = f"{ack} {body}"
+        lowered = body.lower()
+
+    actor_role = str((actor or {}).get("role") or "").strip().lower()
+    next_step = _assistant_next_step_prompt(intent=intent, params=params, memory=memory)
+    if actor_role != "guest" and str(intent or "").strip().lower() in {
+        "get_recommendation",
+        "get_accommodation_recommendation",
+        "gethotelrecommendation",
+        "plan_bayawan_stay",
+    }:
+        next_step = ""
+    if next_step and next_step.lower() not in body.lower() and len(body) < 2200:
+        body = f"{body}\n\n{next_step}"
+    return body
+
+
+def _limit_assistant_quick_replies_for_guest(response_payload, *, limit=3):
+    if not isinstance(response_payload, dict):
+        return response_payload
+    qr = response_payload.get("quick_replies")
+    if not isinstance(qr, list) or not qr:
+        return response_payload
+    response_payload["quick_replies"] = _sanitize_quick_replies(qr, limit=max(1, min(int(limit), 3)))
+    return response_payload
+
+
+def _build_small_talk_payload(*, request, actor, message):
+    text = str(message or "").strip()
+    lowered = text.lower()
+    if not lowered:
+        return None
+
+    profile = _load_social_profile(request)
+    remembered_name = str(profile.get("first_name") or "").strip()
+    introduced_name = _extract_intro_first_name(text)
+    if introduced_name:
+        profile["first_name"] = introduced_name
+        _save_social_profile(request, profile)
+        remembered_name = introduced_name
+
+    has_greeting = bool(
+        re.search(
+            r"\b(hi|hello|hey|good morning|good afternoon|good evening|good day|yo)\b",
+            lowered,
+        )
+    )
+    asks_help = _contains_any_phrase(
+        lowered,
+        (
+            "can you help me",
+            "can u help me",
+            "are you available",
+            "can you assist",
+            "need help",
+            "what can you do",
+            "how can you help",
+            "assist me",
+            "show menu",
+            "show commands",
+        ),
+    )
+    says_thanks = bool(re.search(r"\b(thanks|thank you|salamat)\b", lowered))
+    asks_how_are_you = bool(re.search(r"\b(how are you|kumusta)\b", lowered))
+    says_sorry = bool(re.search(r"\b(sorry|apologies|pasensya)\b", lowered))
+
+    # Do not swallow actionable tourism queries as small-talk.
+    # Example: "can you help me plan my stay in bayawan?"
+    actionable_query = (
+        _is_stay_planning_request(lowered)
+        or _looks_like_tour_request(lowered)
+        or _is_dining_query(lowered)
+        or _is_travel_guidance_request(lowered)
+        or _is_reporting_summary_request(lowered)
+        or any(token in lowered for token in ("hotel", "inn", "accommodation", "where should i stay"))
+    )
+    if actionable_query and not (has_greeting and not asks_help):
+        return None
+
+    if not (has_greeting or asks_help or says_thanks or asks_how_are_you or says_sorry):
+        return None
+
+    role = str(actor.get("role") or "").strip().lower()
+    guest_quick_replies = [
+        "Plan my 10k stay",
+        "Show available tours",
+        "How far is this from me?",
+        "Show my tour bookings",
+    ]
+
+    if says_thanks and not (has_greeting or asks_help):
+        return {
+            "fulfillmentText": _pick_response_variant(
+                [
+                    "You're welcome. I’m here whenever you need help planning your Bayawan trip.",
+                    "Anytime. If you want, I can help with tours, directions, or stay planning next.",
+                    "Glad to help. I can continue with tours, places to stay, or nearby dining anytime.",
+                ],
+                seed_text=lowered,
+            ),
+            "quick_replies": guest_quick_replies if role == "guest" else ["Help", "Open dashboard"],
+        }
+
+    if asks_how_are_you:
+        base = _pick_response_variant(
+            [
+                "I’m doing well, thanks for asking.",
+                "I’m good and ready to help.",
+                "I’m doing great, and I’m here to help with your Bayawan plans.",
+            ],
+            seed_text=lowered,
+        )
+        next_line = (
+            "I can help you with tours, places to stay, directions, dining spots, or trip planning. What would you like first?"
+            if role == "guest"
+            else "How can I help you with your current tasks?"
+        )
+        return {
+            "fulfillmentText": f"{base} {next_line}",
+            "quick_replies": guest_quick_replies if role == "guest" else ["Help", "Open dashboard"],
+        }
+
+    if has_greeting or asks_help or says_sorry or introduced_name:
+        name_part = f", {remembered_name}" if remembered_name else ""
+        if role == "guest":
+            greeting_line = _pick_response_variant(
+                [
+                    f"Hi{name_part}. Welcome to Ibayaw Tour.",
+                    f"Hello{name_part}. Great to have you here at Ibayaw Tour.",
+                    f"Hey{name_part}. Happy to help with your Bayawan plans.",
+                ],
+                seed_text=f"{lowered}|social-greeting-line",
+            )
+            capability_line = _pick_response_variant(
+                [
+                    "I can help you explore Bayawan, check tours, suggest approved accommodations, guide directions, and plan your budget.",
+                    "I can help with tours, approved places to stay, directions, dining, and budget-based stay planning in Bayawan.",
+                    "I can guide you through tours, approved accommodations, travel directions, dining options, and practical trip planning.",
+                ],
+                seed_text=f"{lowered}|social-capability-line",
+            )
+            follow = _pick_response_variant(
+                [
+                    "What would you like to do first?",
+                    "How can I help with your trip today?",
+                    "What can I help you with right now?",
+                ],
+                seed_text=lowered,
+            )
+            return {
+                "fulfillmentText": f"{greeting_line} {capability_line} {follow}",
+                "quick_replies": guest_quick_replies,
+            }
+        role_help = _build_role_help_payload(actor)
+        return {
+            "fulfillmentText": _pick_response_variant(
+                [
+                    f"Hi{name_part}. I’m here and ready to help.",
+                    f"Hello{name_part}. I can help you with your current workspace tasks.",
+                ],
+                seed_text=lowered,
+            )
+            + " "
+            + str(role_help.get("fulfillmentText") or ""),
+            "quick_replies": role_help.get("quick_replies") if isinstance(role_help.get("quick_replies"), list) else ["Help"],
+        }
+
+    return None
 
 
 def _is_remember_preferences_command(message):
@@ -4393,12 +8320,12 @@ def _build_role_operational_snapshot(actor):
             owner_accom_qs = Accomodation.objects.filter(owner=user, is_active=True)
             accepted_accom_qs = owner_accom_qs.filter(approval_status="accepted")
             room_qs = Room.objects.filter(accommodation__in=accepted_accom_qs)
-            booking_qs = AccommodationBooking.objects.filter(accommodation__in=accepted_accom_qs)
+            reports_qs = OwnerMonthlyReport.objects.filter(accommodation__in=accepted_accom_qs).exclude(status="draft")
             return (
                 "Current snapshot: "
                 f"{owner_accom_qs.count()} accommodation(s), "
                 f"{room_qs.count()} room(s), "
-                f"{booking_qs.filter(status='pending').count()} pending booking(s)."
+                f"{reports_qs.count()} submitted monthly report(s)."
             )
 
         if role == "admin":
@@ -4441,16 +8368,20 @@ def _build_role_help_payload(actor):
                 f"{snapshot_block}"
                 "- Show my accommodations\n"
                 "- Show my rooms\n"
-                "- Show my bookings\n"
+                "- Update official links/images\n"
+                "- Submit monthly report\n"
                 "- Open reports and analytics\n"
                 "- Open Owner Hub\n"
                 "- Show tourism information about <place>\n\n"
-                "For registration/edits, use Owner Hub."
+                "For registration/edits, use Owner Hub.\n"
+                "For Tourism Office compliance, submit check-ins per room type in monthly reports."
             ),
             "quick_replies": [
                 "Show my accommodations",
                 "Show my rooms",
-                "Show my bookings",
+                "Update my accommodation links",
+                "Submit monthly report",
+                "How many available rooms today?",
                 "Open reports and analytics",
                 "Open Owner Hub",
             ],
@@ -4471,7 +8402,8 @@ def _build_role_help_payload(actor):
                 "Open traveler surveys",
                 "Show pending accommodations",
                 "Show pending owner accounts",
-                "Open accommodation bookings",
+                "How to activate or deactivate listings?",
+                "Open accommodation links",
             ],
         }
     if role == "employee":
@@ -4487,6 +8419,7 @@ def _build_role_help_payload(actor):
                 "Open dashboard",
                 "Open tour list",
                 "Open assigned tours",
+                "How to manage tourist records?",
                 "Open tour calendar",
                 "Open map",
                 "Open profile",
@@ -4494,58 +8427,144 @@ def _build_role_help_payload(actor):
         }
     return {
         "fulfillmentText": (
-            "Guest assistant mode is active. I can help you find and book hotels/inns in Bayawan.\n"
-            "Try: recommend a hotel in Bayawan for 2 guests under 2000."
+            "You're in guest assistant mode. I can help you discover approved accommodations, plan a Bayawan stay, and guide directions with travel estimates.\n"
+            "Try this: suggest a hotel in Bayawan for 2 guests under 2000, or ask how far a place is from your location."
         ),
         "quick_replies": [
             "Recommend a hotel in Bayawan for 2 guests under 2000",
+            "How far is Bayawan City Plaza from me?",
+            "I'm from Manila, how do I get to Bayawan?",
+            "How to search hotels and inns?",
             "Open map",
             "Show tourism information in Bayawan",
-            "Show my bookings",
+            "Show my tour bookings",
             "Remember my preferences",
             "Forget my preferences",
         ],
     }
 
 
-def _build_out_of_scope_payload(actor):
+def _build_out_of_scope_payload(actor, message=""):
     role = str(actor.get("role") or "").strip().lower()
+    seed = str(message or "")
     if role == "owner":
         return {
-            "fulfillmentText": (
-                "That request is outside the scope of this owner assistant.\n"
-                "I can help with owner operations such as rooms, bookings, performance summaries, and owner navigation."
+            "fulfillmentText": _pick_response_variant(
+                [
+                    "I might have missed what you need there.\nI can still help with owner tasks like managing accommodations, updating links/images, monthly reports, and Owner Hub navigation.",
+                    "I want to guide you correctly.\nI can help with owner workflows such as accommodation updates, room management, monthly reports, and Owner Hub actions.",
+                    "I’m not fully sure which owner task you mean yet.\nI can assist with accommodation management, link/image updates, reports, and Owner Hub navigation.",
+                ],
+                seed_text=f"{seed}|owner-oos",
             ),
-            "quick_replies": ["Help", "Show my rooms", "Show my bookings", "Open Owner Hub"],
+            "quick_replies": ["Help", "Show my rooms", "Submit monthly report", "Open Owner Hub"],
         }
     if role == "admin":
         return {
-            "fulfillmentText": (
-                "That request is outside the scope of this admin assistant.\n"
-                "I can help with moderation, approvals, accommodation bookings, survey results, and admin navigation."
+            "fulfillmentText": _pick_response_variant(
+                [
+                    "I want to make sure I guide you to the right admin task.\nI can help with approvals, visibility checks, surveys, and admin navigation.",
+                    "I may have missed your exact admin intent.\nI can help with approvals, records visibility, survey monitoring, and dashboard navigation.",
+                    "Let’s narrow that down so I can help quickly.\nI can assist with approvals, moderation checks, surveys, and admin pages.",
+                ],
+                seed_text=f"{seed}|admin-oos",
             ),
             "quick_replies": ["Help", "Show pending accommodations", "Show pending owner accounts", "Open dashboard"],
         }
     if role == "employee":
         return {
-            "fulfillmentText": (
-                "That request is outside the scope of this employee assistant.\n"
-                "I can help with assigned tours, tour calendar, accommodations, profile, and employee navigation."
+            "fulfillmentText": _pick_response_variant(
+                [
+                    "I’m not fully sure which employee task you meant.\nI can help with assigned tours, tour calendar, accommodations, profile, and dashboard navigation.",
+                    "I want to make sure I route you to the right employee task.\nI can help with assigned tours, calendar, accommodations, profile, and dashboard actions.",
+                    "I may have missed your exact request.\nI can assist with assigned tours, tour calendar, accommodations, profile, and employee dashboard navigation.",
+                ],
+                seed_text=f"{seed}|employee-oos",
             ),
             "quick_replies": ["Help", "Open assigned tours", "Open tour calendar", "Open dashboard"],
         }
     return {
-        "fulfillmentText": (
-            "That request is outside this system's scope.\n"
-            "I can assist with Bayawan tourism information, hotel/inn recommendations, booking, billing, and booking status."
+        "fulfillmentText": _pick_response_variant(
+            [
+                "I’m not completely sure which part you want yet, but I can help.\nYou can ask me about Bayawan trip planning, approved accommodations, tour packages, directions, nearby dining, or tourism information.",
+                "I want to make sure I understood you correctly.\nI can help with stay planning, approved accommodations, tours, directions, nearby dining, and tourism information.",
+                "I can still help with this.\nWould you like assistance with trip planning, approved stays, tour packages, directions, dining, or tourism details in Bayawan?",
+            ],
+            seed_text=f"{seed}|guest-oos",
         ),
         "quick_replies": [
-            "Help",
-            "Recommend a hotel in Bayawan for 2 guests under 2000",
-            "Show tourism information in Bayawan",
-            "View my accommodation bookings",
+            "Plan my Bayawan trip",
+            "Show available tours",
+            "Recommend an approved accommodation",
+            "How far is this from me?",
         ],
     }
+
+
+def _clarification_fallback(message):
+    prompt = str(message or "").strip()
+    if not prompt:
+        prompt = "Could you clarify what you need help with?"
+    return f"I want to make sure I understood correctly. {prompt}"
+
+
+def _role_aware_clarification_payload(actor):
+    role = str((actor or {}).get("role") or "").strip().lower()
+    if role == "owner":
+        return {
+            "text": _clarification_fallback(
+                "As an owner, do you need help with accommodation details, links/images, rooms, or monthly reports?"
+            ),
+            "quick_replies": [
+                {"label": "Accommodation Details", "value": "show my accommodations"},
+                {"label": "Links/Images", "value": "update my accommodation links"},
+                {"label": "Rooms", "value": "show my rooms"},
+                {"label": "Monthly Reports", "value": "submit monthly report"},
+            ],
+        }
+    if role == "employee":
+        return {
+            "text": _clarification_fallback(
+                "As staff, do you want assigned tours, assignment details, or tourist records support?"
+            ),
+            "quick_replies": [
+                {"label": "Assigned Tours", "value": "show my assigned tours"},
+                {"label": "Open Assignment", "value": "open may 5 assignment"},
+                {"label": "Tour Calendar", "value": "open tour calendar"},
+                {"label": "Tourist Records", "value": "open dashboard"},
+            ],
+        }
+    if role == "admin":
+        return {
+            "text": _clarification_fallback(
+                "For admin monitoring, do you need summaries, reports, or tourism monitoring data?"
+            ),
+            "quick_replies": [
+                {"label": "Summary", "value": "show this month's summary"},
+                {"label": "Reports", "value": "show accommodation reports"},
+                {"label": "Tourist Influx", "value": "show tourist influx"},
+                {"label": "Dashboard", "value": "open dashboard"},
+            ],
+        }
+    return {
+        "text": _clarification_fallback(
+            "Do you want help with tours, accommodations, directions, or full trip planning?"
+        ),
+        "quick_replies": [
+            {"label": "Tours", "value": "show available tours"},
+            {"label": "Accommodations", "value": "show accommodation recommendations"},
+            {"label": "Directions", "value": "how to get to bayawan"},
+            {"label": "Plan Stay", "value": "plan my bayawan trip"},
+        ],
+    }
+
+
+def _no_data_fallback():
+    return "No results found for that request. Try adjusting your filters."
+
+
+def _system_fallback():
+    return "Something went wrong. Let me try that again."
 
 
 def _is_open_dashboard_command(message):
@@ -4743,6 +8762,19 @@ def _detect_owner_support_topic(message):
 
     if _contains_any_phrase(text, ("forgot my password", "forgot password", "reset password", "can't log in", "cannot log in", "cant log in", "nakalimutan ko password", "di makalogin", "dili ko ka log in")):
         return "owner_password_help"
+    if _contains_any_phrase(
+        text,
+        (
+            "is my accommodation approved",
+            "is my listing approved",
+            "listing status",
+            "approval status of my accommodation",
+            "status of my listing",
+            "approved na ba ang listing ko",
+            "na approve na ba accommodation ko",
+        ),
+    ):
+        return "owner_listing_status"
     if _contains_any_phrase(text, ("listing not showing", "listing is missing", "my listing is missing", "not showing on the website", "hindi lumalabas ang listing", "listing missing", "wala nagpakita akong listing", "di makita listing")):
         return "owner_listing_visibility"
     if _contains_any_phrase(text, ("cannot update room", "can't update room", "cant update room", "cannot edit room", "i cannot update my room details", "i-edit ang room details", "edit room details after posting", "di ko ma update room", "dili ma edit room")):
@@ -4766,61 +8798,60 @@ def _detect_owner_support_topic(message):
     if _contains_any_phrase(text, ("edit the amenities of a room", "edit amenities", "room amenities", "amenities sa kwarto", "amenities ng room")):
         return "owner_edit_room_amenities"
 
-    if any(
-        phrase in text
-        for phrase in (
-            "view bookings",
-            "show bookings",
-            "check bookings",
-            "bookings for my accommodation",
-            "makikita ang bookings",
-            "bookings ng accommodation ko",
-        )
+    if _contains_any_phrase(
+        text,
+        (
+            "monthly report",
+            "submit monthly report",
+            "owner monthly report",
+            "tourism office report",
+            "tourism monitoring report",
+            "report submission",
+            "submit report",
+            "where do i input room check ins",
+            "where do i input room check-ins",
+            "how do i report room usage",
+            "add check-ins for",
+            "room check-ins",
+        ),
     ):
-        return "owner_view_bookings"
-    if _contains_any_phrase(text, ("who reserved", "who booked", "guest reservation details", "kinsa nagbook", "sino nag book")):
-        return "owner_booking_guest_details"
-    if _contains_any_phrase(text, ("confirm a guest reservation", "confirm reservation", "approve reservation", "i confirm ang reservation", "aprubahan reservation")):
-        return "owner_confirm_reservation"
-    if _contains_any_phrase(text, ("pending reservations", "pending bookings", "pending ang bookings", "pending reservations ko")):
-        return "owner_pending_reservations"
-    if _contains_any_phrase(text, ("booking is cancelled", "cancelled booking", "canceled booking", "kanselado booking", "cancelled na reservation")):
-        return "owner_cancelled_reservations"
+        return "owner_submit_monthly_report"
 
     if _contains_any_phrase(text, ("update room availability", "availability update", "reopen a room", "re-open a room", "reopen room", "iupdate availability sa room", "ablihi balik ang kwarto")):
         return "owner_update_availability"
+    if _contains_any_phrase(
+        text,
+        (
+            "how many available rooms today",
+            "available rooms today",
+            "rooms available today",
+            "how many rooms are available today",
+            "available ba rooms today",
+            "pila ka available rooms karon",
+        ),
+    ):
+        return "owner_available_rooms_today"
     if _contains_any_phrase(text, ("still showing as available", "why is my room still showing as available", "still available", "nganong available gihapon", "bakit available pa rin")):
         return "owner_room_still_available_issue"
     if _contains_any_phrase(text, ("block dates", "block date", "close dates", "unavailable dates", "i block ang dates", "isarado ang petsa")):
         return "owner_block_dates"
 
-    if _contains_any_phrase(text, ("payment status of reservations", "check if a guest already paid", "payment status", "already paid", "bayad na ba ang guest", "status sa bayad")):
-        return "owner_payment_status"
-    if _contains_any_phrase(text, ("billing details for a booking", "view billing details", "billing details", "detalye sa billing", "billing details ng booking")):
-        return "owner_billing_details"
-    if _contains_any_phrase(text, ("booking transactions", "transactions", "booking transaction", "transaksyon sa booking", "transaction history")):
-        return "owner_transactions"
-    if any(
-        phrase in text
-        for phrase in (
-            "guests book directly from my listing",
-            "book directly from my listing",
-            "users book from my accommodation page",
-            "how do guests book my rooms",
-            "reserve directly from my listing",
-            "booking work for my accommodation",
-            "can guests book directly",
-            "pwede ba magbook diretso sa listing ko",
-            "makabook ba diretso ang guests sa listing nako",
-        )
+    if _contains_any_phrase(
+        text,
+        (
+            "official page link",
+            "facebook link",
+            "update listing links",
+            "update contact links",
+            "external booking link",
+        ),
     ):
-        return "owner_direct_booking_flow"
+        return "owner_listing_update"
 
-    if compact_text in {"add room", "update price", "view bookings", "listing not showing", "room unavailable how"}:
+    if compact_text in {"add room", "update price", "listing not showing", "room unavailable how"}:
         mapping = {
             "add room": "owner_add_room",
             "update price": "owner_update_room_price",
-            "view bookings": "owner_view_bookings",
             "listing not showing": "owner_listing_visibility",
             "room unavailable how": "owner_mark_room_unavailable",
         }
@@ -4906,6 +8937,101 @@ def _build_owner_booking_payment_summary(user, *, max_rows=5):
             )
         )
         shown += 1
+    return "\n".join(lines)
+
+
+def _build_owner_booking_count_today_summary(user):
+    today = timezone.localdate()
+    active_today_qs = AccommodationBooking.objects.filter(
+        accommodation__owner=user,
+        accommodation__is_active=True,
+        check_in__lte=today,
+        check_out__gt=today,
+    ).exclude(status__in=["declined", "cancelled"])
+
+    room_ids_today = {
+        int(room_id)
+        for room_id in active_today_qs.values_list("room_id", flat=True)
+        if room_id
+    }
+    booking_count_today = active_today_qs.count()
+    pending_today = active_today_qs.filter(status="pending").count()
+    confirmed_today = active_today_qs.filter(status="confirmed").count()
+
+    lines = [
+        f"Today ({today.isoformat()}), {len(room_ids_today)} room(s) under your listing(s) have active bookings.",
+        (
+            f"Booking rows affecting today: total {booking_count_today}, "
+            f"confirmed {confirmed_today}, pending {pending_today}."
+        ),
+        "Use Monthly Reports to submit Tourism Office monitoring updates.",
+    ]
+    return "\n".join(lines)
+
+
+def _build_owner_available_rooms_today_summary(user):
+    today = timezone.localdate()
+    accepted_qs = Accomodation.objects.filter(
+        owner=user,
+        is_active=True,
+        approval_status="accepted",
+    )
+    if not accepted_qs.exists():
+        return (
+            "I could not find an accepted accommodation under your account yet.\n"
+            "Complete listing approval first, then room availability can be monitored from your dashboard."
+        )
+
+    rooms_qs = Room.objects.filter(accommodation__in=accepted_qs)
+    available_rooms_qs = rooms_qs.filter(status="AVAILABLE")
+    unavailable_rooms_qs = rooms_qs.exclude(status="AVAILABLE")
+    active_today_bookings_qs = AccommodationBooking.objects.filter(
+        accommodation__in=accepted_qs,
+        check_in__lte=today,
+        check_out__gt=today,
+    ).exclude(status__in=["declined", "cancelled"])
+    booked_room_ids = {
+        int(room_id)
+        for room_id in active_today_bookings_qs.values_list("room_id", flat=True)
+        if room_id
+    }
+    physically_available_now = max(available_rooms_qs.count() - len(booked_room_ids), 0)
+    lines = [
+        f"Room availability snapshot for today ({today.isoformat()}):",
+        (
+            f"- Total rooms: {rooms_qs.count()} | Marked AVAILABLE: {available_rooms_qs.count()} | "
+            f"Unavailable/Maintenance: {unavailable_rooms_qs.count()}"
+        ),
+        (
+            f"- Rooms currently occupied by active bookings: {len(booked_room_ids)} | "
+            f"Rooms likely available now: {physically_available_now}"
+        ),
+        "Use Manage Rooms to adjust status and Owner Bookings for booking-level checks.",
+    ]
+    return "\n".join(lines)
+
+
+def _build_owner_listing_status_summary(user):
+    qs = Accomodation.objects.filter(owner=user, is_active=True).order_by("-submitted_at", "company_name")
+    if not qs.exists():
+        return (
+            "No active accommodation listing is linked to your owner account yet.\n"
+            "Use Accommodation Registration to submit your first listing."
+        )
+    counts = Counter(str(v or "").strip().lower() for v in qs.values_list("approval_status", flat=True))
+    lines = [
+        (
+            "Listing approval status snapshot: "
+            f"Accepted {counts.get('accepted', 0)}, "
+            f"Pending {counts.get('pending', 0)}, "
+            f"Declined {counts.get('declined', 0)}."
+        ),
+        "Your latest listings:",
+    ]
+    for accom in qs[:5]:
+        lines.append(
+            f"- {accom.company_name} | {str(accom.approval_status or '').title()} | {accom.location}"
+        )
     return "\n".join(lines)
 
 
@@ -5053,14 +9179,14 @@ def _build_owner_rooms_summary(user, *, max_rows=12):
             break
         accom = getattr(room, "accommodation", None)
         accom_name = str(getattr(accom, "company_name", "") or "Accommodation").strip()
-        room_name = str(getattr(room, "room_name", "") or f"Room {room.room_id}").strip()
+        room_name = str(getattr(room, "room_name", "") or "Room").strip()
         price = _to_decimal(getattr(room, "price_per_night", 0), default=Decimal("0"))
         capacity = _to_int(getattr(room, "person_limit", 0), default=0)
         current = _to_int(getattr(room, "current_availability", 0), default=0)
         status = str(getattr(room, "status", "") or "").strip().title() or "Unknown"
         lines.append(
             (
-                f"- {accom_name} | {room_name} (Room {room.room_id}) | "
+                f"- {accom_name} | {room_name} | "
                 f"PHP {price:.2f}/night | Capacity: {capacity} pax | "
                 f"Available: {current} | Status: {status}"
             )
@@ -5215,8 +9341,8 @@ def _is_admin_accommodation_bookings_command(message):
     return _contains_any_phrase(
         message,
         (
-            "open accommodation bookings",
-            "show accommodation bookings",
+            "open accommodation links",
+            "show accommodation links",
             "hotel bookings",
             "inn bookings",
             "room bookings",
@@ -5224,7 +9350,7 @@ def _is_admin_accommodation_bookings_command(message):
             "accommodation reservations",
             "hotel reservations",
             "open reservations",
-            "pakita accommodation bookings",
+            "pakita accommodation links",
         ),
     )
 
@@ -5370,10 +9496,100 @@ def _is_employee_assigned_tours_command(message):
             "unsa nga tour ang assigned nako",
             "unsa akong assigned tour package",
             "tasks for tours",
+            "what are my tasks today",
+            "my tasks today",
+            "tasks today",
             "pakita assigned tours",
         ),
     )
 
+
+def _is_employee_open_assignment_command(message):
+    text = _normalize_chat_text(message)
+    if not text:
+        return False
+    if re.search(r"\bopen\b.*\bassignment\b", text):
+        return True
+    if re.search(r"\bassignment\b.*\b(open|details?)\b", text):
+        return True
+    if re.search(r"\b(open|view)\s+\w+\s+\d{1,2}\s+assignment\b", text):
+        return True
+    if re.search(r"\bopen\b.*\b(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\s+\d{1,2}\b.*\bone\b", text):
+        return True
+    return False
+
+
+def _is_employee_assignment_update_command(message):
+    text = _normalize_chat_text(message)
+    if not text:
+        return False
+    if bool(re.fullmatch(r"\s*(?:ok(?:ay)?\s+)?(accept|decline)\s*(?:that|this|it)?\s*", text)):
+        return True
+    if not bool(re.search(r"\b(accept|decline)\b", text)):
+        return False
+    if "assignment" in text:
+        return True
+    return bool(re.search(r"\b(that|this|it)\b", text))
+
+
+def _resolve_employee_record(request, actor):
+    employee = actor.get("employee")
+    if employee is None:
+        employee_id = request.session.get("employee_id") if hasattr(request, "session") else None
+        if employee_id:
+            employee = Employee.objects.filter(emp_id=employee_id).first()
+    return employee
+
+
+def _resolve_employee_assignment_row(request, actor, sched_id_hint=""):
+    assignment, _ = _resolve_employee_assignment_row_with_meta(
+        request,
+        actor,
+        sched_id_hint=sched_id_hint,
+        target_date=None,
+    )
+    return assignment
+
+
+def _resolve_employee_assignment_row_with_meta(request, actor, sched_id_hint="", target_date=None):
+    employee = _resolve_employee_record(request, actor)
+    if employee is None:
+        return None, "none"
+    qs = (
+        TourAssignment.objects.select_related("schedule", "schedule__tour")
+        .filter(employee=employee)
+        .order_by("-assigned_date", "-id")
+    )
+    if not qs.exists():
+        return None, "none"
+    sched_id = str(sched_id_hint or "").strip()
+    if sched_id:
+        picked = qs.filter(schedule__sched_id__iexact=sched_id).first()
+        if picked is not None:
+            return picked, "sched_id_exact"
+
+    if target_date is not None:
+        exact_date_pick = qs.filter(schedule__start_time__date=target_date).order_by("schedule__start_time", "-id").first()
+        if exact_date_pick is not None:
+            return exact_date_pick, "date_exact"
+
+        assignment_rows = [row for row in qs[:50] if getattr(row, "schedule", None) is not None]
+        nearest_row = None
+        nearest_diff = None
+        for row in assignment_rows:
+            schedule = getattr(row, "schedule", None)
+            schedule_start = getattr(schedule, "start_time", None) if schedule is not None else None
+            if schedule_start is None:
+                continue
+            schedule_date = timezone.localtime(schedule_start).date()
+            diff = abs((schedule_date - target_date).days)
+            if nearest_diff is None or diff < nearest_diff:
+                nearest_row = row
+                nearest_diff = diff
+        if nearest_row is not None:
+            return nearest_row, "date_nearest"
+
+    return qs.first(), "latest"
 
 def _build_employee_assigned_tours_summary(request, actor, *, max_rows=5):
     employee = actor.get("employee")
@@ -5532,6 +9748,18 @@ def _detect_employee_support_topic(message):
         return "employee_monitoring_dashboard_help"
     if _contains_any_phrase(text, ("can i update records from my account", "update records from my account", "pwede ba ako mag update ng records", "pwede ba ko mag update og records")):
         return "employee_record_update_help"
+    if _contains_any_phrase(
+        text,
+        (
+            "how to manage tourist records",
+            "how do i manage tourist records",
+            "process tourist records",
+            "workflow for tourist records",
+            "unsaon pag manage sa tourist records",
+            "paano i-manage ang tourist records",
+        ),
+    ):
+        return "employee_tourist_records_workflow_help"
 
     if _contains_any_phrase(text, ("tourist records", "current tourists", "tourist arrivals", "tourist information records", "tourist by name", "tourist record", "records ng tourist", "listahan sa turista")):
         return "employee_tourist_monitoring"
@@ -5718,6 +9946,8 @@ def _extract_tour_selection_index(message):
     for token, idx in ordinal_map.items():
         if re.search(rf"\b{re.escape(token)}\b", text):
             return idx
+    if re.search(r"\bthat one\b", text) or re.search(r"\bthat tour\b", text):
+        return 1
 
     # Accept "book #1", "book number 2", "book option 3", or plain "book 1".
     idx_match = re.search(
@@ -5729,6 +9959,47 @@ def _extract_tour_selection_index(message):
         return _to_int(idx_match.group(1), default=0)
 
     return 0
+
+
+def _is_guest_tour_interest_followup(message):
+    text = _normalize_chat_text(message)
+    if not text:
+        return False
+    if not any(token in text for token in ("tour", "trail", "highlights", "falls", "package")):
+        return False
+    interest_markers = (
+        "looks nice",
+        "looks good",
+        "i like",
+        "id like",
+        "i want",
+        "that one",
+        "the first one",
+        "book that",
+    )
+    return any(marker in text for marker in interest_markers)
+
+
+def _extract_tour_interest_hint(message):
+    text = str(message or "").strip()
+    if not text:
+        return ""
+    normalized = re.sub(r"\s+", " ", text).strip()
+    match = re.search(
+        r"\b(?:that|the)?\s*([a-z0-9][a-z0-9\s\-]{2,80})\s+(?:tour|trail|package)\b",
+        normalized,
+        flags=re.IGNORECASE,
+    )
+    if match:
+        return str(match.group(1) or "").strip(" .,!?:;")
+    # Fallback to tour-name matcher using the full phrase.
+    for tour in Tour_Add.objects.filter(publication_status="published").order_by("tour_name")[:30]:
+        tour_name = str(getattr(tour, "tour_name", "") or "").strip()
+        if not tour_name:
+            continue
+        if _normalize_chat_text(tour_name) in _normalize_chat_text(text):
+            return tour_name
+    return ""
 
 
 def _extract_numeric_option_index(message):
@@ -5800,6 +10071,37 @@ def _merge_quick_replies(*reply_lists, limit=4):
 
 def _slot_quick_replies(slot_name):
     slot = str(slot_name or "").strip().lower()
+    if slot == "total_budget":
+        return [
+            {"label": "PHP 5000", "value": "budget 5000"},
+            {"label": "PHP 8000", "value": "budget 8000"},
+            {"label": "PHP 10000", "value": "budget 10000"},
+        ]
+    if slot == "duration_days":
+        return [
+            {"label": "2 days", "value": "2 days"},
+            {"label": "3 days", "value": "3 days"},
+            {"label": "4 days", "value": "4 days"},
+        ]
+    if slot == "party_type":
+        return [
+            {"label": "Solo", "value": "solo"},
+            {"label": "Couple", "value": "couple"},
+            {"label": "Family", "value": "family"},
+            {"label": "Group", "value": "group"},
+        ]
+    if slot == "accommodation_needed":
+        return [
+            {"label": "Include Accommodation", "value": "with accommodation"},
+            {"label": "Activities Only", "value": "no accommodation needed"},
+        ]
+    if slot == "experience_style":
+        return [
+            {"label": "Relaxing", "value": "relaxing"},
+            {"label": "Adventure", "value": "adventure"},
+            {"label": "Cultural", "value": "cultural"},
+            {"label": "Mixed", "value": "mixed"},
+        ]
     if slot == "company_type":
         return [
             {"label": "Hotel", "value": "hotel"},
@@ -5834,33 +10136,11 @@ def _slot_quick_replies(slot_name):
 
 
 def _build_recommendation_assist_quick_replies(cached_rows):
-    if not isinstance(cached_rows, list) or not cached_rows:
-        return []
-    rows = [row for row in cached_rows if isinstance(row, dict)]
-    if not rows:
-        return []
-    replies = []
-    first_rank = _to_int(rows[0].get("rank"), default=1)
-    replies.append({"label": f"Why Option {first_rank}", "value": f"why option {first_rank}"})
-    if len(rows) >= 2:
-        top_n = min(3, len(rows))
-        replies.append({"label": f"Compare Top {top_n}", "value": f"compare top {top_n}"})
-    return replies
+    return []
 
 
 def _build_post_compare_quick_replies(cached_rows, top_n=3):
-    rows = [row for row in (cached_rows or []) if isinstance(row, dict)]
-    if not rows:
-        return []
-    n = max(2, min(_to_int(top_n, default=3), len(rows), 5))
-    replies = []
-    for row in rows[:n]:
-        rank = _to_int(row.get("rank"), default=0)
-        if rank > 0:
-            replies.append({"label": f"Why Option {rank}", "value": f"why option {rank}"})
-    first_rank = _to_int(rows[0].get("rank"), default=1)
-    replies.append({"label": f"Book Option {first_rank}", "value": str(first_rank)})
-    return replies
+    return []
 
 
 def _build_why_option_text(cached_rows, option_index):
@@ -5927,13 +10207,18 @@ def _build_accommodation_selection_cache(items):
         if not isinstance(item, dict):
             continue
         room_id = _to_int(item.get("room_id"), default=0)
-        if room_id <= 0:
+        accom_id = _to_int(item.get("accom_id"), default=0)
+        item_type = str(item.get("item_type") or item.get("kind") or ("room" if room_id > 0 else "accommodation")).strip().lower()
+        if room_id <= 0 and accom_id <= 0:
             continue
         rank = _to_int(item.get("rank"), default=idx)
         rows.append(
             {
                 "rank": rank if rank > 0 else idx,
                 "room_id": room_id,
+                "accom_id": accom_id,
+                "item_type": item_type,
+                "accommodation_name": str(item.get("accommodation_name") or "").strip()[:120],
                 "title": str(item.get("title") or "").strip()[:120],
                 "subtitle": str(item.get("subtitle") or "").strip()[:240],
                 "match_strength": str(item.get("match_strength") or "").strip()[:24],
@@ -5962,7 +10247,7 @@ def _is_accommodation_detail_query(message):
     text = str(message or "").strip().lower()
     if not text:
         return False
-    if any(token in text for token in ("why option", "compare top", "book option")):
+    if any(token in text for token in ("why option", "compare top", "book option", "preview option")):
         return False
     if any(token in text for token in ("why", "explain", "reason")):
         return False
@@ -6020,6 +10305,68 @@ def _extract_detail_room_id(message):
     return 0
 
 
+def _extract_detail_room_type_hint(message):
+    text = str(message or "").strip().lower()
+    if not text:
+        return ""
+    for token in ("standard", "deluxe", "matrimonial", "family", "suite", "single", "double", "twin"):
+        if re.search(rf"\b{re.escape(token)}\b", text):
+            return token
+    return ""
+
+
+def _extract_detail_accommodation_name_hint(message):
+    text = _normalize_chat_text(message)
+    if not text:
+        return ""
+    patterns = [
+        r"\b(?:room|details?|show details|more about)\s+(?:in|for|at)\s+([a-z0-9][a-z0-9\s&\-\']{2,80})\b",
+        r"\b(?:at|in)\s+([a-z0-9][a-z0-9\s&\-\']{2,80})\b",
+    ]
+    for pattern in patterns:
+        match = re.search(pattern, text, flags=re.IGNORECASE)
+        if not match:
+            continue
+        candidate = " ".join(str(match.group(1) or "").split()).strip(" .,!?")
+        if candidate:
+            return candidate
+    return ""
+
+
+def _resolve_detail_room_from_hints(*, message="", cached_rows=None):
+    text = str(message or "").strip().lower()
+    cached_rows = cached_rows if isinstance(cached_rows, list) else []
+    room_type_hint = _extract_detail_room_type_hint(text)
+    accommodation_hint = _extract_detail_accommodation_name_hint(message)
+
+    if cached_rows:
+        for row in cached_rows:
+            if not isinstance(row, dict):
+                continue
+            title = str(row.get("title") or "").strip().lower()
+            room_name = title.split(" - ", 1)[1].strip() if " - " in title else ""
+            if room_type_hint and room_type_hint not in room_name:
+                continue
+            if accommodation_hint and accommodation_hint.lower() not in title:
+                continue
+            room_id = _to_int(row.get("room_id"), default=0)
+            if room_id > 0:
+                return room_id
+
+    qs = Room.objects.select_related("accommodation").filter(
+        accommodation__approval_status="accepted",
+        accommodation__is_active=True,
+    )
+    if accommodation_hint:
+        qs = qs.filter(accommodation__company_name__icontains=accommodation_hint)
+    if room_type_hint:
+        qs = qs.filter(room_name__icontains=room_type_hint)
+    if not room_type_hint and not accommodation_hint:
+        return 0
+    room = qs.order_by("price_per_night", "room_id").first()
+    return _to_int(getattr(room, "room_id", 0), default=0)
+
+
 def _normalize_amenities_for_display(raw_value):
     text = str(raw_value or "").strip()
     if not text:
@@ -6075,16 +10422,19 @@ def _build_guest_room_detail_payload(message, cached_rows):
         first_row = cached_rows[0] if isinstance(cached_rows, list) and cached_rows else {}
         if isinstance(first_row, dict):
             resolved_room_id = _to_int(first_row.get("room_id"), default=0)
+    if resolved_room_id <= 0:
+        resolved_room_id = _resolve_detail_room_from_hints(message=message, cached_rows=cached_rows)
 
     if resolved_room_id <= 0:
         return {
             "fulfillmentText": (
                 "I can show room details once you provide a room reference.\n"
-                "Please send a Room ID (example: Room 112) or an option number from your latest recommendation list."
+                "Please share a room type (for example: Standard Twin Room or Deluxe Room), "
+                "an accommodation name, or an option number from your latest recommendation list."
             ),
             "quick_replies": [
-                "Show default hotel suggestions",
-                "Recommend a hotel in Bayawan for 2 guests",
+                "show details for standard room",
+                "show details for deluxe room",
             ],
             "needs_clarification": True,
             "missing_slot": "room_reference",
@@ -6102,12 +10452,12 @@ def _build_guest_room_detail_payload(message, cached_rows):
     if room is None:
         return {
             "fulfillmentText": (
-                f"I couldn't find room {resolved_room_id} in the currently accepted hotel/inn listings.\n"
-                "Please send another room reference or refresh recommendations."
+                "I couldn't find that room in the currently accepted hotel/inn listings.\n"
+                "Please try a room type (Standard/Deluxe/Matrimonial/Family) or specify the accommodation name."
             ),
             "quick_replies": [
-                "Show default hotel suggestions",
-                "Recommend a hotel in Bayawan for 2 guests",
+                "show details for standard room",
+                "show details for family room",
             ],
         }
 
@@ -6119,7 +10469,7 @@ def _build_guest_room_detail_payload(message, cached_rows):
     lines = [
         (
             f"Room details: {getattr(accom, 'company_name', 'Accommodation')} - "
-            f"{room.room_name} (Room {room.room_id})"
+            f"{room.room_name}"
         ),
         f"Location: {getattr(accom, 'location', '') or 'Not specified'}",
         f"Type: {str(getattr(accom, 'company_type', '') or 'Accommodation').title()}",
@@ -6145,29 +10495,625 @@ def _build_guest_room_detail_payload(message, cached_rows):
     if description:
         lines.append(f"Description: {description}")
 
+    link_actions = _build_accommodation_link_actions(room=room, max_actions=5)
+    link = ""
+    link_label = ""
+    if link_actions:
+        first_action = link_actions[0] if isinstance(link_actions[0], dict) else {}
+        link = str(first_action.get("url") or "")
+        link_label = str(first_action.get("label") or "")
     quick_replies = [
-        {"label": "Book This Room", "value": f"book room {room.room_id}"},
-        {"label": "Why Option 1", "value": "why option 1"},
-        {"label": "Show More Hotels/Inns", "value": "show default hotel suggestions"},
+        {"label": "View Details", "value": f"show details for {room.room_name}"},
+        {"label": "Create Booking Preview", "value": f"create booking preview for {getattr(accom, 'company_name', 'this accommodation')}"},
+        {"label": "Open Official Page", "value": "open official page"},
+        {"label": "View Facebook Page", "value": "open facebook page"},
     ]
-    return {
+    payload = {
         "fulfillmentText": "\n".join(lines),
         "room_id": room.room_id,
         "quick_replies": quick_replies,
     }
+    if link:
+        payload["billing_link"] = link
+        payload["billing_link_label"] = link_label or "Open Official Link"
+    if link_actions:
+        payload["link_actions"] = link_actions
+    return payload
 
 
 def _is_guest_tour_booking_command(message):
     text = str(message or "").strip().lower()
     if not text:
         return False
-    booking_terms = ("book", "booking", "reserve", "reservation")
-    tour_terms = ("tour", "package", "schedule", "sched")
-    return any(term in text for term in booking_terms) and any(term in text for term in tour_terms)
+    # Guard: viewing/listing booking history should not trigger booking execution flow.
+    if re.search(
+        r"\b(show|view|check|list)\b.*\b(my\s+)?(tour\s+)?book(?:ing|ings|igns)\b",
+        text,
+    ):
+        return False
+    if not any(term in text for term in ("book", "reserve", "reservation")):
+        return False
+    # Keep accommodation flow isolated from tour booking.
+    if re.search(r"\b(hotel|inn|accommodation|room|stay)\b", text):
+        return False
+    tour_terms = ("tour", "package", "schedule", "sched", "trail", "highlights", "nature")
+    if any(term in text for term in tour_terms):
+        return True
+    # Support direct phrasing like "book bayawan food and culture trail".
+    return bool(re.search(r"\b(book|reserve)\b\s+[a-z0-9][a-z0-9\s\-]{3,80}$", text))
 
 
-def _build_guest_tour_booking_link_payload(request, *, sched_id="", fallback_sched_ids=None, selection_index=0):
+def _extract_tour_name_booking_hint(message):
+    text = str(message or "").strip()
+    if not text:
+        return ""
+    normalized = re.sub(r"\s+", " ", text).strip()
+    match = re.search(
+        r"\b(?:book|reserve|reservation(?: for)?)\b\s+(.+)$",
+        normalized,
+        flags=re.IGNORECASE,
+    )
+    if not match:
+        return ""
+    raw_hint = str(match.group(1) or "").strip(" .,!?:;")
+    # Remove trailing date/guest fragments when present.
+    raw_hint = re.split(
+        r"\b(?:for\s+\d+\s*(?:adult|adults|guest|guests|people|person|pax)|on\s+[a-z]+\s+\d{1,2}|on\s+\d{4}-\d{2}-\d{2}|for\s+[a-z]+\s+\d{1,2})\b",
+        raw_hint,
+        maxsplit=1,
+        flags=re.IGNORECASE,
+    )[0].strip(" .,!?:;")
+    raw_hint = re.sub(
+        r"\b(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\s+\d{1,2}(?:,\s*\d{4})?\b",
+        "",
+        raw_hint,
+        flags=re.IGNORECASE,
+    ).strip(" .,!?:;")
+    if len(raw_hint) < 3:
+        return ""
+    return raw_hint
+
+
+def _is_guest_view_tour_bookings_command(message):
+    text = str(message or "").strip().lower()
+    if not text:
+        return False
+    phrases = (
+        "show my tour bookings",
+        "view my tour bookings",
+        "check my tour bookings",
+        "my tour bookings",
+        "show tour bookings",
+        "view tour bookings",
+        "show my tour bookigns",
+        "show tour bookigns",
+        "my tour bookigns",
+        "show my bookings",
+        "view my bookings",
+        "check my bookings",
+        "my bookings",
+    )
+    if any(phrase in text for phrase in phrases):
+        return True
+    return bool(
+        re.search(
+            r"\b(show|view|check|list)\b.*\b(my\s+)?(tour\s+)?book(?:ing|ings|igns)\b",
+            text,
+        )
+    )
+
+
+def _build_guest_tour_bookings_payload(request, user):
+    upcoming_count = 0
+    current_count = 0
+    past_count = 0
+    now = timezone.now()
+
+    tour_bookings = TourBooking.objects.filter(guest=user).select_related("schedule")
+    for booking in tour_bookings:
+        schedule = getattr(booking, "schedule", None)
+        if schedule is None:
+            past_count += 1
+            continue
+        start_time = schedule.start_time
+        end_time = schedule.end_time
+        if not timezone.is_aware(start_time):
+            start_time = timezone.make_aware(start_time)
+        if not timezone.is_aware(end_time):
+            end_time = timezone.make_aware(end_time)
+        status = str(getattr(booking, "status", "") or "").strip().lower()
+        if status == "cancelled":
+            past_count += 1
+        elif start_time > now:
+            upcoming_count += 1
+        elif start_time <= now <= end_time:
+            current_count += 1
+        else:
+            past_count += 1
+
+    pending_qs = Pending.objects.filter(guest_id=user).select_related("sched_id")
+    for pending in pending_qs:
+        schedule = getattr(pending, "sched_id", None)
+        if schedule is None:
+            past_count += 1
+            continue
+        start_time = schedule.start_time
+        end_time = schedule.end_time
+        if not timezone.is_aware(start_time):
+            start_time = timezone.make_aware(start_time)
+        if not timezone.is_aware(end_time):
+            end_time = timezone.make_aware(end_time)
+        status = str(getattr(pending, "status", "") or "").strip().lower()
+        if status == "cancelled":
+            past_count += 1
+        elif start_time > now:
+            upcoming_count += 1
+        elif start_time <= now <= end_time:
+            current_count += 1
+        else:
+            past_count += 1
+
+    total_count = upcoming_count + current_count + past_count
+    bookings_url = reverse("main-page") + "#myBookings"
+    if hasattr(request, "build_absolute_uri"):
+        bookings_url = request.build_absolute_uri(bookings_url)
+
+    if total_count == 0:
+        summary = _pick_response_variant(
+            [
+                "I couldn’t find any tour bookings linked to your account yet. You can browse schedules and book when ready.",
+                "I don’t see any tour bookings in your account yet. You can check available schedules when you’re ready.",
+                "No tour bookings are showing on your account yet. I can help you find available tours next.",
+            ],
+            seed_text=f"{user.pk}|guest-tour-bookings-empty",
+        )
+    else:
+        summary = _pick_response_variant(
+            [
+                f"You currently have {total_count} tour booking(s): {upcoming_count} upcoming, {current_count} current, and {past_count} past.",
+                f"Here’s your booking snapshot: {total_count} total tour booking(s), with {upcoming_count} upcoming, {current_count} current, and {past_count} past.",
+                f"I found {total_count} tour booking(s) in your account: {upcoming_count} upcoming, {current_count} current, and {past_count} past.",
+            ],
+            seed_text=f"{user.pk}|guest-tour-bookings-summary",
+        )
+    return {
+        "fulfillmentText": summary + "\nOpen your My Bookings section below.",
+        "billing_link": bookings_url,
+        "billing_link_label": "Open My Tour Bookings",
+        "open_in_new_tab": True,
+        "quick_replies": [
+            "Show available tours",
+            "How do I cancel a tour booking?",
+            "Plan my 10k stay",
+        ],
+    }
+
+
+def _extract_tour_date_hint_from_message(message):
+    text = str(message or "").strip()
+    if not text:
+        return None
+
+    iso_match = re.search(r"\b(20\d{2})-(0?[1-9]|1[0-2])-(0?[1-9]|[12]\d|3[01])\b", text)
+    if iso_match:
+        try:
+            return datetime(
+                int(iso_match.group(1)),
+                int(iso_match.group(2)),
+                int(iso_match.group(3)),
+            ).date()
+        except Exception:
+            return None
+
+    month_names = [m for m in calendar.month_name if m]
+    month_pattern = "|".join(month_names)
+    month_day = re.search(
+        rf"\b({month_pattern})\s+([0-2]?\d|3[01])(?:,\s*(20\d{{2}}))?\b",
+        text,
+        flags=re.IGNORECASE,
+    )
+    if month_day:
+        month_name = str(month_day.group(1) or "").strip().lower()
+        day_val = _to_int(month_day.group(2), default=0)
+        year_val = _to_int(month_day.group(3), default=timezone.localdate().year)
+        month_val = 0
+        for idx, value in enumerate(month_names, start=1):
+            if value.lower() == month_name:
+                month_val = idx
+                break
+        if month_val > 0 and day_val > 0:
+            try:
+                parsed = datetime(year_val, month_val, day_val).date()
+            except Exception:
+                return None
+            today = timezone.localdate()
+            if parsed < today and month_day.group(3) is None:
+                try:
+                    parsed = datetime(year_val + 1, month_val, day_val).date()
+                except Exception:
+                    pass
+            return parsed
+    return None
+
+
+def _is_tour_schedule_request(message):
+    text = _normalize_chat_text(message)
+    if not text:
+        return False
+    markers = (
+        "show tour schedules",
+        "tour schedules",
+        "show schedules",
+        "view schedules",
+        "available schedules",
+        "when is",
+        "available dates",
+        "tours on ",
+        "schedule for",
+    )
+    if any(marker in text for marker in markers):
+        return True
+    if "schedule" in text and any(token in text for token in ("tour", "trail", "highlights", "package", "date", "available")):
+        return True
+    return False
+
+
+def _extract_tour_name_from_schedule_request(message):
+    text = str(message or "").strip()
+    if not text:
+        return ""
+    normalized = re.sub(r"\s+", " ", text).strip()
+    patterns = (
+        r"\b(?:schedule|schedules)\s+for\s+(.+)$",
+        r"\bwhen\s+is\s+(.+?)\s+(?:available|open)\b",
+        r"\bavailable\s+dates?\s+for\s+(.+)$",
+    )
+    for pattern in patterns:
+        match = re.search(pattern, normalized, flags=re.IGNORECASE)
+        if match:
+            value = str(match.group(1) or "").strip(" .,!?:;")
+            if value:
+                return value
+    for tour in Tour_Add.objects.filter(publication_status="published").order_by("tour_name")[:60]:
+        name = str(getattr(tour, "tour_name", "") or "").strip()
+        if name and _normalize_chat_text(name) in _normalize_chat_text(normalized):
+            return name
+    return ""
+
+
+def _tour_primary_image_url(tour_obj):
+    if tour_obj is None:
+        return ""
+    image_field = getattr(tour_obj, "image", None)
+    if image_field:
+        try:
+            return str(image_field.url or "").strip()
+        except Exception:
+            return ""
+    return ""
+
+
+def _tour_detail_url(request, tour_obj, schedule=None):
+    if tour_obj is None:
+        return ""
+    try:
+        link = reverse("guest_book", kwargs={"tour_id": str(getattr(tour_obj, "tour_id", "") or "").strip()})
+        sched_id = str(getattr(schedule, "sched_id", "") or "").strip() if schedule is not None else ""
+        if sched_id:
+            link = f"{link}?sched_id={sched_id}"
+        if hasattr(request, "build_absolute_uri"):
+            link = request.build_absolute_uri(link)
+        return link
+    except Exception:
+        return ""
+
+
+def _build_tour_card_trace(request, schedule):
+    tour_obj = getattr(schedule, "tour", None)
+    tour_name = str(getattr(tour_obj, "tour_name", "") or "").strip()
+    if not tour_name:
+        return {}
+    sched_date = ""
+    try:
+        sched_date = timezone.localtime(schedule.start_time).strftime("%B %d, %Y")
+    except Exception:
+        sched_date = ""
+    price_text = f"PHP {_to_decimal(getattr(schedule, 'price', 0), default=Decimal('0')):,.0f} per guest"
+    duration_days = max(1, _to_int(getattr(schedule, "duration_days", 1), default=1))
+    slots = max(0, _to_int(getattr(schedule, "slots_available", 0), default=0))
+    description = str(getattr(tour_obj, "description", "") or "").strip()
+    if len(description) > 170:
+        description = description[:167].rstrip() + "..."
+    return {
+        "kind": "tour",
+        "tour_id": str(getattr(tour_obj, "tour_id", "") or "").strip(),
+        "sched_id": str(getattr(schedule, "sched_id", "") or "").strip(),
+        "title": tour_name,
+        "subtitle": f"{price_text} | {duration_days} day(s)",
+        "description": (
+            f"{description}\nNext available: {sched_date if sched_date else 'TBA'} | Slots: {slots}"
+            if description
+            else f"Next available: {sched_date if sched_date else 'TBA'} | Slots: {slots}"
+        ),
+        "image_url": _tour_primary_image_url(tour_obj),
+        "detail_url": _tour_detail_url(request, tour_obj),
+        "meta": {
+            "sched_id": str(getattr(schedule, "sched_id", "") or "").strip(),
+            "tour_id": str(getattr(tour_obj, "tour_id", "") or "").strip(),
+        },
+    }
+
+
+def _build_schedule_card_trace(request, schedule):
+    tour_obj = getattr(schedule, "tour", None)
+    tour_name = str(getattr(tour_obj, "tour_name", "") or "").strip()
+    if not tour_name:
+        return {}
+    try:
+        start_local = timezone.localtime(schedule.start_time)
+        end_local = timezone.localtime(schedule.end_time)
+        date_text = start_local.strftime("%B %d, %Y")
+        time_text = f"{start_local.strftime('%I:%M %p')} - {end_local.strftime('%I:%M %p')}"
+    except Exception:
+        date_text = ""
+        time_text = ""
+    slots = max(0, _to_int(getattr(schedule, "slots_available", 0), default=0))
+    price_text = f"PHP {_to_decimal(getattr(schedule, 'price', 0), default=Decimal('0')):,.0f} per guest"
+    subtitle_parts = [part for part in [date_text, time_text, price_text] if part]
+    return {
+        "kind": "tour_schedule",
+        "tour_id": str(getattr(tour_obj, "tour_id", "") or "").strip(),
+        "sched_id": str(getattr(schedule, "sched_id", "") or "").strip(),
+        "title": tour_name,
+        "subtitle": " | ".join(subtitle_parts),
+        "description": f"Available slots: {slots}",
+        "image_url": _tour_primary_image_url(tour_obj),
+        "detail_url": _tour_detail_url(request, tour_obj, schedule=schedule),
+        "meta": {
+            "sched_id": str(getattr(schedule, "sched_id", "") or "").strip(),
+            "tour_id": str(getattr(tour_obj, "tour_id", "") or "").strip(),
+        },
+    }
+
+
+def _build_tour_schedule_listing_payload(request, message, params):
+    params = params if isinstance(params, dict) else {}
+    tour_name_hint = _extract_tour_name_from_schedule_request(message)
+    date_hint = _extract_tour_date_hint_from_message(message)
+    now = timezone.now()
+    qs = (
+        Tour_Schedule.objects.select_related("tour")
+        .filter(tour__publication_status="published")
+        .exclude(status="cancelled")
+        .order_by("start_time")
+    )
+    if date_hint is not None:
+        local_tz = timezone.get_current_timezone()
+        day_start = timezone.make_aware(datetime(date_hint.year, date_hint.month, date_hint.day, 0, 0, 0), local_tz)
+        day_end = day_start + timedelta(days=1)
+        qs = qs.filter(start_time__gte=day_start, start_time__lt=day_end)
+    else:
+        qs = qs.filter(end_time__gte=now)
+    if tour_name_hint:
+        qs = qs.filter(tour__tour_name__icontains=tour_name_hint)
+    rows = list(qs[:8])
+    if not rows:
+        if tour_name_hint:
+            return {
+                "reply": "There are no available schedules for this tour right now. You may choose another tour package.",
+                "items": [],
+                "quick_replies": ["show available tours", "recommend a tour"],
+            }
+        return {
+            "reply": "There are no available tour schedules right now. You may choose another tour package.",
+            "items": [],
+            "quick_replies": ["show available tours", "recommend a tour"],
+        }
+    items = []
+    sched_ids = []
+    for sched in rows:
+        card = _build_schedule_card_trace(request, sched)
+        if card:
+            items.append(card)
+            sched_ids.append(str(getattr(sched, "sched_id", "") or "").strip())
+    if not items:
+        return {
+            "reply": "There are no available tour schedules right now.",
+            "items": [],
+            "quick_replies": ["show available tours"],
+        }
+    if tour_name_hint:
+        intro = f"Here are available schedules for {tour_name_hint}."
+    elif date_hint is not None:
+        intro = f"Here are available schedules on {date_hint.strftime('%B %d, %Y')}."
+    else:
+        intro = "Here are available tour schedules right now."
+    return {
+        "reply": intro,
+        "items": items,
+        "sched_ids": sched_ids,
+        "quick_replies": ["Book this schedule", "show available tours"],
+    }
+
+
+def _resolve_schedule_for_tour_booking(*, tour_name_hint="", sched_id="", date_hint=None):
+    normalized_sched_id = str(sched_id or "").strip()
+    if normalized_sched_id:
+        schedule = (
+            Tour_Schedule.objects.select_related("tour")
+            .filter(
+                sched_id__iexact=normalized_sched_id,
+                tour__publication_status="published",
+            )
+            .exclude(status="cancelled")
+            .first()
+        )
+        if schedule is not None:
+            return schedule, []
+
+    qs = (
+        Tour_Schedule.objects.select_related("tour")
+        .filter(tour__publication_status="published")
+        .exclude(status="cancelled")
+        .annotate(assigned_count=Count("employee_assignments", distinct=True))
+    )
+    if str(tour_name_hint or "").strip():
+        qs = qs.filter(tour__tour_name__icontains=str(tour_name_hint).strip())
+    if date_hint is not None:
+        local_tz = timezone.get_current_timezone()
+        day_start = timezone.make_aware(datetime(date_hint.year, date_hint.month, date_hint.day, 0, 0, 0), local_tz)
+        day_end = day_start + timedelta(days=1)
+        day_rows = list(
+            qs.filter(start_time__gte=day_start, start_time__lt=day_end)
+            .order_by("-assigned_count", "start_time")[:6]
+        )
+        if len(day_rows) == 1:
+            return day_rows[0], []
+        if len(day_rows) > 1:
+            return None, day_rows
+        nearby = list(
+            qs.filter(start_time__gte=day_start - timedelta(days=3), start_time__lt=day_end + timedelta(days=3))
+            .order_by("-assigned_count", "start_time")[:6]
+        )
+        return None, nearby
+    schedule = (
+        qs.filter(end_time__gte=timezone.now(), assigned_count__gt=0)
+        .order_by("start_time")
+        .first()
+    )
+    if schedule is None:
+        schedule = qs.filter(end_time__gte=timezone.now()).order_by("-assigned_count", "start_time").first()
+    if schedule is None:
+        schedule = qs.order_by("-assigned_count", "start_time").first()
+    return schedule, []
+
+
+def _build_tour_booking_summary_text(*, schedule, guests):
+    tour_name = str(getattr(getattr(schedule, "tour", None), "tour_name", "") or "").strip() or "Selected Tour"
+    try:
+        date_text = timezone.localtime(schedule.start_time).strftime("%B %d, %Y")
+    except Exception:
+        date_text = "Selected date"
+    rate = _to_decimal(getattr(schedule, "price", 0), default=Decimal("0"))
+    total = rate * Decimal(max(1, guests))
+    return (
+        "Here is your tour booking summary:\n\n"
+        f"Tour: {tour_name}\n"
+        f"Schedule: {date_text}\n"
+        f"Guests: {guests}\n"
+        f"Rate: PHP {rate:,.0f} per guest\n"
+        f"Estimated Total: PHP {total:,.0f}\n\n"
+        "Reply YES to submit this booking request."
+    )
+
+
+def _submit_guest_tour_booking_request(request, user, *, schedule, guests):
+    if schedule is None:
+        return {"ok": False, "error": "Selected schedule is no longer available."}
+    if guests <= 0:
+        return {"ok": False, "error": "Please provide at least 1 guest to continue."}
+    available_slots = _to_int(getattr(schedule, "slots_available", 0), default=0)
+    if available_slots < guests:
+        return {"ok": False, "error": "Not enough available slots for that schedule right now."}
+    tour_obj = getattr(schedule, "tour", None)
+    if tour_obj is None:
+        return {"ok": False, "error": "Selected tour package is unavailable right now."}
+
+    guest_name = f"{str(getattr(user, 'first_name', '') or '').strip()} {str(getattr(user, 'last_name', '') or '').strip()}".strip()
+    if not guest_name:
+        guest_name = str(getattr(user, "username", "") or "Guest")
+    guest_email = str(getattr(user, "email", "") or "").strip()
+    guest_phone = str(getattr(user, "phone_number", "") or "").strip() or "000-000-0000"
+
+    assignment_count = 0
+    with transaction.atomic():
+        sched_locked = Tour_Schedule.objects.select_for_update().select_related("tour").filter(
+            sched_id=getattr(schedule, "sched_id", ""),
+            tour__publication_status="published",
+        ).first()
+        if sched_locked is None or str(getattr(sched_locked, "status", "") or "").lower() == "cancelled":
+            return {"ok": False, "error": "That tour schedule is unavailable right now."}
+        if _to_int(getattr(sched_locked, "slots_available", 0), default=0) < guests:
+            return {"ok": False, "error": "Not enough available slots for that schedule right now."}
+        pending = Pending.objects.create(
+            guest_id=user,
+            sched_id=sched_locked,
+            tour_id=sched_locked.tour,
+            status="Pending",
+            total_guests=guests,
+            your_name=guest_name,
+            your_email=guest_email or "default@example.com",
+            your_phone=guest_phone,
+            num_adults=guests,
+            num_children=0,
+        )
+        sched_locked.slots_booked = _to_int(getattr(sched_locked, "slots_booked", 0), default=0) + guests
+        sched_locked.slots_available = _to_int(getattr(sched_locked, "slots_available", 0), default=0) - guests
+        sched_locked.save(update_fields=["slots_booked", "slots_available"])
+        assignment_count = TourAssignment.objects.filter(schedule=sched_locked).count()
+
+    try:
+        create_notification(
+            recipient_guest=user,
+            title="Tour booking submitted",
+            message=f"Your booking request for {sched_locked.tour.tour_name} is pending staff review.",
+            notification_type="booking",
+            url=reverse("main-page") + "#user-bookings",
+            dedupe_key=f"tour-pending-{pending.id}",
+            related_object_id=str(pending.id),
+        )
+        notify_assigned_employees_for_schedule(
+            schedule=sched_locked,
+            title="New tour booking request",
+            message=f"{sched_locked.tour.tour_name} received a new pending booking from {guest_name}.",
+            notification_type="booking",
+            url=reverse("tour_app:pending_view"),
+            dedupe_key_prefix=f"tour-pending-{pending.id}",
+        )
+    except Exception:
+        pass
+
+    try:
+        if guest_email:
+            start_local = timezone.localtime(sched_locked.start_time)
+            end_local = timezone.localtime(sched_locked.end_time)
+            total_amount = _to_decimal(getattr(sched_locked, "price", 0), default=Decimal("0")) * Decimal(max(1, guests))
+            send_mail(
+                subject=f"Booking Request Received for {sched_locked.tour.tour_name}",
+                message=(
+                    f"Dear {guest_name},\n\n"
+                    f"Your booking request is now pending review.\n\n"
+                    f"Tour: {sched_locked.tour.tour_name}\n"
+                    f"Schedule: {start_local.strftime('%B %d, %Y %I:%M %p')} to {end_local.strftime('%B %d, %Y %I:%M %p')}\n"
+                    f"Guests: {guests}\n"
+                    f"Estimated Total: PHP {total_amount:.2f}\n"
+                    f"Status: Pending\n\n"
+                    "We will notify you once tourism staff reviews your request.\n"
+                ),
+                from_email=settings.DEFAULT_FROM_EMAIL,
+                recipient_list=[guest_email],
+                fail_silently=False,
+            )
+    except Exception:
+        pass
+    return {
+        "ok": True,
+        "pending_id": getattr(pending, "id", None),
+        "assignment_count": assignment_count,
+        "sched_id": str(getattr(sched_locked, "sched_id", "") or ""),
+    }
+
+
+def _build_guest_tour_booking_link_payload(
+    request,
+    *,
+    sched_id="",
+    fallback_sched_ids=None,
+    selection_index=0,
+    user_message="",
+):
     resolved_sched_id = str(sched_id or "").strip()
+    tour_name_hint = _extract_tour_name_booking_hint(user_message)
     if not resolved_sched_id and isinstance(fallback_sched_ids, list):
         cleaned = [str(item).strip() for item in fallback_sched_ids if str(item).strip()]
         if selection_index > 0:
@@ -6178,7 +11124,7 @@ def _build_guest_tour_booking_link_payload(request, *, sched_id="", fallback_sch
                 return {
                     "fulfillmentText": (
                         f"I couldn't find option #{selection_index} in your recent recommendations.\n"
-                        f"Available options: {', '.join(cleaned[:5])}"
+                    f"Available options: {', '.join(cleaned[:5])}"
                     )
                 }
         elif len(cleaned) == 1:
@@ -6186,17 +11132,106 @@ def _build_guest_tour_booking_link_payload(request, *, sched_id="", fallback_sch
         elif len(cleaned) > 1:
             return {
                 "fulfillmentText": (
-                    "Please specify which schedule to book.\n"
+                    "I can help you book right away. Please share the schedule ID you want.\n"
                     f"Available recent options: {', '.join(cleaned[:5])}\n"
                     "Example: book tour sched00001"
                 )
             }
 
+    if not resolved_sched_id and tour_name_hint:
+        upcoming_named_qs = (
+            Tour_Schedule.objects.select_related("tour")
+            .filter(
+                tour__publication_status="published",
+                tour__tour_name__icontains=tour_name_hint,
+                end_time__gte=timezone.now(),
+            )
+            .exclude(status="cancelled")
+            .order_by("start_time")
+        )
+        if not upcoming_named_qs.exists():
+            upcoming_named_qs = (
+                Tour_Schedule.objects.select_related("tour")
+                .filter(
+                    tour__publication_status="published",
+                    tour__tour_name__icontains=tour_name_hint,
+                )
+                .exclude(status="cancelled")
+                .order_by("start_time")
+            )
+        if upcoming_named_qs.exists():
+            resolved_sched_id = str(upcoming_named_qs.first().sched_id)
+
     if not resolved_sched_id:
+        date_hint = _extract_tour_date_hint_from_message(user_message)
+        if date_hint is not None:
+            local_tz = timezone.get_current_timezone()
+            day_start = timezone.make_aware(
+                datetime(date_hint.year, date_hint.month, date_hint.day, 0, 0, 0),
+                local_tz,
+            )
+            day_end = day_start + timedelta(days=1)
+            date_qs = (
+                Tour_Schedule.objects.select_related("tour")
+                .filter(
+                    start_time__gte=day_start,
+                    start_time__lt=day_end,
+                    tour__publication_status="published",
+                )
+                .order_by("start_time")
+            )
+            if date_qs.count() == 1:
+                resolved_sched_id = str(date_qs.first().sched_id)
+            elif date_qs.exists():
+                options = [
+                    f"{row.tour.tour_name} ({row.sched_id})"
+                    for row in date_qs[:4]
+                ]
+                return {
+                    "fulfillmentText": (
+                        f"I found multiple tour schedules on {date_hint.strftime('%B %d, %Y')}:\n"
+                        + "\n".join(f"- {item}" for item in options)
+                        + "\nPlease pick one schedule ID so I can continue (example: book tour SCHED00001)."
+                    )
+                }
+            else:
+                nearby_qs = (
+                    Tour_Schedule.objects.select_related("tour")
+                    .filter(
+                        start_time__gte=day_start - timedelta(days=3),
+                        start_time__lt=day_end + timedelta(days=3),
+                        tour__publication_status="published",
+                    )
+                    .order_by("start_time")
+                )
+                if nearby_qs.exists():
+                    preview = [
+                        f"{row.start_time.strftime('%b %d')} - {row.tour.tour_name} ({row.sched_id})"
+                        for row in nearby_qs[:3]
+                    ]
+                    return {
+                        "fulfillmentText": (
+                            f"I couldn't find an exact schedule on {date_hint.strftime('%B %d, %Y')}, "
+                            "but here are nearby options:\n"
+                            + "\n".join(f"- {item}" for item in preview)
+                            + "\nSend the schedule ID you prefer and I'll open the booking page."
+                        )
+                    }
+
+    if not resolved_sched_id:
+        if tour_name_hint:
+            return {
+                "fulfillmentText": (
+                    "I couldn't find that tour right now. "
+                    "You can try viewing current schedules or share a target date."
+                ),
+                "quick_replies": ["show available tours", "book tour for May 5", "help me choose a tour"],
+            }
         return {
             "fulfillmentText": (
-                "I can open tour booking for you. Please include a schedule ID.\n"
-                "Example: book tour sched00001"
+                "I can guide you to tour booking right away. Share a schedule ID or a target date.\n"
+                "Example: book tour sched00001\n"
+                "or: I want to book a tour package for April 25"
             )
         }
 
@@ -6221,13 +11256,21 @@ def _build_guest_tour_booking_link_payload(request, *, sched_id="", fallback_sch
     if hasattr(request, "build_absolute_uri"):
         booking_url = request.build_absolute_uri(booking_url)
 
+    link_actions = [
+        {
+            "label": "Open Tour Booking",
+            "url": booking_url,
+        }
+    ]
+
     return {
         "fulfillmentText": (
-            f"I found {schedule.tour.tour_name} ({schedule.sched_id}). "
-            "Click the button below to open booking in a new tab."
+            f"I found {schedule.tour.tour_name}. "
+            "You can continue your booking using the button below."
         ),
         "billing_link": booking_url,
-        "billing_link_label": f"Open Tour Booking ({schedule.sched_id})",
+        "billing_link_label": "Open Tour Booking",
+        "link_actions": link_actions,
         "open_in_new_tab": True,
     }
 
@@ -6299,6 +11342,23 @@ def _detect_admin_support_topic(message):
         return "admin_user_account_management"
     if _contains_any_phrase(text, ("admin dashboard", "access the admin dashboard", "overall system summaries", "dashboard ng admin")):
         return "admin_reports_dashboard_support"
+    if _contains_any_phrase(
+        text,
+        (
+            "activate accommodation",
+            "deactivate accommodation",
+            "activate or deactivate listings",
+            "activate/deactivate listings",
+            "set listing active",
+            "set listing inactive",
+            "activation and deactivation",
+            "how to activate listing",
+            "how to deactivate listing",
+            "i-activate ang listing",
+            "i-deactivate ang listing",
+        ),
+    ):
+        return "admin_activation_deactivation_help"
 
     if _contains_any_phrase(text, ("approve accommodation registrations", "review pending accommodation listings", "reject a submitted accommodation listing", "listings waiting for approval", "pending review", "pending listings", "i-approve ang accommodation listing", "approve listing", "aprubahan ang accommodation listing")):
         return "admin_approval_workflow"
@@ -6562,6 +11622,18 @@ def _build_admin_record_visibility_diagnostic():
     )
 
 
+def _build_admin_activation_deactivation_summary():
+    active_qs = Accomodation.objects.filter(is_active=True)
+    inactive_qs = Accomodation.objects.filter(is_active=False)
+    return (
+        "Activation/deactivation guidance:\n"
+        f"- Active listings: {active_qs.count()} | Inactive listings: {inactive_qs.count()}\n"
+        "- Approval status and active flag both affect listing visibility and booking eligibility.\n"
+        "- Use accommodation management pages to review records before applying status changes.\n"
+        "- If a listing should disappear from operations, set it inactive and verify associated room availability."
+    )
+
+
 def _build_booking_count_summary(actor, *, user=None, message=""):
     role = str(actor.get("role") or "").strip().lower()
     text = str(message or "").strip().lower()
@@ -6703,6 +11775,13 @@ def _is_default_accommodation_suggestions_command(message):
     text = (message or "").strip().lower()
     if not text:
         return False
+    # Let location/budget/guest-constrained discovery pass through the main
+    # recommendation parser so results stay dynamic per query context.
+    if re.search(
+        r"\b(in|near|under|below|budget|for\s+\d+|barangay|brgy|villareal|suba|poblacion|tinago|ubos|bayawan city)\b",
+        text,
+    ):
+        return False
     phrases = [
         "show default hotel suggestions",
         "show available hotels",
@@ -6716,6 +11795,13 @@ def _is_default_accommodation_suggestions_command(message):
         "show hotel suggestions",
         "show inn suggestions",
         "show accommodation suggestions",
+        "show accommodation recommendations",
+        "show accommodations",
+        "show hotels",
+        "show inns",
+        "places to stay",
+        "where should i stay",
+        "show approved stays",
         "suggest hotels",
         "suggest inns",
     ]
@@ -6725,7 +11811,7 @@ def _is_default_accommodation_suggestions_command(message):
 def _openai_extract_intent_and_params(message):
     # Legacy compatibility wrapper kept to avoid breaking imports/tests.
     # OpenAI is no longer used for intent parsing.
-    parsed = _classify_intent_and_extract_params(message)
+    parsed = _classify_intent_and_extract_params(message, actor=actor)
     parsed["source"] = "legacy_wrapper_no_openai_parse"
     return parsed
 
@@ -6741,8 +11827,30 @@ def _fallback_nlg_paraphrase(reply):
         return lines[0]
     normalized = []
     for line in lines:
-        normalized.append(re.sub(r"\s{2,}", " ", line))
+        cleaned = re.sub(r"\s{2,}", " ", line)
+        # Normalize common encoding artifacts seen in legacy strings.
+        cleaned = (
+            cleaned.replace("â€™", "'")
+            .replace("â€¢", "-")
+            .replace("â‚±", "₱")
+        )
+        normalized.append(cleaned)
     merged = "\n".join(normalized)
+    replacements = {
+        "Invalid JSON payload.": "I had trouble reading that request format. Please try again.",
+        "Please send a message in this format: {\"message\": \"...\"}.": "Please type a short message and I’ll help from there.",
+        "Please log in first to use the chatbot.": "Please log in first so I can assist with your account-based requests.",
+        "I can help with your request. Please try rephrasing it in one sentence.": "I can help with that. Please rephrase it in one clear sentence so I can guide you better.",
+    }
+    for src, dst in replacements.items():
+        if src in merged:
+            merged = merged.replace(src, dst)
+    if merged.lower().startswith("please specify which schedule to book"):
+        merged = merged.replace(
+            "Please specify which schedule to book.",
+            "Happy to help. Please share the schedule ID you want to book.",
+            1,
+        )
     if len(lines) == 1:
         return merged
     # Keep facts unchanged but improve readability for template-heavy text.
@@ -6802,6 +11910,13 @@ def _extract_critical_facts_for_nlg_guardrails(text):
 def _guardrails_validate_nlg_output(backend_reply, candidate_reply):
     backend_facts = _extract_critical_facts_for_nlg_guardrails(backend_reply)
     candidate_facts = _extract_critical_facts_for_nlg_guardrails(candidate_reply)
+    # Allow clean plain-text rewrites that avoid introducing conflicting
+    # structured facts. This prevents overly aggressive guardrail rejection when
+    # the NLG output intentionally stays concise and non-transactional.
+    backend_fact_count = sum(len(backend_facts.get(key) or []) for key in ("urls", "iso_dates", "amounts", "booking_ids", "room_ids", "quantities"))
+    candidate_fact_count = sum(len(candidate_facts.get(key) or []) for key in ("urls", "iso_dates", "amounts", "booking_ids", "room_ids", "quantities"))
+    if backend_fact_count > 0 and candidate_fact_count == 0 and str(candidate_reply or "").strip():
+        return True, []
     reasons = []
     for key in ("urls", "iso_dates", "amounts", "booking_ids", "room_ids", "quantities"):
         expected_values = backend_facts.get(key) or []
@@ -6837,10 +11952,153 @@ def _apply_nlg_output_guardrails(*, request, provider_source, backend_reply, can
     return backend_text, fallback_source
 
 
+def _classify_gemini_error(exc):
+    text = str(exc or "").strip()
+    lowered = text.lower()
+    reason = "provider_error"
+    timeout_flag = False
+    retryable = False
+    http_status = None
+
+    status_match = re.search(r"\bstatus(?:\s*code)?\s*[:=]?\s*(\d{3})\b", lowered)
+    if status_match:
+        try:
+            http_status = int(status_match.group(1))
+        except Exception:
+            http_status = None
+    elif "429" in lowered:
+        http_status = 429
+    elif "503" in lowered:
+        http_status = 503
+    elif "500" in lowered:
+        http_status = 500
+
+    if any(token in lowered for token in ("timeout", "timed out", "deadline", "read timed out")):
+        reason = "timeout"
+        timeout_flag = True
+        retryable = True
+    elif any(token in lowered for token in ("rate limit", "quota", "resource_exhausted", "too many requests")) or http_status == 429:
+        reason = "rate_limited"
+        retryable = True
+    elif any(token in lowered for token in ("unavailable", "temporarily", "internal", "server error", "overloaded")) or http_status in {500, 502, 503, 504}:
+        reason = "provider_unavailable"
+        retryable = True
+    elif any(token in lowered for token in ("blocked", "safety", "content policy", "recitation")):
+        reason = "blocked"
+        retryable = True
+    elif any(token in lowered for token in ("invalid argument", "malformed", "bad request", "invalid_request")) or http_status == 400:
+        reason = "invalid_request"
+        retryable = False
+    elif any(token in lowered for token in ("permission", "unauthorized", "forbidden", "api key", "authentication")) or http_status in {401, 403}:
+        reason = "auth_error"
+        retryable = False
+
+    return {
+        "reason": reason,
+        "http_status": http_status,
+        "timeout": timeout_flag,
+        "retryable": retryable,
+        "message": text[:300],
+    }
+
+
+def _extract_gemini_response_text(gemini_response):
+    direct_text = str(getattr(gemini_response, "text", "") or "").strip()
+    if direct_text:
+        return direct_text
+
+    candidates = getattr(gemini_response, "candidates", None)
+    if not isinstance(candidates, list):
+        return ""
+    parts = []
+    for candidate in candidates[:3]:
+        content = getattr(candidate, "content", None)
+        part_rows = getattr(content, "parts", None)
+        if not isinstance(part_rows, list):
+            continue
+        for part in part_rows[:8]:
+            part_text = str(getattr(part, "text", "") or "").strip()
+            if part_text:
+                parts.append(part_text)
+    return "\n".join(parts).strip()
+
+
+def _is_nlg_fallback_source(source):
+    normalized = str(source or "").strip().lower()
+    if not normalized:
+        return False
+    fallback_markers = (
+        "fallback",
+        "_error",
+        "_unavailable",
+        "_empty",
+        "_disabled",
+    )
+    return any(marker in normalized for marker in fallback_markers)
+
+
+def _record_nlg_meta(request, meta):
+    try:
+        context = getattr(request, "_chatbot_log_context", None)
+        if not isinstance(context, dict):
+            return
+        provenance = context.get("provenance") if isinstance(context.get("provenance"), dict) else {}
+        payload = meta if isinstance(meta, dict) else {}
+        compact_payload = {
+            "nlg_error_reason": str(payload.get("nlg_error_reason") or "")[:120],
+            "nlg_http_status": payload.get("nlg_http_status"),
+            "nlg_timeout": bool(payload.get("nlg_timeout")),
+            "nlg_retry_count": _to_int(payload.get("nlg_retry_count"), default=0),
+            "nlg_guardrail_triggered": bool(payload.get("nlg_guardrail_triggered")),
+            "nlg_empty_response": bool(payload.get("nlg_empty_response")),
+            "nlg_request_skipped": bool(payload.get("nlg_request_skipped")),
+            "nlg_source": str(payload.get("nlg_source") or "")[:120],
+            "nlg_provider": str(payload.get("nlg_provider") or "")[:40],
+        }
+        provenance["nlg"] = compact_payload
+        context["provenance"] = provenance
+        # Preserve existing parse-fallback signals while accurately including
+        # NLG fallbacks only when they really happened.
+        context["fallback_used"] = bool(context.get("fallback_used")) or bool(payload.get("nlg_fallback_used"))
+        if payload.get("nlg_source"):
+            context["response_nlg_source"] = str(payload.get("nlg_source"))
+    except Exception:
+        pass
+
+
+def _resolve_supported_gemini_model():
+    raw = str(os.getenv("GEMINI_MODEL", "gemini-2.5-flash-lite") or "").strip() or "gemini-2.5-flash-lite"
+    lowered = raw.lower()
+    if lowered.startswith("gemini-1.") or "gemini-pro" in lowered:
+        return "gemini-2.5-flash-lite", True
+    return raw, False
+
+
 def generate_final_ai_response(*, request, intent, user_message, backend_reply):
     reply = str(backend_reply or "").strip()
+    nlg_meta = {
+        "nlg_provider": "",
+        "nlg_error_reason": "",
+        "nlg_http_status": None,
+        "nlg_timeout": False,
+        "nlg_retry_count": 0,
+        "nlg_guardrail_triggered": False,
+        "nlg_empty_response": False,
+        "nlg_request_skipped": False,
+        "nlg_source": "",
+        "nlg_fallback_used": False,
+    }
+
+    def _finish(text, source, **updates):
+        nlg_meta.update(updates or {})
+        nlg_meta["nlg_source"] = str(source or "")
+        if "nlg_fallback_used" not in updates:
+            nlg_meta["nlg_fallback_used"] = _is_nlg_fallback_source(source)
+        _record_nlg_meta(request, nlg_meta)
+        return text, source
+
     if not reply:
-        return reply, "empty_backend_reply"
+        return _finish(reply, "empty_backend_reply", nlg_error_reason="empty_backend_reply", nlg_request_skipped=True)
 
     # Preserve structured booking/slot templates exactly to avoid key-value drift.
     if any(
@@ -6855,7 +12113,7 @@ def generate_final_ai_response(*, request, intent, user_message, backend_reply):
             "booking draft (not yet saved)",
         )
     ):
-        return reply, "backend_structured_template"
+        return _finish(reply, "backend_structured_template", nlg_request_skipped=True)
 
     openai_api_key = str(os.getenv("OPENAI_API_KEY", "")).strip()
     gemini_api_key = str(os.getenv("GEMINI_API_KEY", "")).strip()
@@ -6872,7 +12130,37 @@ def generate_final_ai_response(*, request, intent, user_message, backend_reply):
         "on",
     )
     if not nlg_enabled:
-        return _fallback_nlg_paraphrase(reply), "llm_nlg_disabled_paraphrase"
+        return _finish(
+            _fallback_nlg_paraphrase(reply),
+            "llm_nlg_disabled_paraphrase",
+            nlg_error_reason="llm_nlg_disabled",
+            nlg_request_skipped=True,
+            nlg_fallback_used=True,
+        )
+    if DEMO_SAFE_MODE:
+        safe_demo_intents = {
+            "plan_bayawan_stay",
+            "get_accommodation_recommendation",
+            "gethotelrecommendation",
+            "travel_guidance",
+            "get_recommendation",
+            "gettourrecommendation",
+            "calculate_billing",
+            "employee_assigned_tours",
+            "employee_open_assignment",
+            "employee_update_assignment",
+            "reporting_summary",
+        }
+        allow_demo_nlg = str(os.getenv("CHATBOT_DEMO_ALLOW_NLG", "0")).strip().lower() in {"1", "true", "yes", "on"}
+        openai_override = bool(openai_api_key and OpenAI is not None)
+        if str(intent or "").strip().lower() in safe_demo_intents and not allow_demo_nlg and not openai_override:
+            return _finish(
+                reply,
+                "demo_safe_mode_deterministic",
+                nlg_request_skipped=True,
+                nlg_error_reason="demo_safe_mode",
+                nlg_fallback_used=False,
+            )
 
     user_id = ""
     user = getattr(request, "user", None)
@@ -6886,6 +12174,19 @@ def generate_final_ai_response(*, request, intent, user_message, backend_reply):
         "backend_reply": reply[:3500],
         "user_id": user_id[:40],
     }
+    if not str(nlg_payload.get("backend_reply") or "").strip():
+        return _finish(reply, "nlg_skipped_empty_backend_reply", nlg_error_reason="empty_backend_reply", nlg_request_skipped=True)
+
+    payload_json = json.dumps(nlg_payload, ensure_ascii=True)
+    max_prompt_chars = max(1200, min(_to_int(os.getenv("CHATBOT_NLG_MAX_PROMPT_CHARS", "6000"), default=6000), 12000))
+    if len(payload_json) > max_prompt_chars:
+        return _finish(
+            reply,
+            "nlg_skipped_prompt_too_long",
+            nlg_error_reason="prompt_too_long",
+            nlg_request_skipped=True,
+        )
+
     system_prompt = (
         "You are a tourism reservation assistant NLG layer.\n"
         "Rewrite the backend reply into clear, professional, and formal language.\n"
@@ -6909,17 +12210,26 @@ def generate_final_ai_response(*, request, intent, user_message, backend_reply):
             )
             phrased = str(completion.choices[0].message.content or "").strip()
             if phrased:
-                return _apply_nlg_output_guardrails(
+                out_text, out_source = _apply_nlg_output_guardrails(
                     request=request,
                     provider_source="openai_nlg",
                     backend_reply=reply,
                     candidate_reply=phrased,
                 )
+                return _finish(
+                    out_text,
+                    out_source,
+                    nlg_provider="openai",
+                    nlg_guardrail_triggered=bool("guardrail_fallback" in str(out_source or "")),
+                )
         except Exception:
             pass
 
     if gemini_api_key and genai is not None:
-        gemini_model = str(os.getenv("GEMINI_MODEL", "gemini-1.5-flash") or "").strip() or "gemini-1.5-flash"
+        gemini_model, model_was_upgraded = _resolve_supported_gemini_model()
+        nlg_meta["nlg_provider"] = "gemini"
+        if model_was_upgraded:
+            nlg_meta["nlg_error_reason"] = "deprecated_model_replaced"
         gemini_client = None
         try:
             gemini_client = genai.Client(api_key=gemini_api_key)
@@ -6931,79 +12241,194 @@ def generate_final_ai_response(*, request, intent, user_message, backend_reply):
                 event_key="gemini_failure_fallback",
                 detail="gemini_nlg_unavailable",
             )
-            return reply, "gemini_nlg_unavailable"
+            return _finish(
+                reply,
+                "gemini_nlg_unavailable",
+                nlg_error_reason="client_unavailable",
+                nlg_fallback_used=True,
+            )
 
-        last_error = ""
+        last_error = {}
         max_attempts = max(1, min(_to_int(os.getenv("CHATBOT_GEMINI_NLG_RETRY", "2"), default=2), 3))
+        prompt = (
+            f"{system_prompt}\n\n"
+            "Input JSON:\n"
+            f"{payload_json}"
+        )
+        prompt = prompt[: max_prompt_chars + 500]
+        retry_count = 0
         for attempt in range(max_attempts):
             try:
-                prompt = (
-                    f"{system_prompt}\n\n"
-                    "Input JSON:\n"
-                    f"{json.dumps(nlg_payload, ensure_ascii=True)}"
-                )
                 gemini_response = gemini_client.models.generate_content(
                     model=gemini_model,
                     contents=prompt,
                 )
-                phrased = str(getattr(gemini_response, "text", "") or "").strip()
+                phrased = _extract_gemini_response_text(gemini_response)
                 if phrased:
                     source = "gemini_nlg"
-                    if attempt == 0:
-                        source = "gemini_nlg"
-                    else:
+                    if attempt > 0:
                         source = "gemini_nlg_retry"
-                    return _apply_nlg_output_guardrails(
+                    out_text, out_source = _apply_nlg_output_guardrails(
                         request=request,
                         provider_source=source,
                         backend_reply=reply,
                         candidate_reply=phrased,
                     )
+                    return _finish(
+                        out_text,
+                        out_source,
+                        nlg_retry_count=retry_count,
+                        nlg_guardrail_triggered=bool("guardrail_fallback" in str(out_source or "")),
+                    )
+                last_error = {
+                    "reason": "empty_response",
+                    "http_status": None,
+                    "timeout": False,
+                    "retryable": False,
+                    "message": "",
+                }
+                nlg_meta["nlg_empty_response"] = True
             except Exception as exc:
-                last_error = str(exc)
+                last_error = _classify_gemini_error(exc)
+                nlg_meta["nlg_http_status"] = last_error.get("http_status")
+                nlg_meta["nlg_timeout"] = bool(last_error.get("timeout"))
+                nlg_meta["nlg_error_reason"] = str(last_error.get("reason") or "")
+                if bool(last_error.get("retryable")) and attempt + 1 < max_attempts:
+                    retry_count += 1
+                    continue
                 continue
+            # No response text: retry once only for retryable empty output cases.
+            if attempt + 1 < max_attempts:
+                retry_count += 1
+                continue
+            break
+
+        reason_after_attempts = str(last_error.get("reason") or "")
+        if reason_after_attempts in {"timeout", "blocked", "empty_response"} or nlg_meta.get("nlg_empty_response"):
+            try:
+                simplified_prompt = (
+                    "Rewrite this reply in concise, natural English.\n"
+                    "Do not add or change facts.\n"
+                    f"Reply:\n{reply[:2500]}"
+                )
+                gemini_response = gemini_client.models.generate_content(
+                    model=gemini_model,
+                    contents=simplified_prompt,
+                )
+                tier_b_text = _extract_gemini_response_text(gemini_response)
+                if tier_b_text:
+                    out_text, out_source = _apply_nlg_output_guardrails(
+                        request=request,
+                        provider_source="gemini_nlg_tier_b",
+                        backend_reply=reply,
+                        candidate_reply=tier_b_text,
+                    )
+                    return _finish(
+                        out_text,
+                        out_source,
+                        nlg_retry_count=retry_count + 1,
+                        nlg_guardrail_triggered=bool("guardrail_fallback" in str(out_source or "")),
+                    )
+            except Exception as exc:
+                last_error = _classify_gemini_error(exc)
+                reason_after_attempts = str(last_error.get("reason") or reason_after_attempts)
 
         fallback_text = _fallback_nlg_paraphrase(reply)
+        if not str(fallback_text or "").strip():
+            fallback_text = "I can still help with that. Please try your request again in one short sentence."
         if fallback_text and fallback_text != reply:
+            reason = str(last_error.get("reason") or reason_after_attempts)
+            if not reason and nlg_meta.get("nlg_empty_response"):
+                reason = "empty_response"
             _safe_log_chat_runtime_event(
                 request,
                 event_key="gemini_failure_fallback",
-                detail="gemini_nlg_fallback_paraphrase",
+                detail=f"gemini_nlg_fallback_paraphrase:{reason or 'unknown'}",
             )
-            return fallback_text, "gemini_nlg_fallback_paraphrase"
+            return _finish(
+                fallback_text,
+                "gemini_nlg_fallback_paraphrase",
+                nlg_error_reason=reason or "fallback_paraphrase",
+                nlg_retry_count=retry_count,
+                nlg_fallback_used=True,
+            )
         if last_error:
             _safe_log_chat_runtime_event(
                 request,
                 event_key="gemini_failure_fallback",
-                detail="gemini_nlg_error",
+                detail=f"gemini_nlg_error:{str(last_error.get('reason') or 'provider_error')}",
             )
-            return reply, "gemini_nlg_error"
+            return _finish(
+                reply,
+                "gemini_nlg_error",
+                nlg_error_reason=str(last_error.get("reason") or "provider_error"),
+                nlg_http_status=last_error.get("http_status"),
+                nlg_timeout=bool(last_error.get("timeout")),
+                nlg_retry_count=retry_count,
+                nlg_fallback_used=True,
+            )
         _safe_log_chat_runtime_event(
             request,
             event_key="gemini_failure_fallback",
             detail="gemini_nlg_empty",
         )
-        return reply, "gemini_nlg_empty"
+        return _finish(
+            reply,
+            "gemini_nlg_empty",
+            nlg_error_reason="empty_response",
+            nlg_empty_response=True,
+            nlg_retry_count=retry_count,
+            nlg_fallback_used=True,
+        )
 
     if openai_api_key and OpenAI is not None:
-        return _fallback_nlg_paraphrase(reply), "openai_nlg_error_paraphrase"
+        return _finish(
+            _fallback_nlg_paraphrase(reply),
+            "openai_nlg_error_paraphrase",
+            nlg_provider="openai",
+            nlg_error_reason="provider_error",
+            nlg_fallback_used=True,
+        )
     if gemini_api_key and genai is None:
         _safe_log_chat_runtime_event(
             request,
             event_key="gemini_failure_fallback",
             detail="gemini_nlg_unavailable_paraphrase",
         )
-        return _fallback_nlg_paraphrase(reply), "gemini_nlg_unavailable_paraphrase"
+        return _finish(
+            _fallback_nlg_paraphrase(reply),
+            "gemini_nlg_unavailable_paraphrase",
+            nlg_provider="gemini",
+            nlg_error_reason="client_unavailable",
+            nlg_fallback_used=True,
+        )
     if gemini_api_key:
         _safe_log_chat_runtime_event(
             request,
             event_key="gemini_failure_fallback",
             detail="gemini_nlg_error_paraphrase",
         )
-        return _fallback_nlg_paraphrase(reply), "gemini_nlg_error_paraphrase"
+        return _finish(
+            _fallback_nlg_paraphrase(reply),
+            "gemini_nlg_error_paraphrase",
+            nlg_provider="gemini",
+            nlg_error_reason="provider_error",
+            nlg_fallback_used=True,
+        )
     if openai_api_key:
-        return _fallback_nlg_paraphrase(reply), "openai_nlg_error_paraphrase"
-    return _fallback_nlg_paraphrase(reply), "llm_nlg_unavailable_paraphrase"
+        return _finish(
+            _fallback_nlg_paraphrase(reply),
+            "openai_nlg_error_paraphrase",
+            nlg_provider="openai",
+            nlg_error_reason="provider_error",
+            nlg_fallback_used=True,
+        )
+    return _finish(
+        _fallback_nlg_paraphrase(reply),
+        "llm_nlg_unavailable_paraphrase",
+        nlg_error_reason="provider_unavailable",
+        nlg_fallback_used=True,
+    )
 
 def _openai_generate_final_response(*, request, intent, user_message, backend_reply):
     """
@@ -7035,6 +12460,7 @@ def ai_chat(request):
             status=400,
             error_message="invalid_json_payload",
         )
+    client_location = _resolve_client_location(payload, request)
 
     actor = _resolve_chat_actor(request)
     user = actor.get("user")
@@ -7051,8 +12477,21 @@ def ai_chat(request):
         )
 
     raw_message = str(payload.get("message", "")).strip()
+    page_context = str(
+        payload.get("page_context")
+        or payload.get("current_page")
+        or ""
+    ).strip()[:240]
     translated_message, detected_language = translate_to_english(raw_message)
     message = str(translated_message or raw_message).strip()
+    pre_normalized_message = str(message or "").strip()
+    normalized_message = _normalize_common_chat_typos(pre_normalized_message)
+    if normalized_message:
+        message = normalized_message
+    if actor.get("role") == "guest":
+        parity_normalized_message = _normalize_button_parity_message(message)
+        if parity_normalized_message:
+            message = parity_normalized_message
     init_suggestions = bool(payload.get("init_suggestions"))
     if not message:
         return _chat_json_response(
@@ -7072,22 +12511,128 @@ def ai_chat(request):
         "provenance": {
             "chat_role": actor.get("role", ""),
             "session_id": (request.session.session_key or "") if hasattr(request, "session") else "",
+            "page_context": page_context,
             "detected_language": detected_language,
             "input_translated_to_english": bool(
                 str(raw_message or "").strip()
                 and str(message or "").strip()
                 and str(raw_message).strip() != str(message).strip()
             ),
+            "typo_normalization_applied": bool(
+                str(pre_normalized_message or "").strip()
+                and str(message or "").strip()
+                and str(pre_normalized_message).strip() != str(message).strip()
+            ),
             "response_translated_to_user_language": False,
+            "active_flow": "",
+            "slots_filled": [],
+            "slots_missing": "",
+            "last_results_type": "",
+            "last_selected_entity": "",
+            "clarification_used": False,
+            "context_reply_used": False,
         },
     }
+    if (
+        actor.get("role") == "guest"
+        and _contains_any_phrase(
+            message,
+            (
+                "i want to go somewhere nice",
+                "where should i go",
+                "any recommendation",
+                "what can i do",
+            ),
+        )
+        and not _is_stay_planning_request(message)
+    ):
+        request._chatbot_log_context["resolved_intent"] = "clarification"
+        return _chat_json_response(
+            request,
+            start_time,
+            {
+                "fulfillmentText": (
+                    "I want to make sure I understood correctly. "
+                    "Do you want help with tours, accommodations, directions, or full trip planning?"
+                ),
+                "quick_replies": [
+                    "Show tours",
+                    "Find accommodations",
+                    "Plan my trip",
+                    "Get directions",
+                ],
+                "needs_clarification": True,
+                "missing_slot": "clarification",
+            },
+        )
     admin_topic_hint = _detect_admin_support_topic(message) if actor.get("role") == "admin" else ""
     employee_topic_hint = _detect_employee_support_topic(message) if actor.get("role") == "employee" else ""
+
+    social_payload = _build_small_talk_payload(
+        request=request,
+        actor=actor,
+        message=message,
+    )
+    if social_payload:
+        request._chatbot_log_context["resolved_intent"] = "small_talk"
+        return _chat_json_response(request, start_time, social_payload)
 
     if _is_help_or_greeting_command(message):
         request._chatbot_log_context["resolved_intent"] = "role_help"
         help_payload = _build_role_help_payload(actor)
         return _chat_json_response(request, start_time, help_payload)
+
+    if actor.get("role") == "owner" and _is_owner_help_command(message):
+        request._chatbot_log_context["resolved_intent"] = "role_help"
+        return _chat_json_response(request, start_time, _build_role_help_payload(actor))
+
+    if actor.get("role") == "owner" and _is_owner_manage_links_command(message):
+        request._chatbot_log_context["resolved_intent"] = "owner_listing_visibility"
+        return _chat_json_response(
+            request,
+            start_time,
+            _build_link_payload(
+                request,
+                text=(
+                    "You can update your accommodation links and images from Owner Hub.\n"
+                    "Please update these fields there: official website, Facebook page, external booking page, and accommodation images."
+                ),
+                route_name="admin_app:owner_hub",
+                label="Open Owner Hub",
+            ),
+        )
+
+    if actor.get("role") == "owner":
+        owner_booking_today_text = re.sub(
+            r"\s+",
+            " ",
+            re.sub(r"[^a-z0-9\s]", " ", str(message or "").lower()),
+        ).strip()
+        owner_booking_today_hit = bool(
+            re.search(
+                r"\b(rooms?|kwarto)\b.*\b(bookings?|booked|reserved|reservations?)\b.*\b(today|karon|ngayon)\b",
+                owner_booking_today_text,
+            )
+            or re.search(
+                r"\b(today|karon|ngayon)\b.*\b(rooms?|kwarto)\b.*\b(bookings?|booked|reserved|reservations?)\b",
+                owner_booking_today_text,
+            )
+        )
+        if owner_booking_today_hit:
+            request._chatbot_log_context["resolved_intent"] = "owner_submit_monthly_report"
+            return _chat_json_response(
+                request,
+                start_time,
+                _build_link_payload(
+                    request,
+                    text=(
+                        "Owner-side booking transactions are out of scope in chat.\n"
+                        "Please submit or review your monthly tourism report instead."
+                    ),
+                    route_name="admin_app:owner_report_submit",
+                    label="Open Monthly Reports",
+                ),
+            )
 
     if actor.get("role") == "guest":
         current_state = _load_chat_state(request)
@@ -7096,20 +12641,176 @@ def ai_chat(request):
             if isinstance(current_state.get("last_tour_recommendation_sched_ids"), list)
             else []
         )
+        if _is_guest_view_tour_bookings_command(message):
+            request._chatbot_log_context["resolved_intent"] = "guest_view_tour_bookings"
+            return _chat_json_response(
+                request,
+                start_time,
+                _build_guest_tour_bookings_payload(request, user),
+            )
         selection_index = _extract_tour_selection_index(message)
         is_tour_booking_shortcut = (
             selection_index > 0
             and bool(re.search(r"\b(book|reserve|reservation)\b", str(message or "").lower()))
         )
+        if (
+            _is_guest_tour_interest_followup(message)
+            and not _is_guest_tour_booking_command(message)
+            and not is_tour_booking_shortcut
+        ):
+            interest_hint = _extract_tour_interest_hint(message)
+            if not interest_hint and selection_index > 0 and fallback_sched_ids:
+                pick = selection_index - 1
+                if 0 <= pick < len(fallback_sched_ids):
+                    sched = (
+                        Tour_Schedule.objects.select_related("tour")
+                        .filter(sched_id__iexact=str(fallback_sched_ids[pick]))
+                        .first()
+                    )
+                    if sched is not None:
+                        interest_hint = str(getattr(getattr(sched, "tour", None), "tour_name", "") or "").strip()
+            if interest_hint:
+                request._chatbot_log_context["resolved_intent"] = "book_tour_via_link"
+                current_state["pending_tour_booking"] = {
+                    "stage": "awaiting_details",
+                    "active_flow": "tour_booking",
+                    "tour_name_hint": interest_hint,
+                    "expected_slots": ["date", "guests"],
+                }
+                _save_chat_state(request, current_state)
+                return _chat_json_response(
+                    request,
+                    start_time,
+                    {
+                        "fulfillmentText": (
+                            f"Great choice. I can help book {interest_hint}. "
+                            "What date and how many adults?"
+                        ),
+                        "quick_replies": ["May 10 for 2 adults", "May 12 for 2 adults", "show available tours"],
+                    },
+                )
         if _is_guest_tour_booking_command(message) or is_tour_booking_shortcut:
             request._chatbot_log_context["resolved_intent"] = "book_tour_via_link"
-            payload = _build_guest_tour_booking_link_payload(
-                request,
-                sched_id=_extract_sched_id_from_message(message),
-                fallback_sched_ids=fallback_sched_ids,
-                selection_index=selection_index,
+            direct_tour_name_hint = _extract_tour_name_booking_hint(message)
+            direct_date_hint = _extract_tour_date_hint_from_message(message)
+            direct_sched_id = _extract_sched_id_from_message(message)
+            parsed_booking = _extract_params_with_confidence(message)
+            parsed_booking_params = parsed_booking.get("params") if isinstance(parsed_booking.get("params"), dict) else {}
+            direct_guests = _to_int(parsed_booking_params.get("guests"), default=0)
+            if direct_guests <= 0:
+                direct_guests = _to_int(parsed_booking_params.get("group_size"), default=0)
+            if direct_guests <= 0:
+                guest_match = re.search(r"\b(\d+)\s*(adult|adults|guest|guests|people|person|pax)\b", _normalize_chat_text(message))
+                if guest_match:
+                    direct_guests = _to_int(guest_match.group(1), default=0)
+
+            if direct_tour_name_hint and not direct_date_hint and not direct_sched_id and not is_tour_booking_shortcut:
+                current_state["pending_tour_booking"] = {
+                    "stage": "awaiting_details",
+                    "active_flow": "tour_booking",
+                    "tour_name_hint": direct_tour_name_hint,
+                    "expected_slots": ["date", "guests"],
+                }
+                _save_chat_state(request, current_state)
+                return _chat_json_response(
+                    request,
+                    start_time,
+                    {
+                        "fulfillmentText": (
+                            f"Sure. I found {direct_tour_name_hint}. "
+                            "Please share your preferred date and number of adults to continue."
+                        ),
+                        "quick_replies": ["May 5 for 2 adults", "show available tours"],
+                    },
+                )
+            inferred_sched_id = direct_sched_id
+            if not inferred_sched_id and selection_index > 0 and fallback_sched_ids:
+                pick = selection_index - 1
+                if 0 <= pick < len(fallback_sched_ids):
+                    inferred_sched_id = str(fallback_sched_ids[pick] or "").strip()
+            if not direct_tour_name_hint and not inferred_sched_id and selection_index <= 0 and direct_date_hint is None:
+                return _chat_json_response(
+                    request,
+                    start_time,
+                    {
+                        "fulfillmentText": "Which tour would you like to book?",
+                        "quick_replies": ["show available tours", "show tour schedules"],
+                    },
+                )
+
+            schedule, alt_options = _resolve_schedule_for_tour_booking(
+                tour_name_hint=direct_tour_name_hint,
+                sched_id=inferred_sched_id,
+                date_hint=direct_date_hint,
             )
-            return _chat_json_response(request, start_time, payload)
+            if schedule is None and alt_options:
+                schedule_cards = []
+                for sched in alt_options[:5]:
+                    card = _build_schedule_card_trace(request, sched)
+                    if card:
+                        schedule_cards.append(card)
+                current_state["pending_tour_booking"] = {
+                    "stage": "awaiting_details",
+                    "active_flow": "tour_booking",
+                    "tour_name_hint": direct_tour_name_hint,
+                    "expected_slots": ["schedule", "guests"],
+                }
+                _save_chat_state(request, current_state)
+                response_payload = {
+                    "fulfillmentText": "I found multiple schedule options. Please choose one schedule to continue booking.",
+                    "quick_replies": ["show available tours"],
+                }
+                if schedule_cards:
+                    response_payload["recommendation_trace"] = schedule_cards
+                return _chat_json_response(request, start_time, response_payload)
+
+            if schedule is None:
+                return _chat_json_response(
+                    request,
+                    start_time,
+                    {
+                        "fulfillmentText": "I couldn't find that tour right now. You can try viewing current schedules or share a target date.",
+                        "quick_replies": ["show available tours", "show tour schedules"],
+                    },
+                )
+
+            if direct_guests <= 0:
+                current_state["pending_tour_booking"] = {
+                    "stage": "awaiting_details",
+                    "active_flow": "tour_booking",
+                    "tour_name_hint": str(getattr(getattr(schedule, "tour", None), "tour_name", "") or "").strip(),
+                    "sched_id": str(getattr(schedule, "sched_id", "") or "").strip(),
+                    "expected_slots": ["guests"],
+                }
+                _save_chat_state(request, current_state)
+                return _chat_json_response(
+                    request,
+                    start_time,
+                    {
+                        "fulfillmentText": "Great choice. How many guests are joining?",
+                        "quick_replies": ["2 adults", "3 adults", "4 adults"],
+                    },
+                )
+
+            summary_state = dict(current_state)
+            summary_state["pending_tour_booking"] = {
+                "stage": "awaiting_confirmation",
+                "active_flow": "tour_booking_confirmation",
+                "tour_name_hint": str(getattr(getattr(schedule, "tour", None), "tour_name", "") or "").strip(),
+                "sched_id": str(getattr(schedule, "sched_id", "") or "").strip(),
+                "date_text": timezone.localtime(schedule.start_time).strftime("%B %d, %Y"),
+                "guests": direct_guests,
+                "expected_slots": ["confirmation"],
+            }
+            _save_chat_state(request, summary_state)
+            return _chat_json_response(
+                request,
+                start_time,
+                {
+                    "fulfillmentText": _build_tour_booking_summary_text(schedule=schedule, guests=direct_guests),
+                    "quick_replies": ["Yes", "No", "change date"],
+                },
+            )
 
     if (
         actor.get("role") in {"admin", "employee"}
@@ -7119,16 +12820,21 @@ def ai_chat(request):
     ):
         request._chatbot_log_context["resolved_intent"] = "open_dashboard"
         target_name = "admin_app:admin_dashboard" if actor.get("role") == "admin" else "admin_app:employee_dashboard"
-        target_url = reverse(target_name)
-        if hasattr(request, "build_absolute_uri"):
-            target_url = request.build_absolute_uri(target_url)
+        target_label = "Open Admin Dashboard" if actor.get("role") == "admin" else "Open Employee Dashboard"
+        target_reply = (
+            "I found your admin dashboard. Click the button below to open it in a new tab."
+            if actor.get("role") == "admin"
+            else "I found your employee dashboard. Click the button below to open it in a new tab."
+        )
         return _chat_json_response(
             request,
             start_time,
-            {
-                "fulfillmentText": "Opening your dashboard now.",
-                "redirect_url": target_url,
-            },
+            _build_link_payload(
+                request,
+                text=target_reply,
+                route_name=target_name,
+                label=target_label,
+            ),
         )
     if actor.get("role") == "owner" and _is_open_dashboard_command(message):
         request._chatbot_log_context["resolved_intent"] = "open_owner_dashboard"
@@ -7149,18 +12855,22 @@ def ai_chat(request):
         payload = {"fulfillmentText": summary}
         role = str(actor.get("role") or "").strip().lower()
         if role == "owner":
+            payload["fulfillmentText"] = (
+                "Owner booking transactions are not handled in chat.\n"
+                "For Tourism Office operations, please submit or review your monthly report."
+            )
             payload.update(
                 _build_link_payload(
                     request,
-                    text=summary,
-                    route_name="admin_app:owner_accommodation_bookings",
-                    label="View Owner Accommodation Bookings",
+                    text=payload["fulfillmentText"],
+                    route_name="admin_app:owner_report_submit",
+                    label="Open Monthly Reports",
                 )
             )
             payload["quick_replies"] = [
-                "How many bookings do we have today?",
-                "How many bookings do we have this month?",
+                "Submit monthly report",
                 "Open reports and analytics",
+                "Open Owner Hub",
             ]
         elif role == "guest":
             payload.update(
@@ -7168,7 +12878,7 @@ def ai_chat(request):
                     request,
                     text=summary,
                     route_name="my_accommodation_bookings",
-                    label="View My Hotel/Inn Bookings",
+                    label="Open Accommodation Links",
                 )
             )
         elif role == "admin":
@@ -7189,12 +12899,12 @@ def ai_chat(request):
                     route_name=(
                         "tour_app:pending_view"
                         if admin_tour_scope
-                        else ("admin_app:admin_dashboard" if admin_generic_scope else "admin_app:accommodation_bookings")
+                        else ("admin_app:admin_dashboard" if admin_generic_scope else "admin_app:owner_reports_review")
                     ),
                     label=(
                         "Open Tour Bookings"
                         if admin_tour_scope
-                        else ("Open Booking Monitoring" if admin_generic_scope else "Open Accommodation Bookings")
+                        else ("Open Booking Monitoring" if admin_generic_scope else "open accommodation links")
                     ),
                 )
             )
@@ -7251,7 +12961,7 @@ def ai_chat(request):
             start_time,
             {
                 "fulfillmentText": owner_accom_reply,
-                "quick_replies": ["Show my rooms", "Show my bookings", "Open Owner Hub"],
+                "quick_replies": ["Show my rooms", "Submit monthly report", "Open Owner Hub"],
             },
         )
 
@@ -7263,7 +12973,7 @@ def ai_chat(request):
             start_time,
             {
                 "fulfillmentText": owner_summary_reply,
-                "quick_replies": ["Show my rooms", "Show my bookings", "Open Owner Hub"],
+                "quick_replies": ["Show my rooms", "Submit monthly report", "Open Owner Hub"],
             },
         )
 
@@ -7307,7 +13017,7 @@ def ai_chat(request):
                 _build_link_payload(
                     request,
                     text=_build_admin_accommodation_records_summary(message),
-                    route_name="admin_app:accommodation_bookings",
+                    route_name="admin_app:owner_reports_review",
                     label="Open Accommodation Records",
                 ),
             )
@@ -7316,7 +13026,7 @@ def ai_chat(request):
             payload = _build_link_payload(
                 request,
                 text=_build_admin_booking_system_summary(),
-                route_name="admin_app:accommodation_bookings",
+                route_name="admin_app:owner_reports_review",
                 label="Open Booking Monitoring",
             )
             if str(message or "").strip().lower() in short_admin:
@@ -7362,6 +13072,18 @@ def ai_chat(request):
                     "Open admin dashboard",
                 ]
             return _chat_json_response(request, start_time, payload)
+
+        if admin_topic_hint == "admin_activation_deactivation_help":
+            return _chat_json_response(
+                request,
+                start_time,
+                _build_link_payload(
+                    request,
+                    text=_build_admin_activation_deactivation_summary(),
+                    route_name="admin_app:owner_reports_review",
+                    label="Open Accommodation Management",
+                ),
+            )
 
         if admin_topic_hint == "admin_chatbot_activity_monitoring":
             return _chat_json_response(
@@ -7423,8 +13145,8 @@ def ai_chat(request):
             _build_link_payload(
                 request,
                 text="I found the Accommodation Bookings page. Click the button below to open it in a new tab.",
-                route_name="admin_app:accommodation_bookings",
-                label="Open Accommodation Bookings",
+                route_name="admin_app:owner_reports_review",
+                label="open accommodation links",
             ),
         )
 
@@ -7540,6 +13262,111 @@ def ai_chat(request):
             _build_link_payload(
                 request,
                 text=_build_employee_assigned_tours_summary(request, actor),
+                route_name="admin_app:employee_assigned_tours",
+                label="Open Assigned Tours",
+            ),
+        )
+
+    if actor.get("role") == "employee" and _is_employee_open_assignment_command(message):
+        request._chatbot_log_context["resolved_intent"] = "employee_open_assignment"
+        sched_id_hint = _extract_sched_id_from_message(message)
+        date_hint = _extract_tour_date_hint_from_message(message)
+        assignment, assignment_match_mode = _resolve_employee_assignment_row_with_meta(
+            request,
+            actor,
+            sched_id_hint=sched_id_hint,
+            target_date=date_hint,
+        )
+        if assignment is None:
+            return _chat_json_response(
+                request,
+                start_time,
+                {
+                    "fulfillmentText": "No assigned tours found yet. Open Assigned Tours to check current assignments.",
+                    "quick_replies": ["Open assigned tours", "Open dashboard"],
+                },
+            )
+        schedule = getattr(assignment, "schedule", None)
+        tour = getattr(schedule, "tour", None) if schedule is not None else None
+        sched_id = str(getattr(schedule, "sched_id", "") or "").strip()
+        tour_name = str(getattr(tour, "tour_name", "") or "Assigned Tour").strip()
+        start_time_text = ""
+        schedule_start = getattr(schedule, "start_time", None)
+        if schedule_start is not None:
+            start_time_text = timezone.localtime(schedule_start).strftime("%b %d, %Y %I:%M %p")
+        date_hint_note = ""
+        if date_hint is not None and assignment_match_mode == "date_nearest":
+            opened_date = timezone.localtime(schedule_start).strftime("%B %d, %Y") if schedule_start is not None else "a nearby date"
+            date_hint_note = (
+                f"I didn't find an exact assignment on {date_hint.strftime('%B %d, %Y')}, "
+                f"so I opened the nearest one on {opened_date}.\n"
+            )
+        reply = (
+            f"{date_hint_note}Assignment opened: {tour_name} ({sched_id}).\n"
+            + (f"Start time: {start_time_text}.\n" if start_time_text else "")
+            + "You can continue this from the Assigned Tours page."
+        )
+        _save_chat_state(
+            request,
+            {
+                "pending_intent": "employee_open_assignment",
+                "params": {"assignment_sched_id": sched_id},
+            },
+        )
+        if hasattr(request, "session"):
+            request.session["current_assignment_id"] = str(getattr(assignment, "id", "") or "")
+            request.session["current_assignment_sched_id"] = sched_id
+            request.session.modified = True
+        return _chat_json_response(
+            request,
+            start_time,
+            _build_link_payload(
+                request,
+                text=reply,
+                route_name="admin_app:employee_assigned_tours",
+                label="Open Assigned Tours",
+            ),
+        )
+
+    if actor.get("role") == "employee" and _is_employee_assignment_update_command(message):
+        request._chatbot_log_context["resolved_intent"] = "employee_update_assignment"
+        decision = "accept" if "accept" in _normalize_chat_text(message) else "decline"
+        sched_id_hint = _extract_sched_id_from_message(message)
+        state_for_assignment = _load_chat_state(request)
+        state_params = state_for_assignment.get("params") if isinstance(state_for_assignment.get("params"), dict) else {}
+        if not sched_id_hint:
+            sched_id_hint = str(state_params.get("assignment_sched_id") or "").strip()
+        assignment_id_hint = ""
+        if hasattr(request, "session"):
+            assignment_id_hint = str(request.session.get("current_assignment_id") or "").strip()
+        assignment = _resolve_employee_assignment_row(request, actor, sched_id_hint=sched_id_hint)
+        if assignment is None and assignment_id_hint:
+            assignment = (
+                TourAssignment.objects.select_related("schedule", "schedule__tour")
+                .filter(id=assignment_id_hint)
+                .first()
+            )
+        if assignment is None:
+            return _chat_json_response(
+                request,
+                start_time,
+                {
+                    "fulfillmentText": "I couldn't find an active assignment yet. Open an assignment first, then send accept or decline.",
+                    "quick_replies": ["Open assigned tours"],
+                },
+            )
+        schedule = getattr(assignment, "schedule", None)
+        sched_id = str(getattr(schedule, "sched_id", "") or "").strip()
+        reply = (
+            f"Understood. You selected {decision} for assignment {sched_id}.\n"
+            "Please finalize this update in Assigned Tours so it is reflected in your operational workflow."
+        )
+        return _chat_json_response(
+            request,
+            start_time,
+            _build_link_payload(
+                request,
+                text=reply,
                 route_name="admin_app:employee_assigned_tours",
                 label="Open Assigned Tours",
             ),
@@ -7724,6 +13551,24 @@ def ai_chat(request):
                     ]
                 return _chat_json_response(request, start_time, payload)
 
+            if employee_topic == "employee_tourist_records_workflow_help":
+                return _chat_json_response(
+                    request,
+                    start_time,
+                    _build_link_payload(
+                        request,
+                        text=(
+                            "Tourist record workflow:\n"
+                            "1) Open Employee Dashboard monitoring view.\n"
+                            "2) Check active tourist records and booking signals.\n"
+                            "3) Search by tourist name when needed.\n"
+                            "4) Escalate approval or account-level actions to admin."
+                        ),
+                        route_name="admin_app:employee_dashboard",
+                        label="Open Monitoring Dashboard",
+                    ),
+                )
+
             if employee_topic == "employee_workflow_listing_review":
                 payload = _build_link_payload(
                     request,
@@ -7816,6 +13661,59 @@ def ai_chat(request):
             ),
         )
 
+    if actor.get("role") == "guest" and _is_guest_search_help_command(message):
+        request._chatbot_log_context["resolved_intent"] = "guest_search_help"
+        return _chat_json_response(
+            request,
+            start_time,
+            {
+                "fulfillmentText": (
+                    "To search hotels/inns in this system, send a preference sentence with location, guests, and budget.\n"
+                    "Example: hotel in Suba barangay for 2 guests under 2000.\n"
+                    "Then choose an option and I can share its official page."
+                ),
+                "quick_replies": [
+                    "show approved accommodations in bayawan",
+                    "hotel in suba for 2 guests under 1500",
+                    "create booking preview",
+                ],
+            },
+        )
+
+    if actor.get("role") == "guest" and _is_guest_billing_details_help_command(message):
+        request._chatbot_log_context["resolved_intent"] = "guest_billing_details_help"
+        return _chat_json_response(
+            request,
+            start_time,
+            {
+                "fulfillmentText": (
+                    "I can share estimated cost details after you pick a room option and guest count.\n"
+                    "You'll then continue on the accommodation's official page/contact channel."
+                ),
+                "quick_replies": [
+                    "show approved accommodations in bayawan",
+                    "create booking preview",
+                    "open official page",
+                ],
+            },
+        )
+
+    if actor.get("role") == "guest" and _is_guest_booking_review_help_command(message):
+        request._chatbot_log_context["resolved_intent"] = "guest_booking_review_help"
+        return _chat_json_response(
+            request,
+            start_time,
+            _build_link_payload(
+                request,
+                text=(
+                    "Open Accommodation Links to continue to each establishment's official page/contact channel.\n"
+                    "I can also help you compare options before you open a link."
+                ),
+                route_name="my_accommodation_bookings",
+                label="Open Accommodation Links",
+            ),
+        )
+
     if actor.get("role") == "guest" and _is_guest_password_help_command(message):
         request._chatbot_log_context["resolved_intent"] = "guest_password_help"
         return _chat_json_response(
@@ -7840,11 +13738,11 @@ def ai_chat(request):
             _build_link_payload(
                 request,
                 text=(
-                    "To cancel a booking, open your Hotel/Inn Bookings page, select the booking, then click Cancel.\n"
-                    "Only pending or confirmed bookings can be cancelled."
+                    "Accommodation transactions are now completed on each establishment's official page.\n"
+                    "Please contact the accommodation directly for cancellation or date-change requests."
                 ),
                 route_name="my_accommodation_bookings",
-                label="Open My Hotel/Inn Bookings",
+                label="Open Accommodation Links",
             ),
         )
 
@@ -7856,11 +13754,11 @@ def ai_chat(request):
             _build_link_payload(
                 request,
                 text=(
-                    "Direct date change is not yet enabled in this prototype.\n"
-                    "Please cancel the current booking (if pending/confirmed), then create a new booking with your new dates."
+                    "Date changes are handled by the accommodation's official page/contact channel.\n"
+                    "Open the official link and request a schedule update directly with the property."
                 ),
                 route_name="my_accommodation_bookings",
-                label="Open My Hotel/Inn Bookings",
+                label="Open Accommodation Links",
             ),
         )
 
@@ -7877,8 +13775,8 @@ def ai_chat(request):
             start_time,
             {
                 "fulfillmentText": (
-                    f"Supported payment methods in the booking records are: {methods_text}.\n"
-                    "Final payment handling is processed through the LGU-linked billing/payment flow."
+                    f"Common payment methods listed by accommodations include: {methods_text}.\n"
+                    "Final payment and confirmation are handled on each accommodation's official channel."
                 )
             },
         )
@@ -7890,8 +13788,8 @@ def ai_chat(request):
             start_time,
             {
                 "fulfillmentText": (
-                    "Down payment policy may vary per accommodation and LGU payment process.\n"
-                    "This system computes your total and then routes payment through the LGU-linked billing flow."
+                    "Down payment policy may vary per accommodation.\n"
+                    "Please confirm payment terms directly on the accommodation's official page/contact channel."
                 ),
             },
         )
@@ -7911,7 +13809,7 @@ def ai_chat(request):
                 "quick_replies": [
                     "Recommend a hotel in Bayawan for 2 guests",
                     "Show default hotel suggestions",
-                    "View my accommodation bookings",
+                    "View accommodation links",
                 ],
             },
         )
@@ -7922,22 +13820,22 @@ def ai_chat(request):
             "fulfillmentText": (
                 "Great question. Booking has 2 simple steps:\n"
                 "1) Choose a room first from available hotels/inns.\n"
-                "2) Send booking details: check-in date, check-out date, and number of guests.\n\n"
+                "2) Open the property's official page/contact channel.\n\n"
                 "Required details:\n"
-                "- Room reference (Room ID or selected option)\n"
-                "- Check-in date\n"
-                "- Check-out date\n"
+                "- Room reference (room type or selected option)\n"
+                "- Your preferred check-in date\n"
+                "- Your preferred check-out date\n"
                 "- Number of guests\n\n"
                 "Optional details for better matching:\n"
                 "- Budget\n"
                 "- Preferred location\n"
                 "- Amenities (Wi-Fi, aircon, etc.)\n\n"
-                "After confirmation, I will generate your booking summary and LGU payment link."
+                "I can then open the property's official page so you can complete booking directly with them."
             ),
             "quick_replies": [
-                "Show available hotels and inns",
-                "Recommend a hotel in Bayawan for 2 guests under 1500",
-                "View my accommodation bookings",
+                "show approved accommodations in bayawan",
+                "show rooms",
+                "create booking preview",
             ],
         }
         return _chat_json_response(
@@ -8003,14 +13901,14 @@ def ai_chat(request):
         request._chatbot_log_context["resolved_intent"] = "view_my_accommodation_bookings"
         response_payload = {}
         if actor.get("role") == "owner":
-            my_bookings_url = reverse("admin_app:owner_accommodation_bookings")
-            booking_label = "View My Accommodation Bookings (Owner)"
-            booking_reply = "I found your accommodation-owner bookings page. Click the button below to open it in a new tab."
+            my_bookings_url = reverse("admin_app:owner_report_submit")
+            booking_label = "Open Monthly Reports (Owner)"
+            booking_reply = "I found your owner reporting page. Click the button below to open it in a new tab."
         elif actor.get("role") == "admin":
             if _is_accommodation_bookings_page_command(message):
-                my_bookings_url = reverse("admin_app:accommodation_bookings")
-                booking_label = "Open Accommodation Bookings"
-                booking_reply = "I found the Accommodation Bookings page. Click the button below to open it in a new tab."
+                my_bookings_url = reverse("admin_app:owner_reports_review")
+                booking_label = "Open Owner Reports Review"
+                booking_reply = "I found the owner reports review page. Click the button below to open it in a new tab."
             else:
                 my_bookings_url = reverse("admin_app:admin_dashboard")
                 booking_label = "Open Admin Dashboard"
@@ -8021,8 +13919,8 @@ def ai_chat(request):
             booking_reply = "I found your employee dashboard. Click the button below to open it in a new tab."
         else:
             my_bookings_url = reverse("my_accommodation_bookings")
-            booking_label = "View My Hotel/Inn Bookings"
-            booking_reply = "I found your hotel/inn bookings page. Click the button below to open it in a new tab."
+            booking_label = "Open Accommodation Links"
+            booking_reply = "I found the accommodation links page. Click the button below to open official page/contact options."
         if hasattr(request, "build_absolute_uri"):
             my_bookings_url = request.build_absolute_uri(my_bookings_url)
         response_payload = {
@@ -8083,14 +13981,15 @@ def ai_chat(request):
                     ),
                 )
             if owner_topic == "owner_listing_update":
+                request._chatbot_log_context["resolved_intent"] = "owner_listing_visibility"
                 return _chat_json_response(
                     request,
                     start_time,
                     _build_link_payload(
                         request,
                         text=(
-                            "Yes, you can update your listing details after registration.\n"
-                            "Use Owner Hub to edit company information and listing details."
+                            "Use Owner Hub to update your accommodation links and images.\n"
+                            "You can edit: official website, Facebook page, external booking page, and accommodation photos."
                         ),
                         route_name="admin_app:owner_hub",
                         label="Open Owner Hub",
@@ -8127,7 +14026,7 @@ def ai_chat(request):
                         "Then retry from Manage Rooms."
                     ),
                 }
-                short_owner_texts = {"add room", "update price", "view bookings", "listing not showing", "room unavailable how"}
+                short_owner_texts = {"add room", "update price", "listing not showing", "room unavailable how"}
                 payload = _build_owner_manage_rooms_link_payload(
                     request,
                     text=str(detail_map.get(owner_topic) or "Open Manage Rooms to continue."),
@@ -8140,69 +14039,41 @@ def ai_chat(request):
                         "Update room price",
                         "Change room capacity",
                         "Mark room unavailable",
-                        "View bookings",
+                        "Submit monthly report",
                     ]
                 return _chat_json_response(request, start_time, payload)
-            if owner_topic in {
-                "owner_view_bookings",
-                "owner_booking_guest_details",
-                "owner_confirm_reservation",
-                "owner_pending_reservations",
-                "owner_cancelled_reservations",
-            }:
-                booking_text = _build_owner_booking_payment_summary(user)
-                if owner_topic == "owner_confirm_reservation":
-                    booking_text = (
-                        f"{booking_text}\n\n"
-                        "To confirm a reservation, open Owner Bookings and update the booking status to Confirmed."
-                    )
-                if owner_topic == "owner_booking_guest_details":
-                    booking_text = (
-                        f"{booking_text}\n\n"
-                        "Guest reservation details are available inside each booking record."
-                    )
-                payload = _build_link_payload(
-                    request,
-                    text=booking_text,
-                    route_name="admin_app:owner_accommodation_bookings",
-                    label="Open Owner Bookings",
-                )
-                if str(message or "").strip().lower() == "view bookings":
-                    payload["needs_clarification"] = True
-                    payload["missing_slot"] = "owner_booking_filter"
-                    payload["quick_replies"] = [
-                        "Show pending reservations",
-                        "Show payment status",
-                        "Show cancelled reservations",
-                    ]
-                return _chat_json_response(
-                    request,
-                    start_time,
-                    payload,
-                )
-            if owner_topic in {"owner_payment_status", "owner_billing_details", "owner_transactions"}:
-                billing_text = (
-                    _build_owner_billing_details_summary(user)
-                    if owner_topic != "owner_payment_status"
-                    else _build_owner_booking_payment_summary(user)
-                )
+            if owner_topic == "owner_submit_monthly_report":
                 return _chat_json_response(
                     request,
                     start_time,
                     _build_link_payload(
                         request,
-                        text=billing_text,
-                        route_name="admin_app:owner_accommodation_bookings",
-                        label="Open Booking Transactions",
+                        text=(
+                            "Owner reporting is handled through monthly tourism reports.\n"
+                            "Open the report page to submit or update your monthly data.\n"
+                            "Please enter check-ins per room so the Tourism Office can monitor usage per room type."
+                        ),
+                        route_name="admin_app:owner_report_submit",
+                        label="Open Monthly Reports",
                     ),
                 )
-            if owner_topic == "owner_direct_booking_flow":
+            if owner_topic == "owner_available_rooms_today":
+                return _chat_json_response(
+                    request,
+                    start_time,
+                    _build_owner_manage_rooms_link_payload(
+                        request,
+                        text=_build_owner_available_rooms_today_summary(user),
+                        label="Open Manage Rooms",
+                    ),
+                )
+            if owner_topic == "owner_listing_status":
                 return _chat_json_response(
                     request,
                     start_time,
                     _build_link_payload(
                         request,
-                        text=_build_owner_direct_booking_flow_summary(user),
+                        text=_build_owner_listing_status_summary(user),
                         route_name="admin_app:owner_hub",
                         label="Open Owner Hub",
                     ),
@@ -8229,6 +14100,466 @@ def ai_chat(request):
                 )
 
     chat_state = _load_chat_state(request)
+    chat_state_params = chat_state.get("params") if isinstance(chat_state.get("params"), dict) else {}
+    chat_state_pending = str(chat_state.get("pending_intent") or "").strip().lower()
+    chat_state_missing = str(chat_state.get("missing_slot") or "").strip().lower()
+    chat_state_provenance = (
+        request._chatbot_log_context.get("provenance")
+        if isinstance(request._chatbot_log_context.get("provenance"), dict)
+        else {}
+    )
+    if isinstance(chat_state_provenance, dict):
+        active_flow = ""
+        pending_tour_state = (
+            chat_state.get("pending_tour_booking")
+            if isinstance(chat_state.get("pending_tour_booking"), dict)
+            else {}
+        )
+
+    if actor.get("role") == "guest" and (
+        _is_tour_schedule_request(message) or _is_tour_schedule_request(raw_message)
+    ):
+        request._chatbot_log_context["resolved_intent"] = "get_recommendation"
+        schedule_payload = _build_tour_schedule_listing_payload(request, message, chat_state_params)
+        response_payload = {
+            "fulfillmentText": str(schedule_payload.get("reply") or "Here are available tour schedules right now.").strip(),
+        }
+        if isinstance(schedule_payload.get("items"), list) and schedule_payload.get("items"):
+            response_payload["recommendation_trace"] = schedule_payload.get("items")
+        if isinstance(schedule_payload.get("quick_replies"), list):
+            response_payload["quick_replies"] = _sanitize_quick_replies(schedule_payload.get("quick_replies"), limit=4)
+        sched_ids = schedule_payload.get("sched_ids") if isinstance(schedule_payload.get("sched_ids"), list) else []
+        next_state = dict(chat_state)
+        next_state.pop("pending_tour_booking", None)
+        if sched_ids:
+            next_state["last_tour_recommendation_sched_ids"] = sched_ids[:8]
+        next_state["pending_intent"] = "get_recommendation"
+        next_state["params"] = chat_state_params if isinstance(chat_state_params, dict) else {}
+        _save_chat_state(request, next_state)
+        return _chat_json_response(request, start_time, response_payload)
+
+    if (
+        actor.get("role") == "guest"
+        and _is_likely_gibberish_query(message)
+        and not isinstance(chat_state.get("pending_tour_booking"), dict)
+    ):
+        role_clarifier = _role_aware_clarification_payload(actor)
+        request._chatbot_log_context["resolved_intent"] = "clarification"
+        request._chatbot_log_context["fallback_used"] = False
+        _save_chat_state(
+            request,
+            {
+                "pending_intent": "clarification",
+                "params": chat_state_params if isinstance(chat_state_params, dict) else {},
+                "missing_slot": "clarification",
+            },
+        )
+        return _chat_json_response(
+            request,
+            start_time,
+            {
+                "fulfillmentText": (
+                    "I'm not sure I understood your request. You can ask me about tours, approved accommodations, directions, trip planning, or booking previews."
+                ),
+                "quick_replies": _sanitize_quick_replies(role_clarifier.get("quick_replies"), limit=4),
+                "needs_clarification": True,
+                "missing_slot": "clarification",
+            },
+        )
+        if pending_tour_state:
+            active_flow = str(pending_tour_state.get("active_flow") or pending_tour_state.get("stage") or "").strip()
+        if not active_flow:
+            active_flow = chat_state_pending
+        chat_state_provenance["active_flow"] = active_flow[:80]
+        chat_state_provenance["slots_missing"] = chat_state_missing[:60]
+        if isinstance(chat_state_params, dict):
+            filled = [str(k) for k, v in chat_state_params.items() if v not in ("", None, [], {})]
+            chat_state_provenance["slots_filled"] = filled[:10]
+        last_results_type = ""
+        if isinstance(chat_state.get("last_accommodation_recommendations"), list) and chat_state.get("last_accommodation_recommendations"):
+            last_results_type = "accommodation"
+        elif isinstance(chat_state.get("last_tour_recommendation_sched_ids"), list) and chat_state.get("last_tour_recommendation_sched_ids"):
+            last_results_type = "tours"
+        chat_state_provenance["last_results_type"] = last_results_type
+        request._chatbot_log_context["provenance"] = chat_state_provenance
+
+    if actor.get("role") == "guest" and _contains_any_phrase(
+        message,
+        ("what can i do there", "things to do there", "what can i do in bayawan", "things to do in bayawan"),
+    ):
+        request._chatbot_log_context["resolved_intent"] = "get_recommendation"
+        _safe_log_recommendation_event(request, "get_recommendation")
+        try:
+            reply, logged_items = _get_recommendations({})
+        except Exception:
+            reply, logged_items = ("No tours available right now.", [])
+        response = {"fulfillmentText": str(reply or "No tours available right now.")}
+        if logged_items:
+            response["recommendation_trace"] = logged_items
+        rec_sched_ids = []
+        for item in logged_items:
+            if not isinstance(item, dict):
+                continue
+            meta = item.get("meta") if isinstance(item.get("meta"), dict) else {}
+            sched_id = str(item.get("sched_id") or meta.get("sched_id") or "").strip()
+            if sched_id:
+                rec_sched_ids.append(sched_id)
+        if rec_sched_ids:
+            chat_state["last_tour_recommendation_sched_ids"] = rec_sched_ids[:5]
+            _save_chat_state(request, chat_state)
+        return _chat_json_response(request, start_time, response)
+
+    # Phase A: hard directions override before any continuation/slot-filling branches.
+    if actor.get("role") == "guest" and _is_travel_guidance_request(message):
+        combo_parse = _extract_params_with_confidence(message)
+        combo_params = combo_parse.get("params") if isinstance(combo_parse.get("params"), dict) else {}
+        if _has_accommodation_plus_direction_mix(message, combo_params):
+            missing_slot, question = _next_accommodation_clarifying_question(combo_params)
+            next_state = {
+                "pending_intent": "get_accommodation_recommendation",
+                "params": combo_params,
+                "missing_slot": missing_slot or "",
+            }
+            _save_chat_state(request, next_state)
+            if missing_slot:
+                return _chat_json_response(
+                    request,
+                    start_time,
+                    {
+                        "fulfillmentText": (
+                            f"{question}\nAfter that, I can also guide you with distance or directions."
+                        ),
+                        "quick_replies": _slot_quick_replies(missing_slot),
+                        "needs_clarification": True,
+                        "missing_slot": missing_slot,
+                    },
+                )
+
+        request._chatbot_log_context["resolved_intent"] = "travel_guidance"
+        travel_params = {}
+        if _is_contextual_direction_followup(message):
+            explicit_destination = _resolve_destination_for_travel(message, {})
+            explicit_name = str(explicit_destination.get("name") or "").strip()
+            explicit_kind = str(explicit_destination.get("kind") or "").strip().lower()
+            if explicit_name and explicit_kind in {"accommodation", "tourist_spot", "place"}:
+                travel_params["accom_name"] = explicit_name
+                request._chatbot_log_context["provenance"]["context_reply_used"] = True
+                request._chatbot_log_context["provenance"]["last_selected_entity"] = explicit_name[:120]
+            else:
+                recent_choices = _recent_accommodation_choices(chat_state, limit=3)
+                if len(recent_choices) == 1:
+                    choice = recent_choices[0]
+                    travel_params["accom_name"] = str(choice.get("name") or "").strip()
+                    if str(choice.get("location") or "").strip():
+                        travel_params["location"] = str(choice.get("location") or "").strip()
+                    request._chatbot_log_context["provenance"]["context_reply_used"] = True
+                    request._chatbot_log_context["provenance"]["last_selected_entity"] = str(choice.get("name") or "")[:120]
+                elif len(recent_choices) > 1:
+                    a = recent_choices[0]
+                    b = recent_choices[1]
+                    return _chat_json_response(
+                        request,
+                        start_time,
+                        {
+                            "fulfillmentText": (
+                                f"Which place do you mean: {a.get('name')} or {b.get('name')}?"
+                            ),
+                            "quick_replies": [
+                                str(a.get("name") or ""),
+                                str(b.get("name") or ""),
+                            ],
+                            "needs_clarification": True,
+                            "missing_slot": "direction_target",
+                        },
+                    )
+                elif isinstance(chat_state_params, dict):
+                    if str(chat_state_params.get("location") or "").strip():
+                        travel_params["location"] = str(chat_state_params.get("location") or "").strip()
+                        request._chatbot_log_context["provenance"]["context_reply_used"] = True
+            if not travel_params and isinstance(chat_state_params, dict):
+                if str(chat_state_params.get("location") or "").strip():
+                    travel_params["location"] = str(chat_state_params.get("location") or "").strip()
+                    request._chatbot_log_context["provenance"]["context_reply_used"] = True
+        guidance = _build_travel_guidance_payload(message, travel_params, client_location)
+        guidance_reply = str(guidance.get("reply") or "").strip() or "I can guide you with directions. Please share your destination."
+        guidance_response = {"fulfillmentText": guidance_reply}
+        if isinstance(guidance.get("quick_replies"), list):
+            guidance_response["quick_replies"] = _sanitize_quick_replies(guidance.get("quick_replies"), limit=4)
+        if guidance.get("link"):
+            guidance_response["billing_link"] = str(guidance.get("link"))
+            guidance_response["billing_link_label"] = str(guidance.get("link_label") or "Open Map")
+        return _chat_json_response(request, start_time, guidance_response)
+
+    pending_tour_booking = (
+        chat_state.get("pending_tour_booking") if isinstance(chat_state.get("pending_tour_booking"), dict) else {}
+    )
+    if actor.get("role") == "guest" and pending_tour_booking:
+        if isinstance(request._chatbot_log_context.get("provenance"), dict):
+            request._chatbot_log_context["provenance"]["context_reply_used"] = True
+        booking_stage = str(pending_tour_booking.get("stage") or "").strip().lower()
+        pending_tour_name = str(pending_tour_booking.get("tour_name_hint") or "").strip()
+        pending_date_text = str(pending_tour_booking.get("date_text") or "").strip()
+        pending_guests = _to_int(pending_tour_booking.get("guests"), default=0)
+        pending_sched_id = str(pending_tour_booking.get("sched_id") or "").strip()
+        normalized_message = _normalize_chat_text(message)
+        if _contains_any_phrase(normalized_message, ("cancel", "stop booking", "never mind")):
+            _clear_chat_state(request)
+            return _chat_json_response(
+                request,
+                start_time,
+                {
+                    "fulfillmentText": "Tour booking flow cancelled. You can ask for available tours anytime.",
+                    "quick_replies": ["show available tours", "show tour schedules"],
+                },
+            )
+        if _contains_any_phrase(
+            normalized_message,
+            ("show available tours", "show tours", "tour packages", "show tour schedules", "view tour schedules"),
+        ):
+            _clear_chat_state(request)
+            if _is_tour_schedule_request(normalized_message):
+                schedule_payload = _build_tour_schedule_listing_payload(request, message, {})
+                response_payload = {
+                    "fulfillmentText": str(schedule_payload.get("reply") or "Here are available tour schedules right now."),
+                }
+                if isinstance(schedule_payload.get("items"), list) and schedule_payload.get("items"):
+                    response_payload["recommendation_trace"] = schedule_payload.get("items")
+                if isinstance(schedule_payload.get("quick_replies"), list):
+                    response_payload["quick_replies"] = _sanitize_quick_replies(schedule_payload.get("quick_replies"), limit=4)
+                return _chat_json_response(request, start_time, response_payload)
+            rec_reply, rec_items = _get_recommendations({})
+            response_payload = {"fulfillmentText": str(rec_reply or "No tours available right now.")}
+            if rec_items:
+                response_payload["recommendation_trace"] = rec_items
+            return _chat_json_response(request, start_time, response_payload)
+        if booking_stage == "awaiting_confirmation" and _contains_any_phrase(
+            normalized_message,
+            ("change guests", "change guest", "update guests", "change date", "update date"),
+        ):
+            keep_date = pending_date_text
+            keep_guests = pending_guests
+            expect_slots = ["date", "guests"]
+            prompt = "Sure. Please share your updated date and number of adults."
+            if _contains_any_phrase(normalized_message, ("change guests", "change guest", "update guests")):
+                expect_slots = ["guests"]
+                prompt = "Sure. How many guests are joining now?"
+            elif _contains_any_phrase(normalized_message, ("change date", "update date")):
+                expect_slots = ["date"]
+                prompt = "Sure. What date or schedule would you prefer?"
+            refreshed_state = dict(chat_state)
+            refreshed_state["pending_tour_booking"] = {
+                "stage": "awaiting_details",
+                "active_flow": "tour_booking",
+                "tour_name_hint": pending_tour_name,
+                "sched_id": pending_sched_id,
+                "date_text": keep_date,
+                "guests": keep_guests,
+                "expected_slots": expect_slots,
+            }
+            _save_chat_state(request, refreshed_state)
+            return _chat_json_response(
+                request,
+                start_time,
+                {
+                    "fulfillmentText": prompt,
+                    "quick_replies": ["2 adults", "3 adults", "May 10 for 2 adults"],
+                },
+            )
+        if booking_stage == "awaiting_confirmation" and _is_personalization_accept_message(normalized_message):
+            request._chatbot_log_context["resolved_intent"] = "book_tour_via_link"
+            schedule = None
+            if pending_sched_id:
+                schedule = (
+                    Tour_Schedule.objects.select_related("tour")
+                    .filter(
+                        sched_id__iexact=pending_sched_id,
+                        tour__publication_status="published",
+                    )
+                    .exclude(status="cancelled")
+                    .first()
+                )
+            if schedule is None and pending_tour_name and pending_date_text:
+                parsed_date = _extract_tour_date_hint_from_message(pending_date_text)
+                schedule, _alt = _resolve_schedule_for_tour_booking(
+                    tour_name_hint=pending_tour_name,
+                    date_hint=parsed_date,
+                )
+            if schedule is None:
+                _clear_chat_state(request)
+                return _chat_json_response(
+                    request,
+                    start_time,
+                    {
+                        "fulfillmentText": "I couldn't finalize that schedule right now. Please choose a schedule and try again.",
+                        "quick_replies": ["show tour schedules", "show available tours"],
+                    },
+                )
+            submit_result = _submit_guest_tour_booking_request(
+                request,
+                user,
+                schedule=schedule,
+                guests=max(1, pending_guests),
+            )
+            _clear_chat_state(request)
+            if not submit_result.get("ok"):
+                return _chat_json_response(
+                    request,
+                    start_time,
+                    {
+                        "fulfillmentText": str(submit_result.get("error") or "I couldn't submit the booking request right now."),
+                        "quick_replies": ["show tour schedules", "show available tours"],
+                    },
+                )
+            bookings_url = reverse("main-page") + "#user-bookings"
+            if hasattr(request, "build_absolute_uri"):
+                bookings_url = request.build_absolute_uri(bookings_url)
+            has_assignment = _to_int(submit_result.get("assignment_count"), default=0) > 0
+            status_tail = (
+                "Please wait for approval before completing payment."
+                if has_assignment
+                else "Your request is saved. Staff assignment may still be in progress before review."
+            )
+            payload = {
+                "fulfillmentText": (
+                    "Your tour booking request has been submitted and is now pending review. "
+                    "A confirmation email has been sent to your registered email address.\n"
+                    + status_tail
+                ),
+                "billing_link": bookings_url,
+                "billing_link_label": "View My Tour Bookings",
+                "link_actions": [
+                    {"label": "View My Tour Bookings", "url": bookings_url},
+                ],
+                "quick_replies": ["show available tours", "show tour schedules"],
+                "response_nlg_source": "backend_structured_template",
+            }
+            return _chat_json_response(request, start_time, payload)
+        if booking_stage == "awaiting_confirmation" and _is_personalization_decline_message(normalized_message):
+            request._chatbot_log_context["resolved_intent"] = "book_tour_via_link"
+            _clear_chat_state(request)
+            return _chat_json_response(
+                request,
+                start_time,
+                {
+                    "fulfillmentText": "No problem. Tell me your preferred date and number of adults, and I'll prepare the booking flow again.",
+                    "quick_replies": ["show available tours", "book tour for May 5"],
+                },
+            )
+
+        parsed_booking = _extract_params_with_confidence(message)
+        parsed_booking_params = parsed_booking.get("params") if isinstance(parsed_booking.get("params"), dict) else {}
+        date_hint = _extract_tour_date_hint_from_message(message)
+        guest_hint = _to_int(parsed_booking_params.get("guests"), default=0)
+        expected_slots = (
+            pending_tour_booking.get("expected_slots")
+            if isinstance(pending_tour_booking.get("expected_slots"), list)
+            else ["date", "guests"]
+        )
+        if guest_hint <= 0:
+            guest_hint = _to_int(parsed_booking_params.get("group_size"), default=0)
+        if guest_hint <= 0:
+            guest_match = re.search(r"\b(\d+)\s*(adult|adults|guest|guests|people|person|pax)\b", normalized_message)
+            if guest_match:
+                guest_hint = _to_int(guest_match.group(1), default=0)
+        if guest_hint <= 0:
+            # Handle compact phrasing like "May 10 for 2".
+            guest_for_match = re.search(r"\bfor\s+(\d+)\b", normalized_message)
+            if guest_for_match:
+                guest_hint = _to_int(guest_for_match.group(1), default=0)
+
+        if date_hint is None and str(pending_date_text or "").strip():
+            date_hint = _extract_tour_date_hint_from_message(pending_date_text)
+        if guest_hint <= 0 and pending_guests > 0:
+            guest_hint = pending_guests
+
+        need_date = "date" in expected_slots
+        need_guests = "guests" in expected_slots
+        missing_date = need_date and date_hint is None
+        missing_guests = need_guests and guest_hint <= 0
+        if missing_date or missing_guests:
+            request._chatbot_log_context["resolved_intent"] = "book_tour_via_link"
+            if missing_date and missing_guests:
+                missing_text = "please share your preferred date/schedule and number of adults."
+                missing_replies = ["May 5 for 2 adults", "May 12 for 2 adults", "show available tours"]
+            elif missing_date:
+                missing_text = "please share your preferred tour date or schedule."
+                missing_replies = ["May 5", "show tour schedules", "show available tours"]
+            else:
+                missing_text = "please share the number of adults."
+                missing_replies = ["2 adults", "3 adults", "show available tours"]
+            refreshed_state = dict(chat_state)
+            refreshed_state["pending_tour_booking"] = {
+                "stage": "awaiting_details",
+                "active_flow": "tour_booking",
+                "tour_name_hint": pending_tour_name,
+                "sched_id": pending_sched_id,
+                "expected_slots": ["date", "guests"],
+            }
+            _save_chat_state(request, refreshed_state)
+            return _chat_json_response(
+                request,
+                start_time,
+                {
+                    "fulfillmentText": f"To continue booking {pending_tour_name}, {missing_text}",
+                    "quick_replies": missing_replies,
+                },
+            )
+
+        schedule, alt_options = _resolve_schedule_for_tour_booking(
+            tour_name_hint=pending_tour_name,
+            sched_id=pending_sched_id,
+            date_hint=date_hint,
+        )
+        if schedule is None:
+            schedule_items = []
+            for sched in alt_options[:5]:
+                card = _build_schedule_card_trace(request, sched)
+                if card:
+                    schedule_items.append(card)
+            response_payload = {
+                "fulfillmentText": (
+                    f"I found multiple schedules for {pending_tour_name or 'that tour'}. "
+                    "Please choose one schedule to continue."
+                ),
+                "quick_replies": ["show available tours"],
+            }
+            if schedule_items:
+                response_payload["recommendation_trace"] = schedule_items
+            refreshed_state = dict(chat_state)
+            refreshed_state["pending_tour_booking"] = {
+                "stage": "awaiting_details",
+                "active_flow": "tour_booking",
+                "tour_name_hint": pending_tour_name,
+                "expected_slots": ["schedule", "guests"],
+            }
+            _save_chat_state(request, refreshed_state)
+            return _chat_json_response(request, start_time, response_payload)
+
+        date_text = timezone.localtime(schedule.start_time).strftime("%B %d, %Y")
+        request._chatbot_log_context["resolved_intent"] = "book_tour_via_link"
+        confirm_state = dict(chat_state)
+        confirm_state["pending_tour_booking"] = {
+            "stage": "awaiting_confirmation",
+            "active_flow": "tour_booking_confirmation",
+            "tour_name_hint": str(getattr(getattr(schedule, "tour", None), "tour_name", "") or pending_tour_name),
+            "sched_id": str(getattr(schedule, "sched_id", "") or "").strip(),
+            "date_text": date_text,
+            "guests": guest_hint,
+            "expected_slots": ["confirmation"],
+        }
+        _save_chat_state(request, confirm_state)
+        return _chat_json_response(
+            request,
+            start_time,
+            {
+                "fulfillmentText": _build_tour_booking_summary_text(
+                    schedule=schedule,
+                    guests=guest_hint,
+                ),
+                "quick_replies": ["Yes", "No", "change date"],
+            },
+        )
+
     pending_booking = (
         chat_state.get("pending_booking") if isinstance(chat_state.get("pending_booking"), dict) else {}
     )
@@ -8236,13 +14567,68 @@ def ai_chat(request):
         pending_booking.get("params") if isinstance(pending_booking.get("params"), dict) else {}
     )
     pending_booking_created_at = _to_int(pending_booking.get("created_at"), default=0)
+    cached_accommodation_rows_early = (
+        chat_state.get("last_accommodation_recommendations")
+        if isinstance(chat_state.get("last_accommodation_recommendations"), list)
+        else []
+    )
     state_intent_hint = str(chat_state.get("pending_intent") or "").strip().lower()
     state_params_hint = chat_state.get("params") if isinstance(chat_state.get("params"), dict) else {}
+    assistant_memory = _load_assistant_memory(request)
+    if (
+        actor.get("role") == "guest"
+        and not state_intent_hint
+        and _looks_like_assistant_followup(message)
+        and isinstance(assistant_memory, dict)
+    ):
+        topic = str(assistant_memory.get("active_topic") or "").strip().lower()
+        topic_to_intent = {
+            "planning": "plan_bayawan_stay",
+            "accommodations": "get_accommodation_recommendation",
+            "directions": "travel_guidance",
+            "tours": "get_recommendation",
+        }
+        resumed_intent = topic_to_intent.get(topic, "")
+        if resumed_intent:
+            resumed_params = _assistant_memory_to_params(assistant_memory)
+            chat_state = dict(chat_state)
+            chat_state["pending_intent"] = resumed_intent
+            chat_state["params"] = resumed_params
+            chat_state["missing_slot"] = str(chat_state.get("missing_slot") or "")
+            state_intent_hint = resumed_intent
+            state_params_hint = resumed_params
     cached_accommodation_rows = (
         chat_state.get("last_accommodation_recommendations")
         if isinstance(chat_state.get("last_accommodation_recommendations"), list)
         else []
     )
+
+    if actor.get("role") == "guest" and _is_accommodation_room_listing_command(message):
+        request._chatbot_log_context["resolved_intent"] = "get_accommodation_room_listing"
+        target_name = _extract_accommodation_name_for_room_listing(
+            message,
+            cached_accommodation_rows,
+            state_params=state_params_hint,
+        )
+        room_listing_payload = _build_room_listing_response_for_accommodation(target_name, limit=5)
+        if isinstance(room_listing_payload.get("recommendation_trace"), list):
+            next_state = dict(chat_state)
+            next_state["last_accommodation_recommendations"] = _build_accommodation_selection_cache(
+                room_listing_payload.get("recommendation_trace")
+            )
+            next_params = dict(next_state.get("params") if isinstance(next_state.get("params"), dict) else {})
+            selected_accom_id = _to_int(room_listing_payload.get("selected_accommodation_id"), default=0)
+            selected_accom_name = str(room_listing_payload.get("selected_accommodation_name") or "").strip()
+            if selected_accom_id > 0:
+                next_params["selected_accommodation_id"] = selected_accom_id
+            if selected_accom_name:
+                next_params["selected_accommodation_name"] = selected_accom_name
+                next_params["accom_name"] = selected_accom_name
+            next_state["params"] = next_params
+            # Switching to explicit room browsing should discard stale preview locks.
+            next_state.pop("pending_booking", None)
+            _save_chat_state(request, next_state)
+        return _chat_json_response(request, start_time, room_listing_payload)
 
     if actor.get("role") == "guest" and _is_accommodation_detail_query(message):
         request._chatbot_log_context["resolved_intent"] = "get_accommodation_details"
@@ -8311,74 +14697,315 @@ def ai_chat(request):
         )
 
     if pending_booking_params:
-        request._chatbot_log_context["resolved_intent"] = "book_accommodation_confirmation"
-        request._chatbot_log_context["resolved_params"] = pending_booking_params
-        now_epoch = int(time.time())
-        if (
-            pending_booking_created_at > 0
-            and (now_epoch - pending_booking_created_at) > _PENDING_BOOKING_TTL_SECONDS
-        ):
-            next_state = dict(chat_state)
-            next_state.pop("pending_booking", None)
-            _save_chat_state(request, next_state)
-            return _chat_json_response(
-                request,
-                start_time,
-                {
-                    "fulfillmentText": (
-                        "Your pending booking confirmation expired after 10 minutes. "
-                        "Please send your booking details again."
-                    )
-                },
+        if pending_booking_created_at > 0 and (int(time.time()) - pending_booking_created_at) > _PENDING_BOOKING_TTL_SECONDS:
+            expired_state = dict(chat_state)
+            expired_state.pop("pending_booking", None)
+            _save_chat_state(request, expired_state)
+        else:
+            request._chatbot_log_context["resolved_intent"] = "book_accommodation_preview"
+            normalized_followup = _normalize_chat_text(message)
+            parsed_followup = _extract_params_with_confidence(message)
+            followup_params = (
+                parsed_followup.get("params") if isinstance(parsed_followup.get("params"), dict) else {}
             )
+            followup_intent_hint = _intent_from_message(message)
+            followup_check_in = str(followup_params.get("check_in") or "").strip()
+            followup_check_out = str(followup_params.get("check_out") or "").strip()
+            followup_nights = _to_int(followup_params.get("nights"), default=0)
+            followup_guests = _to_int(followup_params.get("guests"), default=0)
+            followup_location = str(followup_params.get("location") or "").strip()
+            followup_room_ref = str(followup_params.get("room_reference") or followup_params.get("room_name") or "").strip()
+            preview_stage = str(pending_booking.get("stage") or "").strip().lower()
+            explicit_tour_switch_requested = _is_explicit_tour_command(message)
+            likely_room_selection_reply = _looks_like_room_selection_reply(message)
 
-        if _is_booking_confirmation_accept(message):
-            booking_result = _book_accommodation_from_chat(request, pending_booking_params, commit=True)
-            _safe_log_chat_booking_linkage(request, message, pending_booking_params, booking_result)
-            next_state = dict(chat_state)
-            next_state.pop("pending_booking", None)
-            _save_chat_state(request, next_state)
-            request._chatbot_log_context["provenance"] = {
-                "booking_result_status": booking_result.get("booking_status", ""),
-                "booking_id": booking_result.get("booking_id"),
-            }
-            response = {"fulfillmentText": booking_result["reply"]}
-            if booking_result.get("billing_link"):
-                response["billing_link"] = booking_result["billing_link"]
-                if booking_result.get("billing_link_label"):
-                    response["billing_link_label"] = booking_result["billing_link_label"]
-            if booking_result.get("booking_id") is not None:
-                response["booking_id"] = booking_result["booking_id"]
-            if booking_result.get("receipt_text"):
-                response["receipt_text"] = booking_result["receipt_text"]
-                response["receipt_filename"] = booking_result.get("receipt_filename") or "ibayaw_booking_receipt.png"
-            if isinstance(booking_result.get("quick_replies"), list):
-                response["quick_replies"] = _sanitize_quick_replies(
-                    booking_result.get("quick_replies"),
-                    limit=4,
+            is_preview_followup = (
+                _is_accommodation_preview_command(message)
+                or _is_preview_confirmation_message(normalized_followup)
+                or _is_open_official_page_request(normalized_followup)
+                or followup_guests > 0
+                or followup_nights > 0
+                or bool(followup_check_in and followup_check_out)
+                or bool(followup_room_ref)
+                or likely_room_selection_reply
+            )
+            has_explicit_new_accommodation_query = (
+                _contains_any_phrase(
+                    normalized_followup,
+                    (
+                        "show approved accommodations",
+                        "show available hotels",
+                        "show hotels",
+                        "show inns",
+                        "where can i stay",
+                        "what about",
+                        "hotel in ",
+                        "inn in ",
+                        "accommodation in ",
+                        "place to stay",
+                        "stay in ",
+                    ),
                 )
-            if booking_result.get("booking_id"):
-                response["show_feedback_prompt"] = True
-            return _chat_json_response(request, start_time, response)
-
-        if _is_booking_confirmation_decline(message):
-            next_state = dict(chat_state)
-            next_state.pop("pending_booking", None)
-            _save_chat_state(request, next_state)
-            return _chat_json_response(
-                request,
-                start_time,
-                {"fulfillmentText": "Okay, I cancelled that draft booking. You can send new booking details anytime."},
+                and not _is_accommodation_preview_command(message)
             )
+            is_new_context_pivot = (
+                followup_intent_hint in {"get_accommodation_recommendation", "travel_guidance", "plan_bayawan_stay"}
+                or _is_accommodation_room_listing_command(message)
+                or explicit_tour_switch_requested
+            )
+            # If preview handoff was already shown and the user asks a new discovery/pivot query,
+            # release preview lock so normal routing can continue naturally.
+            if has_explicit_new_accommodation_query or (
+                not is_preview_followup
+                and (
+                    (
+                        is_new_context_pivot
+                        and not (
+                            preview_stage in {"collecting_details", "awaiting_handoff"}
+                            and likely_room_selection_reply
+                            and not explicit_tour_switch_requested
+                        )
+                    )
+                    or (
+                        preview_stage in {"awaiting_handoff", "ready"}
+                        and (
+                            bool(followup_location)
+                            or bool(followup_room_ref)
+                            or _contains_any_phrase(normalized_followup, ("hotel", "inn", "accommodation", "stay", "villareal", "suba", "poblacion"))
+                        )
+                    )
+                )
+            ):
+                next_state = dict(chat_state)
+                next_state.pop("pending_booking", None)
+                _save_chat_state(request, next_state)
+                pending_booking_params = {}
+                pending_booking_created_at = 0
+            if not pending_booking_params:
+                pass
+            else:
+                merged_preview_params = dict(pending_booking_params)
+                merged_preview_params.update(followup_params)
+                explicit_accommodation_name = _extract_preview_accommodation_name(message)
+                if explicit_accommodation_name:
+                    current_selected_name = str(merged_preview_params.get("selected_accommodation_name") or "").strip()
+                    if current_selected_name and current_selected_name.lower() != explicit_accommodation_name.lower():
+                        # Switching accommodation mid-flow: clear prior preview context.
+                        merged_preview_params = {}
+                        for safe_key in ("guests", "budget"):
+                            if safe_key in followup_params and followup_params.get(safe_key) not in ("", None):
+                                merged_preview_params[safe_key] = followup_params.get(safe_key)
+                    merged_preview_params["accom_name"] = explicit_accommodation_name
 
-        return _chat_json_response(
-            request,
-            start_time,
-            {
-                "fulfillmentText": "Please reply YES to confirm the booking, or NO to cancel it.",
-                "quick_replies": ["Yes", "No"],
-            },
-        )
+                preview_resolution = _resolve_preview_room_selection(
+                    params=merged_preview_params,
+                    message=message,
+                    cached_rows=cached_accommodation_rows_early,
+                )
+                if isinstance(preview_resolution.get("ambiguous_names"), list) and preview_resolution.get("ambiguous_names"):
+                    choices = [str(v) for v in preview_resolution.get("ambiguous_names")[:3] if str(v).strip()]
+                    return _chat_json_response(
+                        request,
+                        start_time,
+                        {
+                            "fulfillmentText": f"Which accommodation do you mean: {', '.join(choices)}?",
+                            "quick_replies": choices,
+                            "needs_clarification": True,
+                            "missing_slot": "accommodation_name",
+                        },
+                    )
+                if preview_resolution.get("needs_room_selection"):
+                    selected_accom_name = str(preview_resolution.get("selected_accommodation_name") or "").strip()
+                    selected_accom_id = _to_int(preview_resolution.get("selected_accommodation_id"), default=0)
+                    room_choices = [
+                        str(v) for v in (preview_resolution.get("room_choices") or []) if str(v).strip()
+                    ][:4]
+                    if selected_accom_id > 0:
+                        merged_preview_params["selected_accommodation_id"] = selected_accom_id
+                    if selected_accom_name:
+                        merged_preview_params["selected_accommodation_name"] = selected_accom_name
+                        merged_preview_params["accom_name"] = selected_accom_name
+                    refreshed_state = dict(chat_state)
+                    refreshed_state["pending_booking"] = {
+                        "params": merged_preview_params,
+                        "created_at": pending_booking_created_at or int(time.time()),
+                        "stage": "collecting_details",
+                    }
+                    _save_chat_state(request, refreshed_state)
+                    question_text = (
+                        f"Which room would you like to preview at {selected_accom_name}?"
+                        if selected_accom_name
+                        else "Which room would you like to preview?"
+                    )
+                    return _chat_json_response(
+                        request,
+                        start_time,
+                        {
+                            "fulfillmentText": question_text,
+                            "quick_replies": room_choices or ["show rooms"],
+                            "needs_clarification": True,
+                            "missing_slot": "room_reference",
+                        },
+                    )
+                if preview_resolution.get("not_found_name"):
+                    missing_name = str(preview_resolution.get("not_found_name") or "").strip()
+                    reset_state = _clear_invalid_preview_context(chat_state)
+                    _save_chat_state(request, reset_state)
+                    return _chat_json_response(
+                        request,
+                        start_time,
+                        {
+                            "fulfillmentText": (
+                                f"I couldn't find {missing_name} in approved accommodation listings yet. "
+                                "Please choose from available rooms or specify the accommodation."
+                            ),
+                            "quick_replies": ["show approved accommodations in bayawan", "create booking preview"],
+                            "needs_clarification": True,
+                            "missing_slot": "accommodation_name",
+                        },
+                    )
+                if preview_resolution.get("not_found_room_ref"):
+                    selected_accom_name = str(preview_resolution.get("selected_accommodation_name") or "").strip()
+                    selected_accom_id = _to_int(preview_resolution.get("selected_accommodation_id"), default=0)
+                    room_choices = [
+                        str(v) for v in (preview_resolution.get("room_choices") or []) if str(v).strip()
+                    ][:4]
+                    reset_state = dict(chat_state)
+                    reset_params = dict(merged_preview_params)
+                    if selected_accom_id > 0:
+                        reset_params["selected_accommodation_id"] = selected_accom_id
+                    if selected_accom_name:
+                        reset_params["selected_accommodation_name"] = selected_accom_name
+                        reset_params["accom_name"] = selected_accom_name
+                    reset_params.pop("room_id", None)
+                    reset_params.pop("selected_room_id", None)
+                    reset_params.pop("selected_room_name", None)
+                    reset_params.pop("room_name", None)
+                    reset_params.pop("room_reference", None)
+                    reset_state["params"] = reset_params
+                    reset_state["pending_booking"] = {
+                        "params": reset_params,
+                        "created_at": pending_booking_created_at or int(time.time()),
+                        "stage": "collecting_details",
+                    }
+                    _save_chat_state(request, reset_state)
+                    return _chat_json_response(
+                        request,
+                        start_time,
+                        {
+                            "fulfillmentText": (
+                                (
+                                    f"I couldn't find that room in {selected_accom_name}. "
+                                    "Please choose from available rooms in this accommodation."
+                                )
+                                if selected_accom_name
+                                else "I couldn't find that room. Please choose from available rooms or specify the accommodation."
+                            ),
+                            "quick_replies": room_choices or ["show approved accommodations in bayawan", "create booking preview"],
+                            "needs_clarification": True,
+                            "missing_slot": "room_reference",
+                        },
+                    )
+
+                preview_room = preview_resolution.get("room")
+                if preview_room is not None:
+                    merged_preview_params["room_id"] = _to_int(getattr(preview_room, "room_id", 0), default=0)
+                    merged_preview_params["selected_room_id"] = merged_preview_params["room_id"]
+                    merged_preview_params["selected_room_name"] = str(getattr(preview_room, "room_name", "") or "").strip()
+                    merged_preview_params["selected_accommodation_id"] = _to_int(
+                        getattr(preview_room, "accommodation_id", 0),
+                        default=0,
+                    )
+                    merged_preview_params["selected_accommodation_name"] = str(
+                        getattr(getattr(preview_room, "accommodation", None), "company_name", "") or ""
+                    ).strip()
+                    merged_preview_params["accom_name"] = merged_preview_params["selected_accommodation_name"]
+                    merged_preview_params["nightly_rate"] = str(getattr(preview_room, "price_per_night", "") or "").strip()
+                    merged_preview_params["selection_source"] = str(preview_resolution.get("source") or "fallback")
+
+                preview_payload = _build_accommodation_preview_response(
+                    room=preview_room,
+                    params=merged_preview_params,
+                )
+
+                refreshed_state = dict(chat_state)
+                if preview_payload.get("ready"):
+                    refreshed_state["pending_booking"] = {
+                        "params": merged_preview_params,
+                        "created_at": pending_booking_created_at or int(time.time()),
+                        "stage": "awaiting_handoff",
+                    }
+                    _save_chat_state(request, refreshed_state)
+                    if _is_preview_confirmation_message(normalized_followup):
+                        return _chat_json_response(
+                            request,
+                            start_time,
+                            {
+                                "fulfillmentText": (
+                                    "This preview is not a confirmed booking. Please use the official link or contact the accommodation to complete your reservation."
+                                ),
+                                "quick_replies": ["open official page"],
+                                "link_actions": preview_payload.get("link_actions") or [],
+                                "billing_link": str(preview_payload.get("billing_link") or ""),
+                                "billing_link_label": str(
+                                    preview_payload.get("billing_link_label") or "Continue to Official Booking Page"
+                                ),
+                            },
+                        )
+                    if _is_open_official_page_request(normalized_followup):
+                        return _chat_json_response(
+                            request,
+                            start_time,
+                            {
+                                "fulfillmentText": "Opening official accommodation channels for your booking handoff.",
+                                "quick_replies": ["open official page"],
+                                "link_actions": preview_payload.get("link_actions") or [],
+                                "billing_link": str(preview_payload.get("billing_link") or ""),
+                                "billing_link_label": str(
+                                    preview_payload.get("billing_link_label") or "Continue to Official Booking Page"
+                                ),
+                            },
+                        )
+                    return _chat_json_response(
+                        request,
+                        start_time,
+                        {
+                            "fulfillmentText": str(preview_payload.get("text") or "").strip(),
+                            "quick_replies": _sanitize_quick_replies(
+                                preview_payload.get("quick_replies"),
+                                limit=4,
+                            ),
+                            "link_actions": preview_payload.get("link_actions") or [],
+                            "billing_link": str(preview_payload.get("billing_link") or ""),
+                            "billing_link_label": str(
+                                preview_payload.get("billing_link_label") or "Continue to Official Booking Page"
+                            ),
+                        },
+                    )
+
+                refreshed_state["pending_booking"] = {
+                    "params": merged_preview_params,
+                    "created_at": pending_booking_created_at or int(time.time()),
+                    "stage": "collecting_details",
+                }
+                _save_chat_state(request, refreshed_state)
+                return _chat_json_response(
+                    request,
+                    start_time,
+                    {
+                        "fulfillmentText": str(preview_payload.get("question") or "").strip(),
+                        "quick_replies": _sanitize_quick_replies(
+                            preview_payload.get("quick_replies"),
+                            limit=4,
+                        ),
+                        "needs_clarification": True,
+                        "missing_slot": (
+                            str((preview_payload.get("missing_fields") or ["accommodation_details"])[0])
+                            if isinstance(preview_payload.get("missing_fields"), list)
+                            else "accommodation_details"
+                        ),
+                    },
+                )
 
     # Compact numeric selection support for accommodation recommendations:
     # if the user replies with just "1", "2", "3", map it to the last shown room.
@@ -8404,7 +15031,7 @@ def ai_chat(request):
                         "fulfillmentText": why_text,
                         "quick_replies": _merge_quick_replies(
                             _build_recommendation_assist_quick_replies(cached_rows),
-                            [{"label": f"Book Option {why_option_index}", "value": str(why_option_index)}],
+                            [{"label": f"View Option {why_option_index}", "value": str(why_option_index)}],
                             limit=4,
                         ),
                     },
@@ -8444,24 +15071,55 @@ def ai_chat(request):
                 next_state["pending_intent"] = "book_accommodation"
                 next_state["params"] = selected_params
                 next_state["missing_slot"] = ""
+                next_state["pending_booking"] = {
+                    "params": selected_params,
+                    "created_at": int(time.time()),
+                    "stage": "collecting_details",
+                }
                 _save_chat_state(request, next_state)
 
-                booking_result = _book_accommodation_from_chat(request, selected_params, commit=False)
-                response = {"fulfillmentText": booking_result.get("reply", "")}
-                if booking_result.get("billing_link"):
-                    response["billing_link"] = booking_result["billing_link"]
-                    if booking_result.get("billing_link_label"):
-                        response["billing_link_label"] = booking_result["billing_link_label"]
-                if booking_result.get("booking_id") is not None:
-                    response["booking_id"] = booking_result["booking_id"]
-                if booking_result.get("receipt_text"):
-                    response["receipt_text"] = booking_result["receipt_text"]
-                    response["receipt_filename"] = booking_result.get("receipt_filename") or "ibayaw_booking_receipt.png"
-                if isinstance(booking_result.get("quick_replies"), list):
+                selected_room = Room.objects.select_related("accommodation").filter(room_id=selected_room_id).first()
+                preview_payload = _build_accommodation_preview_response(room=selected_room, params=selected_params)
+                response = {
+                    "fulfillmentText": (
+                        "Great choice. I can prepare an accommodation booking preview for you. "
+                        "Final booking is completed directly with the accommodation."
+                    ),
+                    "quick_replies": [
+                        "May 10 to May 12 for 2 guests",
+                        "2 nights for 2 guests",
+                        "open official page",
+                    ],
+                }
+                if preview_payload.get("ready"):
+                    response["fulfillmentText"] = str(preview_payload.get("text") or "").strip()
                     response["quick_replies"] = _sanitize_quick_replies(
-                        booking_result.get("quick_replies"),
+                        preview_payload.get("quick_replies"),
                         limit=4,
                     )
+                    if preview_payload.get("billing_link"):
+                        response["billing_link"] = str(preview_payload.get("billing_link"))
+                        response["billing_link_label"] = str(
+                            preview_payload.get("billing_link_label") or "Continue to Official Booking Page"
+                        )
+                    if isinstance(preview_payload.get("link_actions"), list):
+                        response["link_actions"] = preview_payload.get("link_actions")[:4]
+                if selected_room is not None:
+                    selected_params["selected_room_id"] = _to_int(getattr(selected_room, "room_id", 0), default=0)
+                    selected_params["selected_room_name"] = str(getattr(selected_room, "room_name", "") or "").strip()
+                    selected_params["selected_accommodation_id"] = _to_int(getattr(selected_room, "accommodation_id", 0), default=0)
+                    selected_params["selected_accommodation_name"] = str(
+                        getattr(getattr(selected_room, "accommodation", None), "company_name", "") or ""
+                    ).strip()
+                    selected_params["nightly_rate"] = str(getattr(selected_room, "price_per_night", "") or "").strip()
+                    selected_params["selection_source"] = "last_card"
+                    next_state["params"] = selected_params
+                    next_state["pending_booking"] = {
+                        "params": selected_params,
+                        "created_at": int(time.time()),
+                        "stage": "collecting_details",
+                    }
+                    _save_chat_state(request, next_state)
                 return _chat_json_response(request, start_time, response)
 
     pending_budget_offer = (
@@ -8470,6 +15128,17 @@ def ai_chat(request):
         else {}
     )
     offered_budget = _to_int(pending_budget_offer.get("suggested_budget"), default=0)
+    if (
+        pending_budget_offer
+        and state_intent_hint in ("get_accommodation_recommendation", "gethotelrecommendation")
+        and _is_accommodation_how_to_book_request(message)
+    ):
+        next_state = dict(chat_state)
+        next_state.pop("pending_budget_offer", None)
+        _save_chat_state(request, next_state)
+        chat_state = next_state
+        pending_budget_offer = {}
+        offered_budget = 0
     if pending_budget_offer and state_intent_hint in ("get_accommodation_recommendation", "gethotelrecommendation"):
         request._chatbot_log_context["resolved_intent"] = "get_accommodation_recommendation"
         parsed_offer_reply = _extract_params_with_confidence(message)
@@ -8622,6 +15291,66 @@ def ai_chat(request):
             },
         )
 
+    if actor.get("role") == "guest" and _is_accommodation_room_listing_command(message):
+        request._chatbot_log_context["resolved_intent"] = "get_accommodation_room_listing"
+        early_state = _load_chat_state(request)
+        early_cached_rows = (
+            early_state.get("last_accommodation_recommendations")
+            if isinstance(early_state.get("last_accommodation_recommendations"), list)
+            else []
+        )
+        early_state_params = early_state.get("params") if isinstance(early_state.get("params"), dict) else {}
+        target_name = _extract_accommodation_name_for_room_listing(
+            message,
+            early_cached_rows,
+            state_params=early_state_params,
+        )
+        room_listing_payload = _build_room_listing_response_for_accommodation(target_name, limit=5)
+        if isinstance(room_listing_payload.get("recommendation_trace"), list):
+            next_state = dict(early_state)
+            next_state["last_accommodation_recommendations"] = _build_accommodation_selection_cache(
+                room_listing_payload.get("recommendation_trace")
+            )
+            next_params = dict(early_state_params)
+            selected_accom_id = _to_int(room_listing_payload.get("selected_accommodation_id"), default=0)
+            selected_accom_name = str(room_listing_payload.get("selected_accommodation_name") or "").strip()
+            if selected_accom_id > 0:
+                next_params["selected_accommodation_id"] = selected_accom_id
+            if selected_accom_name:
+                next_params["selected_accommodation_name"] = selected_accom_name
+                next_params["accom_name"] = selected_accom_name
+            next_state["params"] = next_params
+            next_state["pending_intent"] = "get_accommodation_recommendation"
+            next_state["missing_slot"] = ""
+            next_state.pop("pending_booking", None)
+            _save_chat_state(request, next_state)
+        return _chat_json_response(request, start_time, room_listing_payload)
+
+    if _is_role_vague_query(actor, message):
+        role_clarifier = _role_aware_clarification_payload(actor)
+        request._chatbot_log_context["resolved_intent"] = "clarification"
+        request._chatbot_log_context["fallback_used"] = False
+        if isinstance(request._chatbot_log_context.get("provenance"), dict):
+            request._chatbot_log_context["provenance"]["clarification_used"] = True
+        _save_chat_state(
+            request,
+            {
+                "pending_intent": "clarification",
+                "params": chat_state_params if isinstance(chat_state_params, dict) else {},
+                "missing_slot": "clarification",
+            },
+        )
+        return _chat_json_response(
+            request,
+            start_time,
+            {
+                "fulfillmentText": str(role_clarifier.get("text") or _clarification_fallback("Could you clarify what you need help with?")),
+                "quick_replies": _sanitize_quick_replies(role_clarifier.get("quick_replies"), limit=4),
+                "needs_clarification": True,
+                "missing_slot": "clarification",
+            },
+        )
+
     parsed = _classify_intent_and_extract_params(message)
     intent = str(parsed["intent"]).strip().lower()
     params = parsed["params"] if isinstance(parsed["params"], dict) else {}
@@ -8636,15 +15365,66 @@ def ai_chat(request):
         else []
     )
     intent_classifier = parsed.get("intent_classifier") if isinstance(parsed.get("intent_classifier"), dict) else {}
+    if actor.get("role") == "guest" and _is_stay_planning_request(message):
+        intent = "plan_bayawan_stay"
+    if actor.get("role") == "guest" and _is_travel_guidance_request(message):
+        intent = "travel_guidance"
+    if _is_reporting_summary_request(message):
+        intent = "reporting_summary"
+    strict_intent_locked = _has_strict_intent_signal(actor=actor, message=message)
+    intent = _apply_strict_intent_overrides(
+        actor=actor,
+        message=message,
+        current_intent=intent,
+    )
     request._chatbot_log_context["resolved_intent"] = intent
     request._chatbot_log_context["resolved_params"] = params
     request._chatbot_log_context["intent_classifier"] = intent_classifier
-    request._chatbot_log_context["fallback_used"] = str(parsed.get("source") or "") in (
+    parse_fallback_used = str(parsed.get("source") or "") in (
         "heuristic_intent_fallback",
         "text_cnn_unavailable",
         "text_cnn_low_confidence",
         "text_cnn_incompatible_label_space",
     )
+    request._chatbot_log_context["parse_fallback_used"] = parse_fallback_used
+    try:
+        provenance_log = (
+            request._chatbot_log_context.get("provenance")
+            if isinstance(request._chatbot_log_context.get("provenance"), dict)
+            else {}
+        )
+        provenance_log["intent_parse_source"] = parse_source[:80]
+        if parse_fallback_used:
+            provenance_log["fallback_reason"] = parse_source[:120]
+            provenance_log["intent_parse_fallback_used"] = True
+        intent_error = str(intent_classifier.get("error") or "").strip()
+        if intent_error:
+            provenance_log["intent_classifier_error"] = intent_error[:180]
+        if needs_parser_clarification:
+            provenance_log["clarification_requested_by_parser"] = True
+        classifier_source = str(intent_classifier.get("source") or "").strip().lower()
+        classifier_conf = float(intent_classifier.get("confidence", 0.0) or 0.0)
+        is_low_conf_case = classifier_source == "text_cnn_low_confidence"
+        top3 = intent_classifier.get("top_3") if isinstance(intent_classifier.get("top_3"), list) else []
+        predicted_intent = ""
+        if top3 and isinstance(top3[0], dict):
+            predicted_intent = str(top3[0].get("intent") or top3[0].get("raw_label") or "").strip().lower()
+        deterministic_fixed = bool(
+            is_low_conf_case
+            and parse_source == "deterministic_pre_route"
+            and str(intent or "").strip().lower() != predicted_intent
+        )
+        provenance_log["low_confidence_case"] = bool(is_low_conf_case)
+        if is_low_conf_case:
+            provenance_log["low_confidence_raw_query"] = str(message or "")[:240]
+            provenance_log["low_confidence_predicted_intent"] = predicted_intent[:80]
+            provenance_log["low_confidence_confidence"] = round(classifier_conf, 6)
+            provenance_log["low_confidence_final_resolved_intent"] = str(intent or "")[:80]
+            provenance_log["deterministic_routing_applied"] = parse_source == "deterministic_pre_route"
+            provenance_log["deterministic_routing_fixed_low_confidence"] = deterministic_fixed
+        request._chatbot_log_context["provenance"] = provenance_log
+    except Exception:
+        pass
     state_intent = str(chat_state.get("pending_intent") or "").strip().lower()
     state_params = chat_state.get("params") if isinstance(chat_state.get("params"), dict) else {}
     state_missing_slot = str(chat_state.get("missing_slot") or "").strip().lower()
@@ -8663,8 +15443,11 @@ def ai_chat(request):
 
     accommodation_intents = ("get_accommodation_recommendation", "gethotelrecommendation")
     booking_intents = ("book_accommodation", "bookhotel", "book_hotel", "reserve_accommodation")
-    continuation_intents = accommodation_intents + booking_intents + ("get_recommendation",)
+    planning_intents = ("plan_bayawan_stay",)
+    continuation_intents = accommodation_intents + booking_intents + planning_intents + ("get_recommendation",)
     continuing_accommodation_flow = (
+        (not strict_intent_locked)
+        and
         state_intent in accommodation_intents
         and (
             intent in accommodation_intents
@@ -8682,6 +15465,8 @@ def ai_chat(request):
         intent = state_intent
 
     continuing_booking_flow = (
+        (not strict_intent_locked)
+        and
         state_intent in booking_intents
         and (
             intent in booking_intents
@@ -8691,6 +15476,25 @@ def ai_chat(request):
     )
     if continuing_booking_flow:
         intent = state_intent
+
+    continuing_planning_flow = (
+        (not strict_intent_locked)
+        and
+        state_intent in planning_intents
+        and (
+            intent in planning_intents
+            or _looks_like_slot_update(params)
+            or state_missing_slot in ("total_budget", "duration_days", "party_type")
+            or bool(re.fullmatch(r"\s*(\d+)\s*(day|days)?\s*", str(message or "").strip().lower()))
+        )
+    )
+    if continuing_planning_flow:
+        intent = state_intent
+
+    if actor.get("role") == "guest" and (
+        _is_accommodation_preview_command(message) or _is_accommodation_how_to_book_request(message)
+    ):
+        intent = "book_accommodation"
 
     if (
         intent == "get_recommendation"
@@ -8708,10 +15512,79 @@ def ai_chat(request):
         parsed_budget = _to_int(params.get("budget"), default=0)
         if existing_budget > 0 and parsed_budget > 0 and parsed_budget != existing_budget:
             params.pop("budget", None)
+    if compact_num_match and state_missing_slot == "total_budget":
+        compact_value = _to_int(compact_num_match.group(1), default=0)
+        if compact_value > 0:
+            params["total_budget"] = compact_value
+    if compact_num_match and state_missing_slot == "duration_days":
+        compact_value = _to_int(compact_num_match.group(1), default=0)
+        if compact_value > 0:
+            params["duration_days"] = compact_value
 
     merged_params = dict(state_params)
     merged_params.update(params)
     params = merged_params
+    if actor.get("role") == "guest" and isinstance(assistant_memory, dict):
+        memory_defaults = _assistant_memory_to_params(assistant_memory)
+        for key, value in memory_defaults.items():
+            if params.get(key) in ("", None, []):
+                params[key] = value
+    compact_lower = str(message or "").strip().lower()
+    if state_intent in planning_intents:
+        people_match = re.search(r"\bfor\s+(\d+)\s*(people|person|pax|guests?)\b", compact_lower)
+        if people_match:
+            people_count = _to_int(people_match.group(1), default=0)
+            if people_count > 0:
+                params["group_size"] = people_count
+                params["guests"] = people_count
+        implied_budget_match = re.search(
+            r"\b(?:only\s+have|i\s+have|have|budget(?:\s+is)?|what\s+if\s+i\s+have)\s*([0-9][0-9,]*(?:\.[0-9]+)?k?)\b",
+            compact_lower,
+        )
+        if implied_budget_match and _to_int(params.get("total_budget"), default=0) <= 0:
+            parse_compact = globals().get("_parse_compact_number")
+            implied_budget = (
+                parse_compact(implied_budget_match.group(1))
+                if callable(parse_compact)
+                else _to_int(implied_budget_match.group(1), default=0)
+            )
+            if implied_budget is not None and implied_budget > 0:
+                params["total_budget"] = implied_budget
+                params.setdefault("spending_style", "budget")
+        days_match = re.search(r"\b(\d+)\s*days?\b", compact_lower)
+        if days_match:
+            day_count = _to_int(days_match.group(1), default=0)
+            if day_count > 0:
+                params["duration_days"] = day_count
+        if _contains_any_phrase(compact_lower, ("no accommodation needed", "without accommodation", "no hotel needed")):
+            params["accommodation_needed"] = False
+        elif _contains_any_phrase(compact_lower, ("with accommodation", "need accommodation", "hotel needed")):
+            params["accommodation_needed"] = True
+        if _contains_any_phrase(compact_lower, ("budget only", "just budget")):
+            params["spending_style"] = "budget"
+        if _contains_any_phrase(compact_lower, ("just nearby", "nearby only", "nearby", "close by")):
+            params["location"] = str(params.get("location") or "Bayawan City Proper")
+        if _contains_any_phrase(compact_lower, ("relaxing", "relax", "chill")):
+            params["experience_style"] = "relaxing"
+        elif _contains_any_phrase(compact_lower, ("adventure", "adventurous", "trail", "hike")):
+            params["experience_style"] = "adventure"
+        elif _contains_any_phrase(compact_lower, ("culture", "cultural", "heritage")):
+            params["experience_style"] = "culture"
+        elif _contains_any_phrase(compact_lower, ("mixed", "combination", "both")):
+            params["experience_style"] = "mixed"
+        if re.fullmatch(r"\s*(solo|couple|family|group)\s*", compact_lower):
+            params["party_type"] = compact_lower.strip()
+        origin_match = re.search(r"\bfrom\s+([a-z][a-z\s\-]{2,35})\b", compact_lower)
+        if origin_match and not str(params.get("origin_hint") or "").strip():
+            params["origin_hint"] = " ".join(str(origin_match.group(1) or "").split()).strip().title()
+
+    if isinstance(client_location, dict):
+        params["client_location_status"] = str(client_location.get("status") or "").strip().lower()
+        if client_location.get("latitude") is not None and client_location.get("longitude") is not None:
+            params["origin_latitude"] = client_location.get("latitude")
+            params["origin_longitude"] = client_location.get("longitude")
+        if client_location.get("accuracy_m") is not None:
+            params["origin_accuracy_m"] = client_location.get("accuracy_m")
     guest_count_update_note = ""
     previous_guests = _to_int(state_params.get("guests"), default=0)
     current_guests = _to_int(params.get("guests"), default=0)
@@ -8759,6 +15632,9 @@ def ai_chat(request):
         ):
             intent = "get_accommodation_recommendation"
     lowered_message = str(message or "").strip().lower()
+    cheaper_followup = bool(
+        re.search(r"\b(make it cheaper|cheaper|lower budget|budget version|something cheaper|adjust to budget version)\b", lowered_message)
+    )
     if (
         state_intent in accommodation_intents
         and any(token in lowered_message for token in ("cheaper", "lower price", "less expensive", "mas mura", "barato"))
@@ -8767,6 +15643,17 @@ def ai_chat(request):
         if existing_budget > 0:
             params["budget"] = max(500, int(existing_budget * 0.8))
         params["prefer_low_price"] = True
+    if state_intent in planning_intents and cheaper_followup:
+        existing_total_budget = _to_int(params.get("total_budget"), default=0)
+        if existing_total_budget <= 0:
+            existing_total_budget = _to_int(state_params.get("total_budget"), default=0)
+        if existing_total_budget > 0:
+            if existing_total_budget <= 3500:
+                params["_already_lowest_budget"] = True
+            else:
+                params["total_budget"] = max(3000, int(existing_total_budget * 0.8))
+                params["_cheaper_adjustment_applied"] = True
+                params["spending_style"] = "budget"
     if (
         state_intent in accommodation_intents + booking_intents
         and _to_int(state_params.get("guests"), default=0) > 0
@@ -8777,6 +15664,37 @@ def ai_chat(request):
         params["guests"] = _to_int(state_params.get("guests"), default=0)
     request._chatbot_log_context["resolved_intent"] = intent
     request._chatbot_log_context["resolved_params"] = params
+
+    # Performance-only fast path for compact accommodation budget/location follow-ups
+    # (e.g., "suba under 1500") while a stay-search flow is already active.
+    if (
+        state_intent in accommodation_intents
+        and intent in accommodation_intents
+        and re.search(r"\b(?:under|below|budget)\s*[0-9][0-9,]*(?:\.[0-9]+)?k?\b", compact_lower)
+        and re.search(r"\b(?:suba|poblacion|bayawan|villareal|tinago|ubos)\b", compact_lower)
+        and _to_int(params.get("guests"), default=0) <= 0
+    ):
+        location_hint = str(params.get("location") or "").strip()
+        budget_hint = _to_int(params.get("budget"), default=0)
+        if location_hint and budget_hint > 0:
+            next_state = dict(chat_state)
+            next_state["pending_intent"] = "get_accommodation_recommendation"
+            next_state["params"] = dict(params)
+            next_state["missing_slot"] = "guests"
+            _save_chat_state(request, next_state)
+            return _chat_json_response(
+                request,
+                start_time,
+                {
+                    "fulfillmentText": (
+                        f"So far: {location_hint.lower()}, PHP {budget_hint}. "
+                        "How many people should the room accommodate?"
+                    ),
+                    "quick_replies": _slot_quick_replies("guests"),
+                    "needs_clarification": True,
+                    "missing_slot": "guests",
+                },
+            )
 
     # Context-aware slot repair for short follow-up replies while collecting
     # accommodation details (e.g., user replies with just "suba" or "inn").
@@ -8791,6 +15709,20 @@ def ai_chat(request):
             simple_location = re.fullmatch(r"[a-zA-Z][a-zA-Z\\s\\-]{1,60}", compact_text)
             if simple_location and compact_lower not in ("yes", "no", "hotel", "inn", "either"):
                 params["location"] = compact_text
+                intent = state_intent
+        if state_missing_slot == "guests" and _to_int(params.get("guests"), default=0) <= 0:
+            guest_inline_match = re.search(r"\b(\d+)\b(?:\s*(?:under|below|less than)\s*\d+)?", compact_lower)
+            if guest_inline_match:
+                inline_guests = _to_int(guest_inline_match.group(1), default=0)
+                if inline_guests > 0:
+                    params["guests"] = inline_guests
+                    intent = state_intent
+        if state_missing_slot == "budget":
+            if compact_lower in {"no", "none", "skip", "no budget", "without budget"}:
+                # User chose to proceed without a strict budget cap.
+                params["budget"] = 0
+                params.pop("budget_min", None)
+                params["clear_budget"] = True
                 intent = state_intent
 
     # Context-aware compact answers:
@@ -8815,9 +15747,46 @@ def ai_chat(request):
             and _to_int(params.get("guests"), default=0) <= 0
             and _to_int(params.get("budget"), default=0) <= 0
         ):
-            params["guests"] = compact_num
+            # If other constraints already exist, treat numeric-only follow-up as budget.
+            has_existing_constraints = bool(
+                str(params.get("location") or "").strip()
+                or str(params.get("company_type") or "").strip()
+                or str(params.get("room_type") or "").strip()
+                or _to_int(state_params.get("guests"), default=0) > 0
+            )
+            if has_existing_constraints and compact_num >= 500:
+                params["budget"] = compact_num
+            else:
+                params["guests"] = compact_num
 
-    if state_intent in accommodation_intents and state_offer_defaults and not state_skip_default_offer:
+    if (
+        compact_num_match
+        and state_intent in accommodation_intents
+        and state_missing_slot in {"budget", "accommodation_details"}
+        and _to_int(params.get("budget"), default=0) > 0
+    ):
+        intent = state_intent
+
+    if state_intent in accommodation_intents and (
+        _is_accommodation_how_to_book_request(message) or _is_accommodation_preview_command(message)
+    ):
+        intent = "book_accommodation"
+        state_offer_defaults = {}
+        state_skip_default_offer = True
+        override_state = dict(chat_state)
+        override_state.pop("default_offer", None)
+        override_state.pop("pending_budget_offer", None)
+        override_state["pending_intent"] = "book_accommodation"
+        override_state["params"] = params
+        _save_chat_state(request, override_state)
+
+    if (
+        state_intent in accommodation_intents
+        and state_offer_defaults
+        and not state_skip_default_offer
+        and not _has_sufficient_accommodation_details(params)
+        and not (_is_accommodation_how_to_book_request(message) or _is_accommodation_preview_command(message))
+    ):
         if _is_personalization_decline_message(message):
             declined_params = dict(params)
             declined_params["_personalization_opt_out"] = True
@@ -8929,10 +15898,27 @@ def ai_chat(request):
         and not _looks_like_slot_update(params)
         and not _looks_like_tour_request(message)
     ):
+        role_clarifier = _role_aware_clarification_payload(actor)
+        if actor.get("role") == "guest":
+            clarifier_text = _pick_response_variant(
+                [
+                    str(role_clarifier.get("text") or _clarification_fallback("Do you want help with places to stay, tour packages, directions, dining, or full trip planning?")),
+                    "I can help with several things in one place.\nAre you asking about accommodations, tour packages, directions, dining, or planning your stay?",
+                    "Let me guide you to the right part.\nWould you like help with approved stays, tours, directions, dining, or full trip planning?",
+                ],
+                seed_text=f"{message}|guest-low-confidence-clarifier",
+            )
+            clarifier_replies = _sanitize_quick_replies(role_clarifier.get("quick_replies"), limit=4)
+        else:
+            clarifier_text = str(
+                role_clarifier.get("text")
+                or _clarification_fallback("Are you asking about dashboard monitoring, reports, or navigation to a module?")
+            )
+            clarifier_replies = _sanitize_quick_replies(role_clarifier.get("quick_replies"), limit=4)
         _save_chat_state(
             request,
             {
-                "pending_intent": "get_accommodation_recommendation",
+                "pending_intent": "clarification",
                 "params": params,
                 "missing_slot": "clarification",
             },
@@ -8941,15 +15927,8 @@ def ai_chat(request):
             request,
             start_time,
             {
-                "fulfillmentText": (
-                    "I want to make sure I understood your request correctly.\n"
-                    "Do you want hotel/inn recommendations, tour recommendations, or tourism information?"
-                ),
-                "quick_replies": [
-                    {"label": "Hotel/Inn Recommendations", "value": "recommend a hotel or inn"},
-                    {"label": "Tour Recommendations", "value": "recommend a tour"},
-                    {"label": "Tourism Information", "value": "show tourism information"},
-                ],
+                "fulfillmentText": clarifier_text,
+                "quick_replies": clarifier_replies,
                 "needs_clarification": True,
                 "confidence": parse_confidence,
             },
@@ -8957,9 +15936,18 @@ def ai_chat(request):
 
     if needs_parser_clarification:
         if not parser_clarification_question:
-            parser_clarification_question = "Could you clarify that so I can continue?"
+            role_clarifier = _role_aware_clarification_payload(actor)
+            parser_clarification_question = _pick_response_variant(
+                [
+                    str(role_clarifier.get("text") or _clarification_fallback("Could you share a bit more so I can guide you correctly?")),
+                    "I can help with that. Can you clarify what you need most right now?",
+                    "To help you better, could you clarify your request a little more?",
+                ],
+                seed_text=message,
+            )
         clarification_quick_replies = _merge_quick_replies(
             _sanitize_quick_replies(parser_clarification_options, limit=4),
+            _sanitize_quick_replies(_role_aware_clarification_payload(actor).get("quick_replies"), limit=4),
             _slot_quick_replies(parser_clarification_field),
             limit=4,
         )
@@ -9026,12 +16014,12 @@ def ai_chat(request):
                 )
             elif role == "owner":
                 role_clarifier = (
-                    "I can help you manage your accommodations, rooms, bookings, and reports. "
+                    "I can help you manage your accommodations, rooms, links/images, and reports. "
                     "What would you like to do?"
                 )
             else:
                 role_clarifier = (
-                    "I can assist with tourism records, bookings, and monitoring. "
+                    "I can assist with tourism records, assignments, and monitoring. "
                     "Please specify your request."
                 )
             if _looks_like_tour_request(message):
@@ -9050,17 +16038,159 @@ def ai_chat(request):
             )
             logged_recommended_items = []
         else:
-            accommodation_like_request = bool(
-                re.search(r"\b(hotel|inn|room|accommodation|stay)\b", str(message or "").lower())
-            ) and not _looks_like_tour_request(message)
-            if accommodation_like_request and _to_int(params.get("guests"), default=0) <= 0:
-                missing_slot = "guests"
-                question = _build_dynamic_accommodation_slot_question(missing_slot, params)
+            if _is_tour_schedule_request(message) or _is_tour_schedule_request(raw_message):
+                _clear_chat_state(request)
+                schedule_payload = _build_tour_schedule_listing_payload(request, message, params)
+                reply = str(schedule_payload.get("reply") or "Here are available tour schedules right now.").strip()
+                logged_recommended_items = (
+                    schedule_payload.get("items")
+                    if isinstance(schedule_payload.get("items"), list)
+                    else []
+                )
+                sched_ids = (
+                    schedule_payload.get("sched_ids")
+                    if isinstance(schedule_payload.get("sched_ids"), list)
+                    else []
+                )
+                if sched_ids:
+                    _save_chat_state(
+                        request,
+                        {
+                            "last_tour_recommendation_sched_ids": sched_ids[:8],
+                            "pending_intent": "get_recommendation",
+                            "params": params,
+                        },
+                    )
+                if isinstance(schedule_payload.get("quick_replies"), list):
+                    billing_actions["quick_replies"] = _sanitize_quick_replies(
+                        schedule_payload.get("quick_replies"),
+                        limit=4,
+                    )
+            else:
+                accommodation_like_request = bool(
+                    re.search(r"\b(hotel|inn|room|accommodation|stay)\b", str(message or "").lower())
+                ) and not _looks_like_tour_request(message)
+                if accommodation_like_request and _to_int(params.get("guests"), default=0) <= 0:
+                    missing_slot = "guests"
+                    question = _build_dynamic_accommodation_slot_question(missing_slot, params)
+                    _save_chat_state(
+                        request,
+                        {
+                            "pending_intent": "get_accommodation_recommendation",
+                            "params": params,
+                            "missing_slot": missing_slot,
+                        },
+                    )
+                    return _chat_json_response(
+                        request,
+                        start_time,
+                        {
+                            "fulfillmentText": question,
+                            "quick_replies": _slot_quick_replies(missing_slot),
+                            "needs_clarification": True,
+                            "missing_slot": missing_slot,
+                        },
+                    )
+                _clear_chat_state(request)
+                _safe_log_recommendation_event(request, intent)
+                try:
+                    reply, logged_recommended_items = _get_recommendations(params)
+                except Exception:
+                    _safe_log_chat_runtime_event(
+                        request,
+                        event_key="tour_listing_fallback",
+                        detail="tour_listing_error_clean_fallback",
+                    )
+                    reply = "No tours available right now."
+                    logged_recommended_items = []
+                if (
+                    not logged_recommended_items
+                    and _contains_any_phrase(str(reply or "").lower(), ("something went wrong", "error", "trouble loading"))
+                ):
+                    reply = "No tours available right now."
+                if not logged_recommended_items and not str(reply or "").strip():
+                    reply = "No tours available right now."
+                rec_sched_ids = []
+                for item in logged_recommended_items:
+                    if not isinstance(item, dict):
+                        continue
+                    meta = item.get("meta") if isinstance(item.get("meta"), dict) else {}
+                    sched_id = str(item.get("sched_id") or meta.get("sched_id") or "").strip()
+                    if sched_id:
+                        rec_sched_ids.append(sched_id)
+                if rec_sched_ids:
+                    _save_chat_state(
+                        request,
+                        {
+                            "last_tour_recommendation_sched_ids": rec_sched_ids[:8],
+                            "pending_intent": "get_recommendation",
+                            "params": params,
+                        },
+                    )
+    elif intent in ("get_tourism_information",):
+        _clear_chat_state(request)
+        reply = _get_tourism_information(params, message)
+        if actor.get("role") == "guest" and _is_dining_query(message):
+            try:
+                map_url = reverse("map")
+                if hasattr(request, "build_absolute_uri"):
+                    map_url = request.build_absolute_uri(map_url)
+                billing_actions["billing_link"] = map_url
+                billing_actions["billing_link_label"] = "Open Map"
+            except Exception:
+                pass
+            billing_actions["quick_replies"] = _sanitize_quick_replies(
+                [
+                    "How far is this from me?",
+                    "Show nearby landmarks",
+                    "Plan my Bayawan stay with 5000 budget",
+                ],
+                limit=4,
+            )
+    elif intent in ("reporting_summary",):
+        _clear_chat_state(request)
+        reporting_payload = _build_reporting_summary_payload(message, params)
+        reply = str(reporting_payload.get("reply") or "").strip()
+        if isinstance(reporting_payload.get("quick_replies"), list):
+            billing_actions["quick_replies"] = _sanitize_quick_replies(
+                reporting_payload.get("quick_replies"),
+                limit=4,
+            )
+    elif intent in ("travel_guidance",):
+        _clear_chat_state(request)
+        guidance = _build_travel_guidance_payload(message, params, client_location)
+        reply = str(guidance.get("reply") or "").strip() or "I can guide you with directions. Please share your destination."
+        if isinstance(guidance.get("quick_replies"), list):
+            billing_actions["quick_replies"] = _sanitize_quick_replies(guidance.get("quick_replies"), limit=4)
+        if guidance.get("link"):
+            billing_actions["billing_link"] = str(guidance.get("link"))
+            billing_actions["billing_link_label"] = str(guidance.get("link_label") or "Open Map")
+    elif intent in ("plan_bayawan_stay",):
+        if actor.get("role") in {"owner", "admin", "employee"}:
+            _clear_chat_state(request)
+            role_help = _build_role_help_payload(actor)
+            reply = (
+                "Budget-based stay planning is available in guest tourism-assistant mode. "
+                + str(role_help.get("fulfillmentText") or "")
+            )
+            out_of_scope_quick_replies = _sanitize_quick_replies(
+                role_help.get("quick_replies") if isinstance(role_help.get("quick_replies"), list) else [],
+                limit=4,
+            )
+        else:
+            planning_payload = _build_budget_stay_plan_payload(params, message)
+            if planning_payload.get("needs_clarification"):
+                next_params = (
+                    planning_payload.get("params")
+                    if isinstance(planning_payload.get("params"), dict)
+                    else dict(params)
+                )
+                missing_slot = str(planning_payload.get("missing_slot") or "").strip() or "total_budget"
                 _save_chat_state(
                     request,
                     {
-                        "pending_intent": "get_accommodation_recommendation",
-                        "params": params,
+                        "pending_intent": "plan_bayawan_stay",
+                        "params": next_params,
                         "missing_slot": missing_slot,
                     },
                 )
@@ -9068,40 +16198,82 @@ def ai_chat(request):
                     request,
                     start_time,
                     {
-                        "fulfillmentText": question,
+                        "fulfillmentText": str(planning_payload.get("question") or "").strip(),
                         "quick_replies": _slot_quick_replies(missing_slot),
                         "needs_clarification": True,
                         "missing_slot": missing_slot,
                     },
                 )
-            _clear_chat_state(request)
-            _safe_log_recommendation_event(request, intent)
-            try:
-                reply, logged_recommended_items = _get_recommendations(params)
-            except Exception:
-                reply = (
-                    "I had trouble loading tour recommendations just now. "
-                    "Please try again, or ask for tourism information while I reset."
+
+            current_plan_signature = str(planning_payload.get("plan_signature") or "").strip()
+            previous_plan_signature = str(chat_state.get("last_plan_signature") or "").strip()
+            if current_plan_signature and previous_plan_signature and current_plan_signature == previous_plan_signature:
+                current_total_budget = _to_int(
+                    (planning_payload.get("params") if isinstance(planning_payload.get("params"), dict) else {}).get("total_budget"),
+                    default=0,
                 )
-                logged_recommended_items = []
-            rec_sched_ids = []
-            for item in logged_recommended_items:
-                if not isinstance(item, dict):
-                    continue
-                meta = item.get("meta") if isinstance(item.get("meta"), dict) else {}
-                sched_id = str(meta.get("sched_id") or "").strip()
-                if sched_id:
-                    rec_sched_ids.append(sched_id)
-            if rec_sched_ids:
+                if bool(re.search(r"\b(make it cheaper|cheaper|lower budget|budget version|something cheaper)\b", lowered_message)):
+                    short_update = (
+                        "These are already the lowest-cost options I found for your current filters. "
+                        "If you want cheaper results, try a different date range, fewer days, or a broader location."
+                    )
+                    if current_total_budget > 0:
+                        short_update = f"{short_update} Current budget target: PHP {current_total_budget:,}."
+                else:
+                    short_update = (
+                        "These are still your best matches with the same details. "
+                        "If you want a different result, share a new budget, number of days, or group size."
+                    )
                 _save_chat_state(
                     request,
                     {
-                        "last_tour_recommendation_sched_ids": rec_sched_ids[:5],
+                        "pending_intent": "plan_bayawan_stay",
+                        "params": (
+                            planning_payload.get("params")
+                            if isinstance(planning_payload.get("params"), dict)
+                            else dict(params)
+                        ),
+                        "missing_slot": "",
+                        "last_plan_signature": current_plan_signature,
                     },
                 )
-    elif intent in ("get_tourism_information",):
-        _clear_chat_state(request)
-        reply = _get_tourism_information(params, message)
+                return _chat_json_response(
+                    request,
+                    start_time,
+                    {
+                        "fulfillmentText": short_update,
+                        "quick_replies": _sanitize_quick_replies(
+                            planning_payload.get("quick_replies")
+                            if isinstance(planning_payload.get("quick_replies"), list)
+                            else [],
+                            limit=4,
+                        ),
+                    },
+                )
+
+            _save_chat_state(
+                request,
+                {
+                    "pending_intent": "plan_bayawan_stay",
+                    "params": (
+                        planning_payload.get("params")
+                        if isinstance(planning_payload.get("params"), dict)
+                        else dict(params)
+                    ),
+                    "missing_slot": "",
+                    "last_plan_signature": current_plan_signature,
+                },
+            )
+            reply = str(planning_payload.get("reply") or "").strip()
+            billing_actions["quick_replies"] = _sanitize_quick_replies(
+                planning_payload.get("quick_replies") if isinstance(planning_payload.get("quick_replies"), list) else [],
+                limit=4,
+            )
+            if planning_payload.get("billing_link"):
+                billing_actions["billing_link"] = str(planning_payload.get("billing_link"))
+                billing_actions["billing_link_label"] = str(
+                    planning_payload.get("billing_link_label") or "Open Official Link"
+                )
     elif intent in ("calculate_billing", "calculatetourbilling"):
         if actor.get("role") in {"owner", "admin", "employee"}:
             _clear_chat_state(request)
@@ -9109,23 +16281,91 @@ def ai_chat(request):
         else:
             _clear_chat_state(request)
             reply = _calculate_billing(params)
+            treasurer_url = str(
+                getattr(settings, "TOURISM_TREASURER_BILLING_URL", "")
+                or getattr(settings, "TOURISM_OFFICE_BILLING_URL", "")
+                or os.getenv("TOURISM_TREASURER_BILLING_URL", "")
+                or os.getenv("TOURISM_OFFICE_BILLING_URL", "")
+                or "https://bayawancity.gov.ph/"
+            ).strip()
+            if treasurer_url:
+                billing_actions["billing_link"] = treasurer_url
+                billing_actions["billing_link_label"] = "Proceed to Treasurer Billing"
+                billing_actions["quick_replies"] = [
+                    "show my tour bookings",
+                    "show available tours",
+                ]
     elif intent in ("get_accommodation_recommendation", "gethotelrecommendation"):
         if actor.get("role") in {"owner", "admin", "employee"}:
             _clear_chat_state(request)
             role_help = _build_role_help_payload(actor)
             reply = (
-                "Accommodation recommendation cards are shown for guest booking flow only. "
+                "Accommodation recommendation cards are shown for guest discovery flow only. "
                 + str(role_help.get("fulfillmentText") or "")
             )
             logged_recommended_items = []
             accommodation_meta = None
         else:
+            if _is_accommodation_room_listing_command(message):
+                target_name = _extract_accommodation_name_for_room_listing(
+                    message,
+                    cached_accommodation_rows,
+                    state_params=params if isinstance(params, dict) else {},
+                )
+                room_listing_payload = _build_room_listing_response_for_accommodation(target_name, limit=5)
+                if isinstance(room_listing_payload.get("recommendation_trace"), list):
+                    next_state = dict(chat_state)
+                    next_state["last_accommodation_recommendations"] = _build_accommodation_selection_cache(
+                        room_listing_payload.get("recommendation_trace")
+                    )
+                    listing_params = dict(params) if isinstance(params, dict) else {}
+                    selected_id = _to_int(room_listing_payload.get("selected_accommodation_id"), default=0)
+                    selected_name = str(room_listing_payload.get("selected_accommodation_name") or "").strip()
+                    if selected_id > 0:
+                        listing_params["selected_accommodation_id"] = selected_id
+                    if selected_name:
+                        listing_params["selected_accommodation_name"] = selected_name
+                        listing_params["accom_name"] = selected_name
+                    next_state["params"] = listing_params
+                    next_state["pending_intent"] = "get_accommodation_recommendation"
+                    next_state["missing_slot"] = ""
+                    next_state.pop("pending_booking", None)
+                    _save_chat_state(request, next_state)
+                return _chat_json_response(request, start_time, room_listing_payload)
+
+            if _is_broad_accommodation_discovery_query(message, params):
+                broad_payload = _build_broad_accommodation_discovery_response(params=params, limit=5)
+                if isinstance(broad_payload.get("recommendation_trace"), list):
+                    next_state = dict(chat_state)
+                    next_state["last_accommodation_recommendations"] = _build_accommodation_selection_cache(
+                        broad_payload.get("recommendation_trace")
+                    )
+                    broad_params = dict(params) if isinstance(params, dict) else {}
+                    next_state["pending_intent"] = "get_accommodation_recommendation"
+                    next_state["params"] = broad_params
+                    next_state["missing_slot"] = ""
+                    next_state.pop("pending_booking", None)
+                    _save_chat_state(request, next_state)
+                return _chat_json_response(request, start_time, broad_payload)
+
             missing_slot, question = _next_accommodation_clarifying_question(params)
+            if missing_slot and _has_sufficient_accommodation_details(params):
+                # Enough constraints are already present for recommendation;
+                # avoid re-asking optional slots like budget.
+                missing_slot = ""
+                question = ""
             if missing_slot:
                 baseline = _infer_user_accommodation_baseline(user)
                 defaults = _build_personalization_defaults(params, baseline)
                 personalization_prompt = _build_personalization_offer_text(defaults, baseline)
-                if (not state_skip_default_offer) and defaults and personalization_prompt:
+                suppress_default_offer = _is_vague_accommodation_request(message, params)
+                if (
+                    (not suppress_default_offer)
+                    and (not state_skip_default_offer)
+                    and (not _has_sufficient_accommodation_details(params))
+                    and defaults
+                    and personalization_prompt
+                ):
                     _save_chat_state(
                         request,
                         {
@@ -9183,9 +16423,9 @@ def ai_chat(request):
                         }
                         _save_chat_state(request, next_state)
                         prompt_suffix = (
-                            f"To continue booking, {next_question}"
+                            f"To refine this recommendation, {next_question}"
                             if next_question else
-                            "Tell me if you want to proceed with booking any room above."
+                            "Tell me which option you want to explore and I'll share the official page."
                         )
                         response = {
                             "fulfillmentText": f"{preview_reply}\n\n{prompt_suffix}"
@@ -9220,6 +16460,12 @@ def ai_chat(request):
                         "location_preview_for": chat_state.get("location_preview_for", ""),
                     },
                 )
+                if (
+                    suppress_default_offer
+                    and _to_int(params.get("guests"), default=0) <= 0
+                    and _to_int(params.get("budget"), default=0) <= 0
+                ):
+                    question = "Sure. I can help you find a place to stay. How many guests and what budget per night?"
                 return _chat_json_response(
                     request,
                     start_time,
@@ -9278,85 +16524,349 @@ def ai_chat(request):
             ):
                 reply = f"{reply}\n\n{_format_cnn_prediction_for_chat(cnn_prediction)}"
     elif intent in ("calculate_accommodation_billing", "calculatehotelbilling"):
-        if actor.get("role") in {"owner", "admin", "employee"}:
-            _clear_chat_state(request)
-            reply = "Accommodation billing in chat is for guest booking flow only."
-        else:
-            _clear_chat_state(request)
-            reply = _calculate_accommodation_billing(params)
-            room = _find_accommodation_room(params)
-            if room is not None:
-                billing_actions["quick_replies"] = [
-                    {
-                        "label": "Continue to Book",
-                        "value": _build_book_from_billing_prompt(room, params),
-                    },
-                    {
-                        "label": "Find Another Hotel",
-                        "value": _build_find_another_accommodation_prompt(params),
-                    },
-                ]
-    elif intent in ("book_accommodation", "bookhotel", "book_hotel", "reserve_accommodation"):
-        if actor.get("role") in {"owner", "admin", "employee"}:
-            _clear_chat_state(request)
-            reply = "Room booking via chatbot is available for guest accounts. Use your role dashboard for management tasks."
-        else:
+        _clear_chat_state(request)
+        resolution = _resolve_preview_room_selection(
+            params=params,
+            message=message,
+            cached_rows=cached_accommodation_rows,
+        )
+        if isinstance(resolution.get("ambiguous_names"), list) and resolution.get("ambiguous_names"):
+            options = [str(v) for v in resolution.get("ambiguous_names")[:3] if str(v).strip()]
+            return _chat_json_response(
+                request,
+                start_time,
+                {
+                    "fulfillmentText": f"Which accommodation do you mean: {', '.join(options)}?",
+                    "quick_replies": options,
+                    "needs_clarification": True,
+                    "missing_slot": "accommodation_name",
+                },
+            )
+        room = resolution.get("room")
+        if resolution.get("needs_room_selection"):
+            room_choices = [str(v) for v in (resolution.get("room_choices") or []) if str(v).strip()][:4]
+            selected_accom_name = str(resolution.get("selected_accommodation_name") or "").strip()
+            prompt = (
+                f"Which room would you like to preview at {selected_accom_name}?"
+                if selected_accom_name
+                else "Which room would you like to preview?"
+            )
             next_state = dict(chat_state)
-            next_state.pop("pending_booking", None)
+            preview_params = dict(params)
+            if _to_int(resolution.get("selected_accommodation_id"), default=0) > 0:
+                preview_params["selected_accommodation_id"] = _to_int(resolution.get("selected_accommodation_id"), default=0)
+            if selected_accom_name:
+                preview_params["selected_accommodation_name"] = selected_accom_name
+                preview_params["accom_name"] = selected_accom_name
+            next_state["pending_intent"] = "book_accommodation"
+            next_state["params"] = preview_params
+            next_state["missing_slot"] = "room_reference"
+            next_state["pending_booking"] = {
+                "params": preview_params,
+                "created_at": int(time.time()),
+                "stage": "collecting_details",
+            }
             _save_chat_state(request, next_state)
-            booking_result = _book_accommodation_from_chat(request, params, commit=False)
-            reply = booking_result["reply"]
-            if guest_count_update_note:
-                reply = f"{guest_count_update_note}\n\n{reply}"
-            if booking_result.get("requires_confirmation"):
-                latest_state = _load_chat_state(request)
-                latest_state["pending_booking"] = {
-                    "params": {
-                        "room_id": booking_result.get("prepared_params", {}).get("room_id"),
-                        "check_in": booking_result.get("prepared_params", {}).get("check_in"),
-                        "check_out": booking_result.get("prepared_params", {}).get("check_out"),
-                        "guests": booking_result.get("prepared_params", {}).get("guests"),
-                    },
-                    "created_at": int(time.time()),
-                }
-                _save_chat_state(request, latest_state)
-            else:
-                missing_slot = str(booking_result.get("missing_slot") or "").strip().lower()
-                prepared_params = (
-                    booking_result.get("prepared_params")
-                    if isinstance(booking_result.get("prepared_params"), dict)
-                    else {}
+            return _chat_json_response(
+                request,
+                start_time,
+                {
+                    "fulfillmentText": prompt,
+                    "quick_replies": room_choices or ["show rooms"],
+                    "needs_clarification": True,
+                    "missing_slot": "room_reference",
+                },
+            )
+        if resolution.get("not_found_name"):
+            not_found = str(resolution.get("not_found_name") or "").strip()
+            _save_chat_state(request, _clear_invalid_preview_context(chat_state))
+            return _chat_json_response(
+                request,
+                start_time,
+                {
+                    "fulfillmentText": (
+                        f"I couldn't find {not_found} in approved accommodations yet. "
+                        "Please choose from available rooms or specify the accommodation."
+                    ),
+                    "quick_replies": ["show approved accommodations in bayawan"],
+                    "needs_clarification": True,
+                    "missing_slot": "accommodation_name",
+                },
+            )
+        if resolution.get("not_found_room_ref"):
+            room_choices = [str(v) for v in (resolution.get("room_choices") or []) if str(v).strip()][:4]
+            selected_accom_name = str(resolution.get("selected_accommodation_name") or "").strip()
+            selected_accom_id = _to_int(resolution.get("selected_accommodation_id"), default=0)
+            next_state = dict(chat_state)
+            next_params = dict(params)
+            if selected_accom_id > 0:
+                next_params["selected_accommodation_id"] = selected_accom_id
+            if selected_accom_name:
+                next_params["selected_accommodation_name"] = selected_accom_name
+                next_params["accom_name"] = selected_accom_name
+            next_state["pending_intent"] = "book_accommodation"
+            next_state["params"] = next_params
+            next_state["missing_slot"] = "room_reference"
+            next_state["pending_booking"] = {
+                "params": next_params,
+                "created_at": int(time.time()),
+                "stage": "collecting_details",
+            }
+            _save_chat_state(request, next_state)
+            return _chat_json_response(
+                request,
+                start_time,
+                {
+                    "fulfillmentText": (
+                        (
+                            f"I couldn't find that room in {selected_accom_name}. Please choose a room from this accommodation."
+                            if selected_accom_name
+                            else "I couldn't find that room. Please choose from available rooms or specify the accommodation."
+                        )
+                    ),
+                    "quick_replies": room_choices or ["show rooms"],
+                    "needs_clarification": True,
+                    "missing_slot": "room_reference",
+                },
+            )
+        preview_payload = _build_accommodation_preview_response(room=room, params=params)
+        if preview_payload.get("ready"):
+            reply = str(preview_payload.get("text") or "").strip()
+            billing_actions["quick_replies"] = _sanitize_quick_replies(
+                preview_payload.get("quick_replies"),
+                limit=4,
+            )
+            if preview_payload.get("billing_link"):
+                billing_actions["billing_link"] = str(preview_payload.get("billing_link"))
+                billing_actions["billing_link_label"] = str(
+                    preview_payload.get("billing_link_label") or "Continue to Official Booking Page"
                 )
-                if missing_slot:
-                    _safe_log_chat_runtime_event(
-                        request,
-                        event_key="clarification_triggered",
-                        detail=missing_slot,
-                    )
-                    next_params = dict(params)
-                    if booking_result.get("room_id") not in (None, ""):
-                        next_params["room_id"] = booking_result.get("room_id")
-                    for key in ("room_id", "check_in", "check_out", "guests"):
-                        if prepared_params.get(key) not in (None, ""):
-                            next_params[key] = prepared_params.get(key)
-                    _save_chat_state(
-                        request,
-                        {
-                            "pending_intent": "book_accommodation",
-                            "params": next_params,
-                            "missing_slot": missing_slot,
-                        },
-                    )
+            if isinstance(preview_payload.get("link_actions"), list):
+                billing_actions["link_actions"] = preview_payload.get("link_actions")[:4]
+        else:
+            reply = (
+                "I can prepare an accommodation booking preview for you. "
+                "Please share missing details so I can estimate total cost."
+            )
+            billing_actions["quick_replies"] = _sanitize_quick_replies(
+                preview_payload.get("quick_replies"),
+                limit=4,
+            )
+        next_state = dict(chat_state)
+        next_state["pending_intent"] = "book_accommodation"
+        preview_params = dict(params)
+        if room is not None:
+            preview_params["selected_room_id"] = _to_int(getattr(room, "room_id", 0), default=0)
+            preview_params["selected_room_name"] = str(getattr(room, "room_name", "") or "").strip()
+            preview_params["selected_accommodation_id"] = _to_int(getattr(room, "accommodation_id", 0), default=0)
+            preview_params["selected_accommodation_name"] = str(
+                getattr(getattr(room, "accommodation", None), "company_name", "") or ""
+            ).strip()
+            preview_params["accom_name"] = preview_params["selected_accommodation_name"]
+            preview_params["nightly_rate"] = str(getattr(room, "price_per_night", "") or "").strip()
+            preview_params["selection_source"] = str(resolution.get("source") or "fallback")
+        next_state["params"] = preview_params
+        next_state["missing_slot"] = ""
+        next_state["pending_booking"] = {
+            "params": preview_params,
+            "created_at": int(time.time()),
+            "stage": "collecting_details",
+        }
+        _save_chat_state(request, next_state)
+    elif intent in ("book_accommodation", "bookhotel", "book_hotel", "reserve_accommodation"):
+        resolution = _resolve_preview_room_selection(
+            params=params,
+            message=message,
+            cached_rows=cached_accommodation_rows,
+        )
+        if isinstance(resolution.get("ambiguous_names"), list) and resolution.get("ambiguous_names"):
+            options = [str(v) for v in resolution.get("ambiguous_names")[:3] if str(v).strip()]
+            return _chat_json_response(
+                request,
+                start_time,
+                {
+                    "fulfillmentText": f"Which accommodation do you mean: {', '.join(options)}?",
+                    "quick_replies": options,
+                    "needs_clarification": True,
+                    "missing_slot": "accommodation_name",
+                },
+            )
+        room = resolution.get("room")
+        if resolution.get("needs_room_selection"):
+            room_choices = [str(v) for v in (resolution.get("room_choices") or []) if str(v).strip()][:4]
+            selected_accom_name = str(resolution.get("selected_accommodation_name") or "").strip()
+            prompt = (
+                f"Which room would you like to preview at {selected_accom_name}?"
+                if selected_accom_name
+                else "Which room would you like to preview?"
+            )
+            next_state = dict(chat_state)
+            preview_params = dict(params)
+            if _to_int(resolution.get("selected_accommodation_id"), default=0) > 0:
+                preview_params["selected_accommodation_id"] = _to_int(resolution.get("selected_accommodation_id"), default=0)
+            if selected_accom_name:
+                preview_params["selected_accommodation_name"] = selected_accom_name
+                preview_params["accom_name"] = selected_accom_name
+            next_state["pending_intent"] = "book_accommodation"
+            next_state["params"] = preview_params
+            next_state["missing_slot"] = "room_reference"
+            next_state["pending_booking"] = {
+                "params": preview_params,
+                "created_at": int(time.time()),
+                "stage": "collecting_details",
+            }
+            _save_chat_state(request, next_state)
+            return _chat_json_response(
+                request,
+                start_time,
+                {
+                    "fulfillmentText": prompt,
+                    "quick_replies": room_choices or ["show rooms"],
+                    "needs_clarification": True,
+                    "missing_slot": "room_reference",
+                },
+            )
+        if resolution.get("not_found_name"):
+            missing_name = str(resolution.get("not_found_name") or "").strip()
+            _save_chat_state(request, _clear_invalid_preview_context(chat_state))
+            return _chat_json_response(
+                request,
+                start_time,
+                {
+                    "fulfillmentText": (
+                        f"I couldn't find {missing_name} in approved accommodation listings yet. "
+                        "Please choose from available rooms or specify the accommodation."
+                    ),
+                    "quick_replies": ["show approved accommodations in bayawan"],
+                    "needs_clarification": True,
+                    "missing_slot": "accommodation_name",
+                },
+            )
+        if resolution.get("not_found_room_ref"):
+            room_choices = [str(v) for v in (resolution.get("room_choices") or []) if str(v).strip()][:4]
+            selected_accom_name = str(resolution.get("selected_accommodation_name") or "").strip()
+            selected_accom_id = _to_int(resolution.get("selected_accommodation_id"), default=0)
+            next_state = dict(chat_state)
+            next_params = dict(params)
+            if selected_accom_id > 0:
+                next_params["selected_accommodation_id"] = selected_accom_id
+            if selected_accom_name:
+                next_params["selected_accommodation_name"] = selected_accom_name
+                next_params["accom_name"] = selected_accom_name
+            next_state["pending_intent"] = "book_accommodation"
+            next_state["params"] = next_params
+            next_state["missing_slot"] = "room_reference"
+            next_state["pending_booking"] = {
+                "params": next_params,
+                "created_at": int(time.time()),
+                "stage": "collecting_details",
+            }
+            _save_chat_state(request, next_state)
+            return _chat_json_response(
+                request,
+                start_time,
+                {
+                    "fulfillmentText": (
+                        (
+                            f"I couldn't find that room in {selected_accom_name}. Please choose a room from this accommodation."
+                            if selected_accom_name
+                            else "I couldn't find that room. Please choose from available rooms or specify the accommodation."
+                        )
+                    ),
+                    "quick_replies": room_choices or ["show rooms"],
+                    "needs_clarification": True,
+                    "missing_slot": "room_reference",
+                },
+            )
+        if _is_accommodation_how_to_book_request(message):
+            request._chatbot_log_context["resolved_intent"] = "book_accommodation"
+            guidance_text = (
+                "You can complete your booking directly with the accommodation using their official page "
+                "or contact details. I can also prepare a booking preview if you'd like to estimate your stay cost."
+            )
+            link_actions = _build_accommodation_link_actions(room=room, max_actions=4) if room is not None else []
+            return _chat_json_response(
+                request,
+                start_time,
+                {
+                    "fulfillmentText": guidance_text,
+                    "quick_replies": [
+                        "create booking preview",
+                    ],
+                    "link_actions": link_actions,
+                },
+            )
+        preview_payload = _build_accommodation_preview_response(room=room, params=params)
+        if preview_payload.get("ready"):
+            reply = str(preview_payload.get("text") or "").strip()
+            billing_actions["quick_replies"] = _sanitize_quick_replies(
+                preview_payload.get("quick_replies"),
+                limit=4,
+            )
+            if preview_payload.get("billing_link"):
+                billing_actions["billing_link"] = str(preview_payload.get("billing_link"))
+                billing_actions["billing_link_label"] = str(
+                    preview_payload.get("billing_link_label") or "Continue to Official Booking Page"
+                )
+            if isinstance(preview_payload.get("link_actions"), list):
+                billing_actions["link_actions"] = preview_payload.get("link_actions")[:4]
+            next_stage = "awaiting_handoff"
+        else:
+            reply = (
+                "I can prepare an accommodation booking preview for you. "
+                "Final booking is completed directly with the accommodation.\n"
+                f"{str(preview_payload.get('question') or '').strip()}"
+            ).strip()
+            billing_actions["quick_replies"] = _sanitize_quick_replies(
+                preview_payload.get("quick_replies"),
+                limit=4,
+            )
+            next_stage = "collecting_details"
+
+        next_state = dict(chat_state)
+        next_state["pending_intent"] = "book_accommodation"
+        preview_params = dict(params)
+        if room is not None:
+            preview_params["selected_room_id"] = _to_int(getattr(room, "room_id", 0), default=0)
+            preview_params["selected_room_name"] = str(getattr(room, "room_name", "") or "").strip()
+            preview_params["selected_accommodation_id"] = _to_int(getattr(room, "accommodation_id", 0), default=0)
+            preview_params["selected_accommodation_name"] = str(
+                getattr(getattr(room, "accommodation", None), "company_name", "") or ""
+            ).strip()
+            preview_params["accom_name"] = preview_params["selected_accommodation_name"]
+            preview_params["nightly_rate"] = str(getattr(room, "price_per_night", "") or "").strip()
+            preview_params["selection_source"] = str(resolution.get("source") or "fallback")
+        next_state["params"] = preview_params
+        next_state["missing_slot"] = ""
+        next_state["pending_booking"] = {
+            "params": preview_params,
+            "created_at": int(time.time()),
+            "stage": next_stage,
+        }
+        _save_chat_state(request, next_state)
     else:
         if intent not in continuation_intents:
             _clear_chat_state(request)
-        fallback_payload = _build_out_of_scope_payload(actor)
+        fallback_payload = _build_out_of_scope_payload(actor, message=message)
         reply = str(fallback_payload.get("fulfillmentText") or "").strip()
         if isinstance(fallback_payload.get("quick_replies"), list):
             out_of_scope_quick_replies = _sanitize_quick_replies(
                 fallback_payload.get("quick_replies"),
                 limit=4,
             )
+
+    normalized_reply = str(reply or "").strip().lower()
+    if intent in (
+        "get_accommodation_recommendation",
+        "gethotelrecommendation",
+        "get_recommendation",
+        "reporting_summary",
+    ):
+        if normalized_reply.startswith("i couldn't find") or normalized_reply.startswith("no data available yet"):
+            if intent == "reporting_summary":
+                reply = str(reply or "No reporting data is available yet.").strip()
+            else:
+                reply = f"{reply}\n{_no_data_fallback()}"
 
     final_reply, nlg_source = generate_final_ai_response(
         request=request,
@@ -9393,6 +16903,13 @@ def ai_chat(request):
                 billing_actions.get("quick_replies"),
                 limit=4,
             )
+        if isinstance(billing_actions.get("link_actions"), list):
+            response["link_actions"] = billing_actions.get("link_actions")[:3]
+        if billing_actions.get("billing_link"):
+            response["billing_link"] = str(billing_actions.get("billing_link"))
+            response["billing_link_label"] = str(
+                billing_actions.get("billing_link_label") or "Open Official Link"
+            )
     if out_of_scope_quick_replies:
         response["quick_replies"] = out_of_scope_quick_replies
     if cnn_prediction:
@@ -9410,6 +16927,15 @@ def ai_chat(request):
     response["response_nlg_source"] = nlg_source
     if logged_recommended_items and intent in ("get_accommodation_recommendation", "gethotelrecommendation"):
         response["recommendation_trace"] = logged_recommended_items
+        first_item = logged_recommended_items[0] if isinstance(logged_recommended_items, list) and logged_recommended_items else {}
+        first_meta = first_item.get("meta") if isinstance(first_item, dict) and isinstance(first_item.get("meta"), dict) else {}
+        first_link_actions = _build_accommodation_link_actions(row_meta=first_meta, max_actions=3)
+        if first_link_actions:
+            response["link_actions"] = first_link_actions
+        official_link, official_label = _build_accommodation_official_link(row_meta=first_meta)
+        if official_link:
+            response["billing_link"] = official_link
+            response["billing_link_label"] = official_label or "Open Official Link"
         assist_qr = _build_recommendation_assist_quick_replies(
             _build_accommodation_selection_cache(logged_recommended_items)
         )
@@ -9419,6 +16945,24 @@ def ai_chat(request):
             limit=4,
         )
         _inject_recommendation_context(response, params if isinstance(params, dict) else {})
+    if logged_recommended_items and intent in ("get_recommendation", "gettourrecommendation"):
+        response["recommendation_trace"] = logged_recommended_items
+        rec_sched_ids = []
+        for row in logged_recommended_items:
+            if not isinstance(row, dict):
+                continue
+            sched_id = str(row.get("sched_id") or "").strip()
+            if not sched_id:
+                meta = row.get("meta") if isinstance(row.get("meta"), dict) else {}
+                sched_id = str(meta.get("sched_id") or "").strip()
+            if sched_id:
+                rec_sched_ids.append(sched_id)
+        if rec_sched_ids:
+            merged_state = _load_chat_state(request)
+            if not isinstance(merged_state, dict):
+                merged_state = {}
+            merged_state["last_tour_recommendation_sched_ids"] = rec_sched_ids[:8]
+            _save_chat_state(request, merged_state)
     if accommodation_meta and intent in ("get_accommodation_recommendation", "gethotelrecommendation"):
         if isinstance(accommodation_meta, dict):
             no_match_reasons = accommodation_meta.get("no_match_reasons")
@@ -9433,6 +16977,68 @@ def ai_chat(request):
                 response["recommendation_fallback"] = str(fallback_applied)
             if isinstance(quick_replies, list):
                 response["quick_replies"] = _sanitize_quick_replies(quick_replies, limit=4)
+            parsed_context = (
+                accommodation_meta.get("parsed_context")
+                if isinstance(accommodation_meta.get("parsed_context"), dict)
+                else {}
+            )
+            response["recommendation_diagnostics"] = {
+                "display_mode": str(
+                    accommodation_meta.get("display_mode")
+                    or accommodation_meta.get("view_mode")
+                    or "accommodation_list"
+                ),
+                "fallback_stage": str(accommodation_meta.get("fallback_applied") or "none"),
+                "fallback_reason_codes": [
+                    str(code) for code in (accommodation_meta.get("fallback_reason_codes") or [])
+                ],
+                "extracted_location": str(parsed_context.get("location") or ""),
+                "extracted_budget": _to_int(parsed_context.get("budget"), default=0),
+                "extracted_budget_min": _to_int(parsed_context.get("budget_min"), default=0),
+                "extracted_guests": _to_int(parsed_context.get("guests"), default=0),
+                "extracted_type": str(parsed_context.get("company_type") or ""),
+                "extracted_room_type": str(parsed_context.get("room_type") or ""),
+            }
+    if actor.get("role") == "guest" and intent in ("get_recommendation", "gettourrecommendation"):
+        response["fulfillmentText"] = re.sub(
+            r"\b(?:sched(?:ule)?\s*id[:\s-]*|sched)\s*[a-z]*\d+\b",
+            "",
+            str(response.get("fulfillmentText") or ""),
+            flags=re.IGNORECASE,
+        )
+        if isinstance(response.get("recommendation_trace"), list):
+            cleaned_trace = []
+            for row in response.get("recommendation_trace"):
+                if not isinstance(row, dict):
+                    cleaned_trace.append(row)
+                    continue
+                cleaned_row = dict(row)
+                cleaned_row["subtitle"] = re.sub(
+                    r"\b(?:sched(?:ule)?\s*id[:\s-]*|sched)\s*[a-z]*\d+\s*\|?\s*",
+                    "",
+                    str(cleaned_row.get("subtitle") or ""),
+                    flags=re.IGNORECASE,
+                ).strip(" |")
+                cleaned_trace.append(cleaned_row)
+            response["recommendation_trace"] = cleaned_trace
+    response["fulfillmentText"] = _apply_assistant_response_style(
+        actor=actor,
+        intent=intent,
+        message=message,
+        text=response.get("fulfillmentText") or "",
+        params=params,
+        memory=assistant_memory if isinstance(assistant_memory, dict) else {},
+        needs_clarification=bool(response.get("needs_clarification")),
+        nlg_source=str(response.get("response_nlg_source") or ""),
+    )
+    if actor.get("role") == "guest":
+        response = _limit_assistant_quick_replies_for_guest(response, limit=3)
+        _save_assistant_memory_from_context(
+            request,
+            actor=actor,
+            intent=intent,
+            params=params,
+        )
     _safe_log_step_events_from_response(request, intent=intent, response_payload=response)
     _safe_log_recommendation_result_with_metadata(
         request,
@@ -9512,7 +17118,7 @@ def chat_runtime_health(request):
                     "gemini_client_available": genai is not None,
                     "provider": provider,
                     "model": str(os.getenv("OPENAI_MODEL", "gpt-4o-mini") or "").strip() or "gpt-4o-mini",
-                    "gemini_model": str(os.getenv("GEMINI_MODEL", "gemini-1.5-flash") or "").strip() or "gemini-1.5-flash",
+                    "gemini_model": str(os.getenv("GEMINI_MODEL", "gemini-2.5-flash-lite") or "").strip() or "gemini-2.5-flash-lite",
                 },
                 "models": {
                     "intent_cnn_path": str(intent_cnn_path),
@@ -9619,6 +17225,12 @@ def log_guest_funnel_event(request):
         error_message=detail,
         request=request,
     )
+    if event_key == "billing_link_clicked":
+        _safe_log_chat_step_event(
+            request,
+            event_type="click",
+            item_ref="accommodation_external_handoff_clicked",
+        )
     return JsonResponse({"status": "ok", "event_key": event_key, "item_ref": item_ref, "event_type": event_type})
 
 
@@ -9627,34 +17239,22 @@ def accommodation_booking_notifications(request):
     if request.method != "GET":
         return JsonResponse({"error": "Method not allowed."}, status=405)
 
-    user = getattr(request, "user", None)
-    if not user or not getattr(user, "is_authenticated", False):
-        return JsonResponse(
-            {
-                "status": "skipped",
-                "bookings": [],
-                "reason": "not_authenticated",
-            },
-            status=200,
-        )
+    try:
+        links_url = reverse("my_accommodation_bookings")
+    except NoReverseMatch:
+        links_url = "/accommodations/my-bookings/"
 
-    bookings = (
-        AccommodationBooking.objects.filter(guest=user, status__in=("pending", "confirmed", "declined"))
-        .select_related("accommodation", "room")
-        .order_by("-last_updated")[:50]
+    return JsonResponse(
+        {
+            "status": "disabled",
+            "bookings": [],
+            "reason": "accommodation_booking_transactions_decommissioned",
+            "message": "Accommodation transactions are handled through each property's official page.",
+            "redirect_url": links_url,
+            "redirect_label": "Visit Official Accommodation Pages",
+        },
+        status=200,
     )
-    rows = []
-    for booking in bookings:
-        rows.append(
-            {
-                "booking_id": booking.booking_id,
-                "status": str(booking.status or "").lower(),
-                "last_updated": booking.last_updated.isoformat() if booking.last_updated else "",
-                "hotel_name": getattr(getattr(booking, "accommodation", None), "company_name", ""),
-                "room_name": getattr(getattr(booking, "room", None), "room_name", ""),
-            }
-        )
-    return JsonResponse({"status": "ok", "bookings": rows})
 
 
 @csrf_exempt
@@ -9782,4 +17382,9 @@ def text_cnn_predict(request):
     if err:
         return JsonResponse({"error": err}, status=500)
     return JsonResponse(prediction)
+
+
+
+
+
 

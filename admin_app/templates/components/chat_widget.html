@@ -56,13 +56,7 @@
     transform: none;
     width: 390px;
     height: 590px;
-    background-color: #edf3fb;
-    background-image:
-      radial-gradient(circle at 1px 1px, rgba(29, 78, 216, 0.16) 1px, transparent 0),
-      linear-gradient(180deg, rgba(255, 255, 255, 0.78), rgba(255, 255, 255, 0.78));
-    background-size: 18px 18px, auto;
-    background-repeat: repeat, no-repeat;
-    background-position: 0 0, 0 0;
+    background: linear-gradient(180deg, #ffffff 0%, #f6faff 100%);
     border-radius: 20px;
     border: 1px solid rgba(255, 255, 255, 0.7);
     box-shadow: 0 24px 60px rgba(7, 17, 34, 0.35);
@@ -117,10 +111,34 @@
     font-weight: 700;
   }
 
+  .staff-chat-header-actions {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .staff-chat-clear {
+    border: 1px solid rgba(255, 255, 255, 0.26);
+    background: rgba(255, 255, 255, 0.18);
+    color: #fff;
+    border-radius: 9px;
+    height: 32px;
+    padding: 0 10px;
+    font-size: 0.73rem;
+    font-weight: 700;
+    cursor: pointer;
+  }
+
   .staff-chat-messages {
     padding: 14px;
     overflow-y: auto;
-    background: transparent;
+    background-color: #eef4fb;
+    background-image:
+      linear-gradient(180deg, rgba(244, 248, 253, 0.74), rgba(244, 248, 253, 0.74)),
+      url('/static/images/chatbot-bg.jpg');
+    background-size: auto, cover;
+    background-position: 0 0, center center;
+    background-repeat: no-repeat, no-repeat;
     flex: 1 1 auto;
     min-height: 0;
     max-height: none;
@@ -136,6 +154,7 @@
     line-height: 1.45;
     white-space: pre-wrap;
     overflow-wrap: anywhere;
+    word-break: break-word;
   }
 
   .staff-chat-message.user {
@@ -456,6 +475,127 @@
     line-height: 1.4;
   }
 
+  .staff-chat-message.bot .bot-owner-rooms {
+    border: 1px solid #d7e3f7;
+    border-radius: 12px;
+    background: linear-gradient(180deg, rgba(255,255,255,0.96), rgba(244,249,255,0.94));
+    box-shadow: 0 4px 12px rgba(16, 56, 104, 0.08);
+    padding: 10px;
+    width: 100%;
+    display: grid;
+    gap: 8px;
+  }
+
+  .staff-chat-message.bot .bot-owner-rooms-head {
+    font-weight: 800;
+    color: #173f6d;
+    font-size: 0.9rem;
+    letter-spacing: 0.01em;
+  }
+
+  .staff-chat-message.bot .bot-owner-rooms-summary {
+    border: 1px solid #dbe6f8;
+    border-radius: 10px;
+    background: #fff;
+    padding: 7px 9px;
+    font-size: 0.8rem;
+    color: #395272;
+    line-height: 1.4;
+  }
+
+  .staff-chat-message.bot .bot-owner-room-item {
+    border: 1px solid #dbe6f8;
+    border-radius: 10px;
+    background: #fff;
+    padding: 8px 9px;
+    display: grid;
+    gap: 2px;
+  }
+
+  .staff-chat-message.bot .bot-owner-room-title {
+    font-size: 0.82rem;
+    font-weight: 800;
+    color: #1f3556;
+  }
+
+  .staff-chat-message.bot .bot-owner-room-meta {
+    font-size: 0.78rem;
+    color: #3f5978;
+    line-height: 1.35;
+  }
+
+  .staff-chat-message.bot .bot-owner-rooms-tip {
+    border-top: 1px dashed #d5e1f3;
+    padding-top: 6px;
+    font-size: 0.78rem;
+    color: #4a5f7b;
+    line-height: 1.4;
+  }
+
+  .staff-chat-message.bot .bot-owner-availability {
+    border: 1px solid #d7e3f7;
+    border-radius: 12px;
+    background: linear-gradient(180deg, rgba(255,255,255,0.96), rgba(244,249,255,0.94));
+    box-shadow: 0 4px 12px rgba(16, 56, 104, 0.08);
+    padding: 10px;
+    width: 100%;
+    display: grid;
+    gap: 8px;
+  }
+
+  .staff-chat-message.bot .bot-owner-availability-head {
+    font-weight: 800;
+    color: #173f6d;
+    font-size: 0.9rem;
+  }
+
+  .staff-chat-message.bot .bot-owner-availability-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .staff-chat-message.bot .bot-owner-availability-cell {
+    border: 1px solid #dbe6f8;
+    border-radius: 10px;
+    background: #fff;
+    padding: 8px 9px;
+  }
+
+  .staff-chat-message.bot .bot-owner-availability-label {
+    font-size: 0.73rem;
+    color: #4a5f7b;
+    font-weight: 700;
+  }
+
+  .staff-chat-message.bot .bot-owner-availability-value {
+    font-size: 0.95rem;
+    color: #163d69;
+    font-weight: 800;
+    margin-top: 2px;
+  }
+
+  .staff-chat-message.bot .bot-owner-availability-note {
+    border-top: 1px dashed #d5e1f3;
+    padding-top: 6px;
+    font-size: 0.78rem;
+    color: #4a5f7b;
+    line-height: 1.4;
+  }
+
+  .staff-chat-message.bot .bot-role-help-actions {
+    display: grid;
+    gap: 6px;
+  }
+
+  .staff-chat-message.bot .bot-role-help-actions .staff-chat-quick-btn {
+    width: 100%;
+    text-align: left;
+    border-radius: 10px;
+    padding: 8px 10px;
+    background: #fff;
+  }
+
   .staff-chat-message.bot .bot-availability-summary,
   .staff-chat-message.bot .bot-clarify-summary {
     border: 1px solid #d7e3f7;
@@ -520,6 +660,86 @@
     cursor: pointer;
     font-size: 0.82rem;
     font-weight: 600;
+    white-space: normal;
+    line-height: 1.25;
+    text-align: left;
+  }
+
+  .staff-chat-quick-btn:hover {
+    background: #f3f8ff;
+    border-color: #9fb8df;
+  }
+
+  .staff-chat-quick-btn:focus-visible {
+    outline: 2px solid #8bb0e8;
+    outline-offset: 1px;
+  }
+
+  .staff-chat-message.bot .bot-state-card {
+    border: 1px solid #f0d9ad;
+    border-radius: 12px;
+    background: linear-gradient(180deg, #fffef9, #fff8e6);
+    padding: 10px;
+    display: grid;
+    gap: 7px;
+  }
+
+  .staff-chat-message.bot .bot-state-card.warning {
+    border-color: #efcf9c;
+    background: linear-gradient(180deg, #fffdf7, #fff4db);
+  }
+
+  .staff-chat-message.bot .bot-state-card.muted {
+    border-color: #d7e3f7;
+    background: linear-gradient(180deg, rgba(255,255,255,0.96), rgba(244,249,255,0.94));
+  }
+
+  .staff-chat-message.bot .bot-state-head {
+    font-size: 0.86rem;
+    font-weight: 800;
+    color: #173f6d;
+  }
+
+  .staff-chat-message.bot .bot-state-text {
+    font-size: 0.81rem;
+    color: #2c3f57;
+    line-height: 1.45;
+  }
+
+  .staff-chat-message.bot .bot-next-step {
+    border-top: 1px dashed #d6c6a0;
+    padding-top: 6px;
+    font-size: 0.79rem;
+    color: #5b4b23;
+    font-weight: 700;
+  }
+
+  .staff-chat-message.bot .bot-summary-card {
+    border: 1px solid #d7e3f7;
+    border-radius: 12px;
+    background: linear-gradient(180deg, rgba(255,255,255,0.96), rgba(244,249,255,0.94));
+    padding: 10px;
+    display: grid;
+    gap: 8px;
+  }
+
+  .staff-chat-message.bot .bot-summary-head {
+    font-size: 0.86rem;
+    font-weight: 800;
+    color: #173f6d;
+  }
+
+  .staff-chat-message.bot .bot-summary-lines {
+    margin: 0;
+    padding-left: 18px;
+    display: grid;
+    gap: 5px;
+  }
+
+  .staff-chat-message.bot .bot-summary-lines li {
+    font-size: 0.8rem;
+    color: #2b3f58;
+    line-height: 1.4;
   }
 
   .staff-chat-input-row {
@@ -538,6 +758,8 @@
     border: 1px solid #bfd1ee;
     outline: none;
     background: #f8fbff;
+    min-width: 0;
+    font-size: 16px;
   }
   .staff-chat-input:focus {
     border-color: #1a67d2;
@@ -570,18 +792,88 @@
     .staff-chat-modal {
       top: calc(84px + env(safe-area-inset-top, 0px));
       right: 12px;
+      left: 12px;
       width: calc(100vw - 24px);
-      max-width: 390px;
-      height: min(74vh, 590px);
+      max-width: none;
+      height: min(75dvh, 620px);
       border-radius: 18px;
     }
 
     .staff-chat-fab {
-      top: calc(84px + env(safe-area-inset-top, 0px));
+      top: auto;
+      bottom: calc(14px + env(safe-area-inset-bottom, 0px));
       right: 16px;
       width: 58px;
       height: 58px;
       border-radius: 18px;
+    }
+
+    .staff-chat-header {
+      padding: 12px 12px 20px;
+      align-items: flex-start;
+      gap: 8px;
+    }
+
+    .staff-chat-header::after {
+      left: 12px;
+      right: 54px;
+      bottom: 5px;
+      line-height: 1.2;
+      white-space: normal;
+    }
+
+    .staff-chat-title {
+      max-width: calc(100% - 80px);
+      padding-bottom: 12px;
+      line-height: 1.2;
+    }
+
+    .staff-chat-header-actions {
+      flex-shrink: 0;
+    }
+
+    .staff-chat-messages {
+      padding: 12px 10px;
+    }
+
+    .staff-chat-message {
+      max-width: 92%;
+      padding: 10px 11px;
+      font-size: 0.9rem;
+    }
+
+    .staff-chat-input-row {
+      gap: 6px;
+      padding: 10px;
+    }
+
+    .staff-chat-send {
+      width: 42px;
+      height: 42px;
+      border-radius: 13px;
+      flex-shrink: 0;
+    }
+  }
+
+  @media (max-width: 480px) {
+    .staff-chat-modal {
+      top: calc(66px + env(safe-area-inset-top, 0px));
+      left: 8px;
+      right: 8px;
+      width: auto;
+      height: min(80dvh, 640px);
+      border-radius: 16px;
+    }
+
+    .staff-chat-fab {
+      right: 10px;
+      width: 54px;
+      height: 54px;
+      border-radius: 16px;
+    }
+
+    .staff-chat-quick-btn {
+      min-height: 34px;
     }
   }
 </style>
@@ -596,21 +888,25 @@
   id="staffChatModal"
   class="staff-chat-modal"
   data-chat-role="{{ chat_role|default:'guest' }}"
-  data-welcome-admin="Good day. Admin assistant mode is now active. Type help to view available commands."
-  data-welcome-employee="Good day. Employee assistant mode is now active. Type help to view available commands."
-  data-welcome-owner="Good day. Owner assistant mode is now active. You may type: show my rooms or show my bookings."
+  data-chat-user-id="{% if request.user.is_authenticated %}{{ request.user.pk }}{% else %}anon{% endif %}"
+  data-welcome-admin="Hello! Admin assistant mode is active. I can help with monitoring, approvals, and reports."
+  data-welcome-employee="Hello! Employee assistant mode is active. I can help with assigned tours and operations."
+  data-welcome-owner="Hello! Owner assistant mode is active. I can help with rooms, listing visibility, and monthly report tasks."
 >
   <div
     class="staff-chat-header"
     id="staffChatHeader"
-    data-chat-subtitle="Hotel | Booking | Billing"
+    data-chat-subtitle="Hotels | Explore | Official Pages"
     data-chat-subtitle-admin="Admin | Tours | Approvals"
     data-chat-subtitle-employee="Employee | Tours | Tasks"
-    data-chat-subtitle-owner="Owner | Rooms | Bookings"
-    data-chat-subtitle-guest="Hotel | Booking | Billing"
+    data-chat-subtitle-owner="Owner | Rooms | Reports"
+    data-chat-subtitle-guest="Hotels | Explore | Official Pages"
   >
     <h3 class="staff-chat-title">Ibayaw Tour Assistant</h3>
-    <button id="staffChatClose" class="staff-chat-close" type="button">&times;</button>
+    <div class="staff-chat-header-actions">
+      <button id="staffChatClear" class="staff-chat-clear" type="button" aria-label="Clear chat history">Clear Chat</button>
+      <button id="staffChatClose" class="staff-chat-close" type="button" aria-label="Close chat">&times;</button>
+    </div>
   </div>
   <div
     id="staffChatMessages"
@@ -641,11 +937,12 @@
     const fab = document.getElementById("staffChatFab");
     const modal = document.getElementById("staffChatModal");
     const closeBtn = document.getElementById("staffChatClose");
+    const clearBtn = document.getElementById("staffChatClear");
     const messagesEl = document.getElementById("staffChatMessages");
     const headerEl = document.getElementById("staffChatHeader");
     const inputEl = document.getElementById("staffChatInput");
     const sendBtn = document.getElementById("staffChatSend");
-    if (!fab || !modal || !closeBtn || !messagesEl || !inputEl || !sendBtn) {
+    if (!fab || !modal || !closeBtn || !clearBtn || !messagesEl || !inputEl || !sendBtn) {
       return;
     }
 
@@ -659,11 +956,115 @@
     const subtitleMap = {
       admin: headerEl ? (headerEl.getAttribute("data-chat-subtitle-admin") || "Admin | Tours | Approvals") : "Admin | Tours | Approvals",
       employee: headerEl ? (headerEl.getAttribute("data-chat-subtitle-employee") || "Employee | Tours | Tasks") : "Employee | Tours | Tasks",
-      owner: headerEl ? (headerEl.getAttribute("data-chat-subtitle-owner") || "Owner | Rooms | Bookings") : "Owner | Rooms | Bookings",
-      guest: headerEl ? (headerEl.getAttribute("data-chat-subtitle-guest") || "Hotel | Booking | Billing") : "Hotel | Booking | Billing",
+      owner: headerEl ? (headerEl.getAttribute("data-chat-subtitle-owner") || "Owner | Rooms | Reports") : "Owner | Rooms | Reports",
+      guest: headerEl ? (headerEl.getAttribute("data-chat-subtitle-guest") || "Hotels | Explore | Official Pages") : "Hotels | Explore | Official Pages",
     };
     if (headerEl) {
       headerEl.setAttribute("data-chat-subtitle", subtitleMap[role] || subtitleMap.guest);
+    }
+
+    const userId = String(modal.getAttribute("data-chat-user-id") || "anon").trim() || "anon";
+    const historyStorageKey = `ibayaw_staff_chat_history_v3:${role}:${userId}`;
+    let historyHydrated = false;
+    let suppressPersist = false;
+
+    function _safeReadHistory() {
+      try {
+        const raw = localStorage.getItem(historyStorageKey);
+        if (!raw) return [];
+        const parsed = JSON.parse(raw);
+        return Array.isArray(parsed) ? parsed : [];
+      } catch (e) {
+        return [];
+      }
+    }
+
+    function _safeWriteHistory(events) {
+      try {
+        localStorage.setItem(historyStorageKey, JSON.stringify(events));
+      } catch (e) {
+        // Ignore storage quota/access issues.
+      }
+    }
+
+    function _clonePayload(payload) {
+      if (!payload || typeof payload !== "object") return null;
+      try {
+        return JSON.parse(JSON.stringify(payload));
+      } catch (e) {
+        return null;
+      }
+    }
+
+    function _appendHistoryEvent(eventItem) {
+      if (suppressPersist) return;
+      const normalized = _clonePayload(eventItem);
+      if (!normalized || typeof normalized !== "object") return;
+      const history = _safeReadHistory();
+      history.push(normalized);
+      const trimmed = history.slice(-160);
+      _safeWriteHistory(trimmed);
+    }
+
+    function _renderHistoryEvent(eventItem) {
+      if (!eventItem || typeof eventItem !== "object") return;
+      const type = String(eventItem.type || "").trim();
+      if (type === "quick_replies") {
+        addQuickReplies(
+          Array.isArray(eventItem.items) ? eventItem.items : [],
+          { persist: false }
+        );
+        return;
+      }
+      if (type === "message") {
+        addMessage(
+          String(eventItem.text || ""),
+          String(eventItem.kind || "bot"),
+          _clonePayload(eventItem.payload),
+          { persist: false }
+        );
+      }
+    }
+
+    function _seedWelcomeState() {
+      const welcome = String(welcomeMap[role] || welcomeMap.guest).trim();
+      addMessage(
+        `${welcome} You can type help to view the prompts available for your role.`,
+        "bot",
+        null,
+        { persist: true }
+      );
+      addQuickReplies(["help"], { persist: true });
+    }
+
+    function _hydrateChatHistory(forceReset = false) {
+      if (historyHydrated && !forceReset) {
+        return;
+      }
+      messagesEl.innerHTML = "";
+      const history = forceReset ? [] : _safeReadHistory();
+      suppressPersist = true;
+      if (history.length) {
+        history.forEach((eventItem) => _renderHistoryEvent(eventItem));
+      }
+      suppressPersist = false;
+      if (!history.length) {
+        _seedWelcomeState();
+      }
+      historyHydrated = true;
+      messagesEl.dataset.initialized = "1";
+      messagesEl.scrollTop = messagesEl.scrollHeight;
+    }
+
+    function _clearChatHistoryAndReset() {
+      try {
+        localStorage.removeItem(historyStorageKey);
+      } catch (e) {
+        // Ignore storage access issues.
+      }
+      historyHydrated = false;
+      messagesEl.dataset.initialized = "";
+      _hydrateChatHistory(true);
     }
 
     function escapeHtml(text) {
@@ -679,6 +1080,30 @@
       const raw = String(text || "").trim();
       if (!raw) {
         container.textContent = "";
+        return;
+      }
+
+      const ownerAvailabilityCard = buildOwnerAvailabilitySnapshotCard(raw);
+      if (ownerAvailabilityCard) {
+        container.appendChild(ownerAvailabilityCard);
+        return;
+      }
+
+      const noMatchCard = buildNoMatchStateCard(raw);
+      if (noMatchCard) {
+        container.appendChild(noMatchCard);
+        return;
+      }
+
+      const operationalSummaryCard = buildOperationalSummaryCard(raw);
+      if (operationalSummaryCard) {
+        container.appendChild(operationalSummaryCard);
+        return;
+      }
+
+      const ownerRoomsCard = buildOwnerRoomsCard(raw);
+      if (ownerRoomsCard) {
+        container.appendChild(ownerRoomsCard);
         return;
       }
 
@@ -858,6 +1283,84 @@
       return root;
     }
 
+    function buildNoMatchStateCard(rawText) {
+      const raw = String(rawText || "").trim();
+      if (!raw) return null;
+      const compact = raw.replace(/\s+/g, " ").trim();
+      const signals = [
+        /i could not find/i,
+        /no .* found/i,
+        /outside the scope/i,
+        /not yet enabled/i,
+        /temporary issue/i,
+      ];
+      if (!signals.some((rx) => rx.test(compact))) {
+        return null;
+      }
+
+      const root = document.createElement("div");
+      root.className = "bot-state-card warning";
+
+      const head = document.createElement("div");
+      head.className = "bot-state-head";
+      head.textContent = "Update";
+      root.appendChild(head);
+
+      const body = document.createElement("div");
+      body.className = "bot-state-text";
+      body.textContent = raw;
+      root.appendChild(body);
+
+      const nextLine = compact.match(/(next step:.*)$/i);
+      if (nextLine && nextLine[1]) {
+        const step = document.createElement("div");
+        step.className = "bot-next-step";
+        step.textContent = nextLine[1].replace(/^next step:\s*/i, "Next step: ");
+        root.appendChild(step);
+      }
+      return root;
+    }
+
+    function buildOperationalSummaryCard(rawText) {
+      const raw = String(rawText || "").trim();
+      if (!raw) return null;
+      const lines = raw.split("\n").map((line) => String(line || "").trim()).filter(Boolean);
+      if (!lines.length) return null;
+      const headLine = lines[0];
+      if (!/(snapshot|summary|diagnostic)/i.test(headLine)) {
+        return null;
+      }
+      const listLines = lines.filter((line) => /^-\s+/.test(line));
+      if (!listLines.length) {
+        return null;
+      }
+      const root = document.createElement("div");
+      root.className = "bot-summary-card";
+
+      const head = document.createElement("div");
+      head.className = "bot-summary-head";
+      head.textContent = headLine;
+      root.appendChild(head);
+
+      const list = document.createElement("ul");
+      list.className = "bot-summary-lines";
+      listLines.forEach((line) => {
+        const li = document.createElement("li");
+        li.textContent = line.replace(/^-+\s*/, "");
+        list.appendChild(li);
+      });
+      root.appendChild(list);
+
+      const extraLine = lines.find((line) => /^use\s+/i.test(line) || /^if\s+/i.test(line));
+      if (extraLine) {
+        const note = document.createElement("div");
+        note.className = "bot-next-step";
+        note.textContent = extraLine;
+        root.appendChild(note);
+      }
+      return root;
+    }
+
     function buildAvailabilityOptionsCard(rawText) {
       const raw = String(rawText || "").trim();
       if (!raw) {
@@ -928,8 +1431,8 @@
       const isPaymentPolicy =
         joined.includes("supported payment methods") ||
         joined.includes("down payment policy") ||
-        joined.includes("lgu-linked billing") ||
-        joined.includes("billing/payment flow");
+        joined.includes("lgu-linked payment handoff") ||
+        joined.includes("official page and payment handoff flow");
       if (!isPaymentPolicy) {
         return null;
       }
@@ -1010,7 +1513,9 @@
         const list = document.createElement("ul");
         list.className = "bot-text-list";
         String(requiredMatch[1])
-          .split(/\s*-\s*/)
+          // Split only on separator dashes with surrounding spaces
+          // so hyphenated words like "check-in" and "Wi-Fi" stay intact.
+          .split(/\s+-\s+/)
           .map((v) => v.trim())
           .filter(Boolean)
           .forEach((itemText) => {
@@ -1035,7 +1540,9 @@
         const list = document.createElement("ul");
         list.className = "bot-text-list";
         String(optionalMatch[1])
-          .split(/\s*-\s*/)
+          // Split only on separator dashes with surrounding spaces
+          // so hyphenated words like "check-in" and "Wi-Fi" stay intact.
+          .split(/\s+-\s+/)
           .map((v) => v.trim())
           .filter(Boolean)
           .forEach((itemText) => {
@@ -1062,6 +1569,9 @@
     function buildSupportGuideCard(rawText) {
       const raw = String(rawText || "").trim();
       if (!raw) return null;
+      if (/your rooms:/i.test(raw) || /your accommodations:/i.test(raw)) {
+        return null;
+      }
       const compact = raw.replace(/\s+/g, " ").trim();
 
       const supportSignals = [
@@ -1070,7 +1580,7 @@
         /not showing|missing listing|record not showing/i,
         /what should i do/i,
         /\b(open|go to)\b.*\b(hub|dashboard|page)\b/i,
-        /\bto (fix|resolve|continue)\b/i,
+        /\bto (fix|resolve)\b/i,
       ];
       const looksLikeSupport = supportSignals.some((rx) => rx.test(compact));
       if (!looksLikeSupport) {
@@ -1082,7 +1592,7 @@
 
       const head = document.createElement("div");
       head.className = "bot-reco-title";
-      head.textContent = "Support Guide";
+      head.textContent = "Helpful Steps";
       root.appendChild(head);
 
       const sentenceParts = compact
@@ -1132,6 +1642,140 @@
         root.appendChild(fallback);
       }
 
+      return root;
+    }
+
+    function buildOwnerRoomsCard(rawText) {
+      const raw = String(rawText || "").trim();
+      if (!/your rooms:/i.test(raw)) {
+        return null;
+      }
+
+      const lines = raw
+        .split("\n")
+        .map((line) => String(line || "").trim())
+        .filter(Boolean);
+      const summaryLine = lines.find((line) => /^you currently have/i.test(line)) || "";
+      const tipLine = lines.find((line) => /^tip:/i.test(line)) || "";
+      let roomLines = lines.filter((line) => /^-\s+/.test(line));
+
+      if (!roomLines.length) {
+        const compact = raw.replace(/\s+/g, " ").trim();
+        const roomsSectionMatch = compact.match(/your rooms:\s*(.+?)(?:\s+tip:|$)/i);
+        if (roomsSectionMatch && roomsSectionMatch[1]) {
+          roomLines = String(roomsSectionMatch[1])
+            .split(/\s+-\s+/)
+            .map((chunk) => chunk.trim())
+            .filter(Boolean)
+            .map((chunk) => `- ${chunk}`);
+        }
+      }
+
+      if (!roomLines.length) {
+        return null;
+      }
+
+      const root = document.createElement("div");
+      root.className = "bot-owner-rooms";
+
+      const head = document.createElement("div");
+      head.className = "bot-owner-rooms-head";
+      head.textContent = "My Rooms";
+      root.appendChild(head);
+
+      if (summaryLine) {
+        const summary = document.createElement("div");
+        summary.className = "bot-owner-rooms-summary";
+        summary.textContent = summaryLine;
+        root.appendChild(summary);
+      }
+
+      roomLines.slice(0, 12).forEach((line) => {
+        const text = line.replace(/^-+\s*/, "").trim();
+        const parts = text.split("|").map((part) => String(part || "").trim()).filter(Boolean);
+
+        const item = document.createElement("div");
+        item.className = "bot-owner-room-item";
+
+        if (parts.length >= 2) {
+          const title = document.createElement("div");
+          title.className = "bot-owner-room-title";
+          title.textContent = `${parts[0]} - ${parts[1]}`;
+          item.appendChild(title);
+
+          const meta = document.createElement("div");
+          meta.className = "bot-owner-room-meta";
+          meta.textContent = parts.slice(2).join(" | ") || "No additional room details.";
+          item.appendChild(meta);
+        } else {
+          const fallback = document.createElement("div");
+          fallback.className = "bot-owner-room-meta";
+          fallback.textContent = text;
+          item.appendChild(fallback);
+        }
+
+        root.appendChild(item);
+      });
+
+      if (tipLine) {
+        const tip = document.createElement("div");
+        tip.className = "bot-owner-rooms-tip";
+        tip.textContent = tipLine;
+        root.appendChild(tip);
+      }
+
+      return root;
+    }
+
+    function buildOwnerAvailabilitySnapshotCard(rawText) {
+      const raw = String(rawText || "").trim();
+      if (!/^room availability snapshot for today/i.test(raw)) {
+        return null;
+      }
+      const compact = raw.replace(/\s+/g, " ").trim();
+      const root = document.createElement("div");
+      root.className = "bot-owner-availability";
+
+      const head = document.createElement("div");
+      head.className = "bot-owner-availability-head";
+      const dateMatch = compact.match(/\((\d{4}-\d{2}-\d{2})\)/);
+      head.textContent = dateMatch ? `Room Availability • ${dateMatch[1]}` : "Room Availability";
+      root.appendChild(head);
+
+      const metricDefs = [
+        [/total rooms:\s*(\d+)/i, "Total Rooms"],
+        [/marked available:\s*(\d+)/i, "Marked Available"],
+        [/unavailable\/maintenance:\s*(\d+)/i, "Unavailable"],
+        [/occupied by active bookings:\s*(\d+)/i, "Occupied Today"],
+        [/rooms likely available now:\s*(\d+)/i, "Likely Available Now"],
+      ];
+      const grid = document.createElement("div");
+      grid.className = "bot-owner-availability-grid";
+      let rendered = 0;
+      metricDefs.forEach(([rx, label]) => {
+        const m = compact.match(rx);
+        if (!m) return;
+        const cell = document.createElement("div");
+        cell.className = "bot-owner-availability-cell";
+        const labelNode = document.createElement("div");
+        labelNode.className = "bot-owner-availability-label";
+        labelNode.textContent = label;
+        const valueNode = document.createElement("div");
+        valueNode.className = "bot-owner-availability-value";
+        valueNode.textContent = String(m[1] || "0");
+        cell.appendChild(labelNode);
+        cell.appendChild(valueNode);
+        grid.appendChild(cell);
+        rendered += 1;
+      });
+      if (rendered) {
+        root.appendChild(grid);
+      }
+
+      const note = document.createElement("div");
+      note.className = "bot-owner-availability-note";
+      note.textContent = "Use Manage Rooms for status updates and Owner Bookings for booking-level checks.";
+      root.appendChild(note);
       return root;
     }
 
@@ -1406,8 +2050,23 @@
 
       const header = lines.find((line) => /assistant mode is active/i.test(line)) || lines[0];
       const snapshotLine = lines.find((line) => /^current snapshot:/i.test(line)) || "";
-      const commandLines = lines.filter((line) => /^-\s+/.test(line));
-      const noteLines = lines.filter((line) => !/^-\s+/.test(line) && line !== header && line !== snapshotLine);
+      const commandLines = lines.filter((line) => /^-\s+/.test(line)).map((line) => line.replace(/^-+\s*/, "").trim());
+      const remainingLines = lines.filter((line) => !/^-\s+/.test(line) && line !== header && line !== snapshotLine);
+
+      const actionPattern = /^(show|open|view|go to|how many|register|manage|book|find|check|track|create|update)\b/i;
+      const inferredActions = remainingLines.filter((line) => {
+        if (!line) return false;
+        if (/^for registration\/edits/i.test(line)) return false;
+        if (/^accommodation recommendation cards are shown/i.test(line)) return false;
+        return actionPattern.test(line);
+      });
+      const allActions = [...commandLines, ...inferredActions]
+        .map((line) => String(line || "").trim())
+        .filter(Boolean)
+        .filter((line, index, arr) => arr.findIndex((v) => v.toLowerCase() === line.toLowerCase()) === index)
+        .slice(0, 8);
+
+      const noteLines = remainingLines.filter((line) => !inferredActions.includes(line));
 
       const root = document.createElement("div");
       root.className = "bot-role-help";
@@ -1424,16 +2083,21 @@
         root.appendChild(snapshot);
       }
 
-      if (commandLines.length) {
-        const list = document.createElement("ul");
-        list.className = "bot-role-help-list";
-        commandLines.forEach((line) => {
-          const li = document.createElement("li");
-          li.className = "bot-role-help-item";
-          li.textContent = line.replace(/^-+\s*/, "");
-          list.appendChild(li);
+      if (allActions.length) {
+        const actionWrap = document.createElement("div");
+        actionWrap.className = "bot-role-help-actions";
+        allActions.forEach((actionText) => {
+          const btn = document.createElement("button");
+          btn.type = "button";
+          btn.className = "staff-chat-quick-btn";
+          btn.textContent = actionText;
+          btn.addEventListener("click", function () {
+            inputEl.value = actionText;
+            sendMessage();
+          });
+          actionWrap.appendChild(btn);
         });
-        root.appendChild(list);
+        root.appendChild(actionWrap);
       }
 
       if (noteLines.length) {
@@ -1446,7 +2110,8 @@
       return root;
     }
 
-    function addMessage(text, kind, payload = null) {
+    function addMessage(text, kind, payload = null, options = {}) {
+      const persist = options.persist !== false;
       const msg = document.createElement("div");
       msg.className = "staff-chat-message " + (kind === "user" ? "user" : "bot");
       if (kind === "bot") {
@@ -1470,8 +2135,12 @@
             box.appendChild(head);
             const meta = document.createElement("div");
             meta.className = "bot-reco-meta";
+            const titleText = String(item?.title || "Option").trim();
             const subtitle = String(item?.subtitle || "").trim();
-            meta.textContent = subtitle || "Please provide check-in/check-out and guest count to proceed.";
+            const dedupedSubtitle = subtitle && subtitle.toLowerCase() === titleText.toLowerCase()
+              ? ""
+              : subtitle;
+            meta.textContent = dedupedSubtitle || "Please provide your filters to refine these options.";
             box.appendChild(meta);
             traceCard.appendChild(box);
           });
@@ -1479,20 +2148,43 @@
         } else {
           appendFormattedBotText(msg, text);
         }
+
+        if (payload?.billing_link) {
+          const a = document.createElement("a");
+          a.className = "staff-chat-link";
+          a.href = String(payload.billing_link);
+          a.textContent = String(payload.billing_link_label || "Open");
+          if (payload.open_in_new_tab === true) {
+            a.target = "_blank";
+            a.rel = "noopener noreferrer";
+          }
+          msg.appendChild(document.createElement("br"));
+          msg.appendChild(a);
+        }
       } else {
         msg.textContent = String(text || "");
       }
       messagesEl.appendChild(msg);
       messagesEl.scrollTop = messagesEl.scrollHeight;
+      if (persist) {
+        _appendHistoryEvent({
+          type: "message",
+          kind: kind === "user" ? "user" : "bot",
+          text: String(text || ""),
+          payload: _clonePayload(payload),
+        });
+      }
       return msg;
     }
 
-    function addQuickReplies(list) {
+    function addQuickReplies(list, options = {}) {
+      const persist = options.persist !== false;
       if (!Array.isArray(list) || !list.length) {
         return;
       }
       const row = document.createElement("div");
       row.className = "staff-chat-quick-replies";
+      const serialized = [];
       list.slice(0, 4).forEach((item) => {
         const label = typeof item === "string" ? item : String(item.label || item.value || "");
         const value = typeof item === "string" ? item : String(item.value || item.label || "");
@@ -1506,27 +2198,127 @@
           sendMessage();
         });
         row.appendChild(btn);
+        serialized.push({ label, value });
       });
       messagesEl.appendChild(row);
       messagesEl.scrollTop = messagesEl.scrollHeight;
+      if (persist && serialized.length) {
+        _appendHistoryEvent({
+          type: "quick_replies",
+          items: serialized,
+        });
+      }
+    }
+
+    const chatGeoContext = {
+      status: "unknown",
+      latitude: null,
+      longitude: null,
+      accuracy: null,
+      captured_at: "",
+    };
+
+    async function captureCurrentLocationForChat() {
+      if (!navigator.geolocation) {
+        chatGeoContext.status = "unsupported";
+        return;
+      }
+      await new Promise((resolve) => {
+        navigator.geolocation.getCurrentPosition(
+          (position) => {
+            const lat = Number(position?.coords?.latitude);
+            const lng = Number(position?.coords?.longitude);
+            const acc = Number(position?.coords?.accuracy);
+            if (Number.isFinite(lat) && Number.isFinite(lng)) {
+              chatGeoContext.status = "available";
+              chatGeoContext.latitude = lat;
+              chatGeoContext.longitude = lng;
+              chatGeoContext.accuracy = Number.isFinite(acc) ? acc : null;
+              chatGeoContext.captured_at = new Date().toISOString();
+            } else {
+              chatGeoContext.status = "unavailable";
+            }
+            resolve();
+          },
+          (error) => {
+            chatGeoContext.status = Number(error?.code) === 1 ? "denied" : "unavailable";
+            resolve();
+          },
+          {
+            enableHighAccuracy: false,
+            timeout: 4500,
+            maximumAge: 180000,
+          }
+        );
+      });
+    }
+
+    function _normalizeLoadingProbe(message) {
+      return String(message || "")
+        .toLowerCase()
+        .replace(/[^a-z0-9\s]/g, " ")
+        .replace(/\s+/g, " ")
+        .trim();
+    }
+
+    function _intentAwareLoadingText(message) {
+      const probe = _normalizeLoadingProbe(message);
+      if (!probe) {
+        return "Thinking...";
+      }
+      if (/\b(plan|itinerary|budget|stay)\b/.test(probe)) {
+        return "Preparing your plan...";
+      }
+      if (/\b(hotel|inn|stay|accommodation|places to stay)\b/.test(probe)) {
+        return "Finding approved stays...";
+      }
+      if (/\b(tour|schedule|package|book tour)\b/.test(probe)) {
+        return "Checking tour options...";
+      }
+      if (/\b(direction|how far|distance|minutes|travel time|get there|route|navigate)\b/.test(probe)) {
+        return "Getting route guidance...";
+      }
+      if (/\b(report|influx|monthly)\b/.test(probe)) {
+        return "Reviewing tourism summaries...";
+      }
+      return "Thinking...";
     }
 
     async function sendMessage() {
       const message = String(inputEl.value || "").trim();
       if (!message) return;
+      if (chatGeoContext.status === "unknown") {
+        await captureCurrentLocationForChat();
+      }
       inputEl.value = "";
       addMessage(message, "user");
       sendBtn.disabled = true;
       if (messagesEl) {
         messagesEl.setAttribute("aria-busy", "true");
       }
-      const typing = addMessage("Please wait while I process your request...", "bot");
+      const loadingText = _intentAwareLoadingText(message);
+      const typing = addMessage(
+        loadingText,
+        "bot",
+        null,
+        { persist: false }
+      );
 
       try {
         const response = await fetch("/api/chat/", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ message: message }),
+          body: JSON.stringify({
+            message: message,
+            page_context: String(window.location.pathname || "").trim(),
+            client_location: {
+              status: chatGeoContext.status,
+              latitude: chatGeoContext.latitude,
+              longitude: chatGeoContext.longitude,
+              accuracy_m: chatGeoContext.accuracy,
+              captured_at: chatGeoContext.captured_at,
+            },
+          }),
         });
         let data = {};
         try {
@@ -1542,22 +2334,9 @@
           (Array.isArray(data.recommendation_trace) && data.recommendation_trace.length
             ? "Here are the recommendations I found based on your request."
             : (data.billing_link
-              ? "I found a page/action for your request. Use the button below to continue."
+                    ? "You can continue using the link below."
               : "I can help with your request. Please try rephrasing it in one sentence."));
-        const replyNode = addMessage(replyText, "bot", data);
-
-        if (data.billing_link) {
-          const a = document.createElement("a");
-          a.className = "staff-chat-link";
-          a.href = String(data.billing_link);
-          a.textContent = String(data.billing_link_label || "Open");
-          if (data.open_in_new_tab === true) {
-            a.target = "_blank";
-            a.rel = "noopener noreferrer";
-          }
-          replyNode.appendChild(document.createElement("br"));
-          replyNode.appendChild(a);
-        }
+        addMessage(replyText, "bot", data);
 
         if (Array.isArray(data.quick_replies) && data.quick_replies.length > 0) {
           addQuickReplies(data.quick_replies);
@@ -1581,15 +2360,7 @@
     function openChat() {
       modal.classList.add("open");
       fab.classList.add("hidden");
-      if (!messagesEl.dataset.initialized) {
-        const welcome = String(welcomeMap[role] || welcomeMap.guest).trim();
-        addMessage(
-          `${welcome} You can type help to view the prompts available for your role.`,
-          "bot"
-        );
-        addQuickReplies(["help"]);
-        messagesEl.dataset.initialized = "1";
-      }
+      _hydrateChatHistory(false);
       inputEl.focus();
     }
 
@@ -1601,6 +2372,10 @@
     fab.addEventListener("click", openChat);
 
     closeBtn.addEventListener("click", closeChat);
+    clearBtn.addEventListener("click", function () {
+      _clearChatHistoryAndReset();
+      inputEl.focus();
+    });
 
     sendBtn.addEventListener("click", sendMessage);
     inputEl.addEventListener("keydown", function (event) {

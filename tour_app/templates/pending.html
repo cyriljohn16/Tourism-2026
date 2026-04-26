@@ -240,6 +240,15 @@
     <div class="content">
       <div class="container">
         <h1 class="report-title">Booking Report</h1>
+        {% if is_admin and allow_override %}
+          <div class="no-data" style="margin-bottom:10px;">
+            Override mode enabled: Admin can update pending booking status on this view.
+          </div>
+        {% elif not can_update_booking_status %}
+          <div class="no-data" style="margin-bottom:10px;">
+            Monitoring mode: Admin can view all tour bookings but cannot approve/reject unless explicit override is enabled.
+          </div>
+        {% endif %}
 
         <div class="filters">
           <select id="tourFilter">
@@ -283,20 +292,26 @@
                   <td class="danger-text">No receipt</td>
                   <td>Pending</td>
                   <td>
-                    <form class="status-form" method="POST" action="{% url 'tour_app:status_update' booking.pk %}">
-                      {% csrf_token %}
-                      <input type="hidden" name="guest_id" value="{{ booking.guest_id.guest_id }}">
-                      <input type="hidden" name="sched_id" value="{{ booking.sched_id.sched_id }}">
-                      <input type="hidden" name="tour_id" value="{{ booking.tour_id.tour_id }}">
-                      <input type="hidden" name="guest_email" value="{{ booking.your_email }}">
-                      <input type="hidden" name="guest_name" value="{{ booking.your_name }}">
-                      <select name="status">
-                        <option value="Pending" selected>Pending</option>
-                        <option value="Accepted">Accepted</option>
-                        <option value="Declined">Declined</option>
-                      </select>
-                      <button type="submit" class="update-btn">Update</button>
-                    </form>
+                    {% if can_update_booking_status %}
+                      <form class="status-form" method="POST" action="{% url 'tour_app:status_update' booking.pk %}">
+                        {% csrf_token %}
+                        <input type="hidden" name="guest_id" value="{{ booking.guest_id.guest_id }}">
+                        <input type="hidden" name="sched_id" value="{{ booking.sched_id.sched_id }}">
+                        <input type="hidden" name="tour_id" value="{{ booking.tour_id.tour_id }}">
+                        <input type="hidden" name="guest_email" value="{{ booking.your_email }}">
+                        <input type="hidden" name="guest_name" value="{{ booking.your_name }}">
+                        {% if is_admin and allow_override %}
+                          <input type="hidden" name="allow_override" value="1">
+                        {% endif %}
+                        <select name="status">
+                          <option value="Accepted">Accepted</option>
+                          <option value="Declined">Declined</option>
+                        </select>
+                        <button type="submit" class="update-btn">Update</button>
+                      </form>
+                    {% else %}
+                      <span class="receipt-text">Monitoring only</span>
+                    {% endif %}
                   </td>
                   <td>{{ booking.your_phone }}</td>
                   <td>{{ booking.num_adults }}</td>

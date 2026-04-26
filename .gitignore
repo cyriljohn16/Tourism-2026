@@ -42,3 +42,21 @@ ENV/
 
 # Other
 .DS_Store
+
+# Generated evaluation/report outputs
+thesis_data_templates/
+
+# Model training/eval snapshots
+artifacts/text_cnn_intent_baseline_retrain_v3/
+artifacts/text_cnn_intent_boost_v2/
+artifacts/text_cnn_intent/baseline_before_boost/
+
+# Optional large model binaries
+*.h5
+*.keras
+!artifacts/text_cnn_intent/text_cnn_intent.h5
+!artifacts/text_cnn_intent/label_map.json
+!artifacts/text_cnn_intent/text_cnn_intent_vocab.json
+
+# Runtime progress logs
+*.jsonl

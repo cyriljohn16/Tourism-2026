@@ -103,6 +103,18 @@ class Accomodation(models.Model):
     company_type = models.CharField(max_length=100, db_index=True)
     description = models.TextField(blank=True, default="")
     accommodation_amenities = models.TextField(blank=True, default="")
+    official_booking_url = models.URLField(
+        max_length=500,
+        blank=True,
+        default="",
+        help_text="Official external booking page URL for promotional handoff.",
+    )
+    official_contact_url = models.URLField(
+        max_length=500,
+        blank=True,
+        default="",
+        help_text="Official contact/inquiry page URL for this accommodation.",
+    )
     password = models.CharField(max_length=128)
     phone_number = models.CharField(max_length=20)
     status = models.CharField(max_length=50, null=True, blank=True, default="Pending")
@@ -305,6 +317,7 @@ class Room(models.Model):
     person_limit = models.IntegerField(default=0)
     current_availability = models.IntegerField(null=True, blank=True)
     price_per_night = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    room_image = models.ImageField(upload_to='room_images/', blank=True, null=True)
     status = models.CharField(max_length=15, choices=ROOM_STATUS_CHOICES, default='AVAILABLE')
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -348,3 +361,135 @@ class TourAssignment(models.Model):
     
     def __str__(self):
         return f"{self.employee} assigned to {self.schedule}"
+
+
+class InAppNotification(models.Model):
+    NOTIFICATION_TYPE_CHOICES = [
+        ("booking", "Booking"),
+        ("approval", "Approval"),
+        ("assignment", "Assignment"),
+        ("billing", "Billing"),
+        ("system", "System"),
+    ]
+
+    recipient_guest = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="in_app_notifications",
+        null=True,
+        blank=True,
+    )
+    recipient_employee = models.ForeignKey(
+        Employee,
+        on_delete=models.CASCADE,
+        related_name="in_app_notifications",
+        null=True,
+        blank=True,
+    )
+    title = models.CharField(max_length=140)
+    message = models.TextField()
+    notification_type = models.CharField(
+        max_length=20,
+        choices=NOTIFICATION_TYPE_CHOICES,
+        default="system",
+        db_index=True,
+    )
+    related_object_id = models.CharField(max_length=40, blank=True, default="")
+    url = models.CharField(max_length=255, blank=True, default="")
+    dedupe_key = models.CharField(max_length=160, blank=True, default="", db_index=True)
+    is_read = models.BooleanField(default=False, db_index=True)
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["recipient_guest", "is_read", "created_at"]),
+            models.Index(fields=["recipient_employee", "is_read", "created_at"]),
+        ]
+
+    def __str__(self):
+        recipient = self.recipient_guest or self.recipient_employee
+        return f"{self.title} -> {recipient}"
+
+
+class OwnerMonthlyReport(models.Model):
+    REPORT_STATUS_CHOICES = [
+        ("draft", "Draft"),
+        ("submitted", "Submitted"),
+        ("returned", "Returned for Revision"),
+        ("reviewed", "Reviewed"),
+    ]
+
+    report_id = models.BigAutoField(primary_key=True)
+    owner = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="owner_monthly_reports",
+    )
+    accommodation = models.ForeignKey(
+        Accomodation,
+        on_delete=models.CASCADE,
+        related_name="monthly_reports",
+    )
+    reporting_period = models.DateField(
+        help_text="Use first day of month to represent reporting period (e.g., 2026-02-01)."
+    )
+    guests_checked_in = models.PositiveIntegerField(default=0)
+    guests_checked_out = models.PositiveIntegerField(default=0)
+    rooms_used = models.PositiveIntegerField(default=0)
+    room_usage_notes = models.TextField(blank=True, default="")
+    nationality_breakdown = models.TextField(
+        blank=True,
+        default="",
+        help_text="Owner-submitted nationality summary (e.g., Filipino: 34, Foreign: 12).",
+    )
+    additional_remarks = models.TextField(blank=True, default="")
+    status = models.CharField(max_length=20, choices=REPORT_STATUS_CHOICES, default="submitted")
+    reviewed_by = models.ForeignKey(
+        Employee,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="reviewed_owner_monthly_reports",
+    )
+    review_notes = models.TextField(blank=True, default="")
+    submitted_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-reporting_period", "-submitted_at"]
+        unique_together = [("accommodation", "reporting_period")]
+
+    def __str__(self):
+        return f"{self.accommodation.company_name} | {self.reporting_period:%b %Y} | {self.status}"
+
+
+class MonthlyReportRoomUsage(models.Model):
+    usage_id = models.BigAutoField(primary_key=True)
+    monthly_report = models.ForeignKey(
+        OwnerMonthlyReport,
+        on_delete=models.CASCADE,
+        related_name="room_usage_rows",
+    )
+    room = models.ForeignKey(
+        Room,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="monthly_report_usage_rows",
+    )
+    room_name_snapshot = models.CharField(max_length=120, default="")
+    check_ins = models.PositiveIntegerField(default=0)
+    check_outs = models.PositiveIntegerField(default=0)
+    guests_count = models.PositiveIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["room_name_snapshot", "usage_id"]
+        unique_together = [("monthly_report", "room")]
+
+    def __str__(self):
+        report_period = self.monthly_report.reporting_period if self.monthly_report else None
+        period_text = report_period.strftime("%b %Y") if report_period else "N/A"
+        return f"{self.room_name_snapshot} | {period_text}"

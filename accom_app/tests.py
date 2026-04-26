@@ -58,6 +58,7 @@ class RoomManagementAuthoritativeModelTests(TestCase):
         response = self.client.post(
             reverse("accom_app:add_room_ajax"),
             data={
+                "room_name": "Deluxe Queen",
                 "room_type": "Deluxe Queen",
                 "person_limit": 3,
                 "price_per_night": "2200.50",
@@ -97,6 +98,40 @@ class RoomManagementAuthoritativeModelTests(TestCase):
                 room_name="Spoofed Access Room",
             ).exists()
         )
+
+    def test_add_room_ajax_rejects_missing_room_type(self):
+        self.client.force_login(self.owner)
+        self._set_room_session(accom_id=self.accommodation.accom_id)
+
+        response = self.client.post(
+            reverse("accom_app:add_room_ajax"),
+            data={
+                "room_name": "No Type Room",
+                "person_limit": 2,
+                "price_per_night": "1200.00",
+            },
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("room type is required", response.json().get("message", "").lower())
+
+    def test_add_room_ajax_rejects_invalid_capacity_price_or_availability(self):
+        self.client.force_login(self.owner)
+        self._set_room_session(accom_id=self.accommodation.accom_id)
+
+        response = self.client.post(
+            reverse("accom_app:add_room_ajax"),
+            data={
+                "room_name": "Bad Room",
+                "room_type": "Standard",
+                "person_limit": 0,
+                "price_per_night": "0",
+                "current_availability": 2,
+            },
+        )
+        self.assertEqual(response.status_code, 400)
+        payload = response.json()
+        self.assertEqual(payload.get("status"), "error")
+        self.assertIn("capacity", payload.get("message", "").lower())
 
     def test_get_rooms_json_returns_authoritative_contract_fields(self):
         self.client.force_login(self.owner)
@@ -360,3 +395,38 @@ class OwnerReportsAnalyticsTests(TestCase):
         self.assertEqual(response.context["selected_month"], 4)
         self.assertEqual(response.context["selected_year"], 2026)
         self.assertEqual(response.context["total_checkins"], 0)
+
+    def test_reports_support_trend_window_and_metric_filters(self):
+        AccommodationBooking.objects.create(
+            guest=self.guest,
+            accommodation=self.accommodation,
+            room=self.room,
+            check_in=date(2026, 5, 10),
+            check_out=date(2026, 5, 13),
+            num_guests=2,
+            status="confirmed",
+            total_amount="6800.00",
+        )
+
+        self.client.force_login(self.owner)
+        response = self.client.get(
+            reverse("accom_app:owner_reports_analytics"),
+            {"month": "5", "year": "2026", "trend_window": "12", "trend_metric": "rooms"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context["selected_trend_window"], "12")
+        self.assertEqual(response.context["selected_trend_metric"], "rooms")
+        self.assertEqual(len(response.context["trend_rows"]), 12)
+
+    def test_reports_invalid_trend_filters_fallback_to_defaults(self):
+        self.client.force_login(self.owner)
+        response = self.client.get(
+            reverse("accom_app:owner_reports_analytics"),
+            {"trend_window": "99", "trend_metric": "invalid"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context["selected_trend_window"], "6")
+        self.assertEqual(response.context["selected_trend_metric"], "all")
+        self.assertEqual(len(response.context["trend_rows"]), 6)

@@ -56,10 +56,10 @@ SYSTEM_TRANSLATIONS = {
     
     # Hero section
     'hero_title': {
-        'en': 'RIVER TOUR',
-        'tl': 'TOUR SA ILOG',
-        'ceb': 'TOUR SA SUBA',
-        'es': 'TOUR DEL RÍO'
+        'en': 'BAYAWAN TOURS',
+        'tl': 'MGA TOUR SA BAYAWAN',
+        'ceb': 'MGA TOUR SA BAYAWAN',
+        'es': 'TOURS EN BAYAWAN'
     },
     'initiative': {
         'en': 'Initiative',
@@ -895,3 +895,4 @@ def populate_friendships():
     
     print(f"Created {count} friendship relationships.")
     return count
+

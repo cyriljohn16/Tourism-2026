@@ -404,6 +404,7 @@
     <div class="page-header">
         <h1>Room Management</h1>
         <p>Manage room inventory, pricing, and room guest registration entries.</p>
+        <p><small>Schema enforcement: room name/type required, capacity >= 1, price > 0, availability between 0 and capacity.</small></p>
     </div>
     <div class="panel">
     <div class="rooms-header">
@@ -464,19 +465,35 @@
         <div class="modal-content">
             <span class="close-button" id="closeAddRoomModalBtn">&times;</span>
             <h2>Add New Room</h2>
-            <form id="addRoomForm" method="post">
+            <form id="addRoomForm" method="post" enctype="multipart/form-data">
                 {% csrf_token %}
                 <label for="roomName">Room Name:</label><br>
                 <input type="text" id="roomName" name="room_name" placeholder="Enter room name" required>
                 <br>
+                <label for="roomType">Room Type:</label><br>
+                <input type="text" id="roomType" name="room_type" placeholder="e.g., Family, Deluxe Twin" required>
+                <br>
                 <label for="personLimit">Person Limit:</label><br>
-                <input type="number" id="personLimit" name="person_limit" placeholder="Max number of people allowed" min="0" value="0" required>
+                <input type="number" id="personLimit" name="person_limit" placeholder="Max number of people allowed" min="1" value="1" required>
                 <br>
                 <label for="pricePerNight">Price per Night (PHP):</label><br>
-                <input type="number" id="pricePerNight" name="price_per_night" placeholder="0.00" min="0" step="0.01" value="0.00" required>
+                <input type="number" id="pricePerNight" name="price_per_night" placeholder="0.00" min="0.01" step="0.01" required>
+                <br>
+                <label for="addAvailabilityStatus">Availability Status:</label><br>
+                <select id="addAvailabilityStatus" name="availability_status" required>
+                    <option value="AVAILABLE" selected>Available</option>
+                    <option value="OCCUPIED">Reserved</option>
+                    <option value="UNAVAILABLE">Unavailable</option>
+                </select>
+                <br>
+                <label for="addCurrentAvailability">Current Availability:</label><br>
+                <input type="number" id="addCurrentAvailability" name="current_availability" min="0" placeholder="Defaults to capacity">
                 <br>
                 <label for="roomAmenities">Amenities (comma-separated):</label><br>
                 <input type="text" id="roomAmenities" name="amenities" placeholder="WiFi, Aircon, Parking">
+                <br>
+                <label for="addRoomImage">Room Image (optional):</label><br>
+                <input type="file" id="addRoomImage" name="room_image" accept="image/*">
                 <br>
                 <button type="submit" class="add-room-btn">Add Room</button>
             </form>
@@ -488,20 +505,23 @@
         <div class="modal-content">
             <span class="close-button" id="closeEditRoomModalBtn">&times;</span>
             <h2>Edit Room</h2>
-            <form id="editRoomForm" method="post">
+            <form id="editRoomForm" method="post" enctype="multipart/form-data">
                 {% csrf_token %}
                 <input type="hidden" id="editRoomId" name="room_id">
 
                 <label for="editRoomName">Room Name:</label><br>
                 <input type="text" id="editRoomName" name="room_name" required>
                 <br>
+                <label for="editRoomType">Room Type:</label><br>
+                <input type="text" id="editRoomType" name="room_type" required>
+                <br>
 
                 <label for="editPersonLimit">Capacity (pax):</label><br>
-                <input type="number" id="editPersonLimit" name="person_limit" min="0" required>
+                <input type="number" id="editPersonLimit" name="person_limit" min="1" required>
                 <br>
 
                 <label for="editPricePerNight">Price per Night (PHP):</label><br>
-                <input type="number" id="editPricePerNight" name="price_per_night" min="0" step="0.01" required>
+                <input type="number" id="editPricePerNight" name="price_per_night" min="0.01" step="0.01" required>
                 <br>
 
                 <label for="editAvailabilityStatus">Availability Status:</label><br>
@@ -518,6 +538,16 @@
 
                 <label for="editAmenities">Amenities (comma-separated):</label><br>
                 <input type="text" id="editAmenities" name="amenities" placeholder="WiFi, Aircon, Parking">
+                <br>
+                <label for="editRoomImage">Room Image (optional):</label><br>
+                <input type="file" id="editRoomImage" name="room_image" accept="image/*">
+                <div id="editRoomImagePreviewWrap" style="margin-top:8px; display:none;">
+                    <img id="editRoomImagePreview" src="" alt="Current room image" style="width:120px; height:80px; object-fit:cover; border-radius:8px; border:1px solid #d6e2f4;">
+                </div>
+                <label style="display:flex; align-items:center; gap:6px; margin-top:8px; font-size:0.85rem;">
+                    <input type="checkbox" id="removeRoomImage" name="remove_room_image" value="1">
+                    Remove current image
+                </label>
                 <br>
 
                 <button type="submit" class="add-room-btn">Save Changes</button>
@@ -666,20 +696,51 @@
         // Handle the add room form submission via AJAX.
         $("#addRoomForm").submit(function(e) {
             e.preventDefault();
+            var formEl = document.getElementById("addRoomForm");
             var roomName = $("#roomName").val();
+            var roomType = String($("#roomType").val() || "").trim();
             var personLimit = $("#personLimit").val();
             var pricePerNight = $("#pricePerNight").val();
+            var availabilityStatus = $("#addAvailabilityStatus").val();
+            var currentAvailability = $("#addCurrentAvailability").val();
             var amenities = $("#roomAmenities").val();
+
+            if (!String(roomName || "").trim()) {
+                showToast("Room name is required.", "error");
+                return false;
+            }
+            if (!roomType) {
+                showToast("Room type is required.", "error");
+                return false;
+            }
+            if (parseInt(personLimit || "0", 10) < 1) {
+                showToast("Capacity must be at least 1.", "error");
+                return false;
+            }
+            if (parseFloat(pricePerNight || "0") <= 0) {
+                showToast("Price per night must be greater than 0.", "error");
+                return false;
+            }
+            if (currentAvailability !== "" && parseInt(currentAvailability, 10) > parseInt(personLimit, 10)) {
+                showToast("Current availability cannot exceed capacity.", "error");
+                return false;
+            }
+
+            var payload = new FormData(formEl);
+            payload.set("room_name", String(roomName || "").trim());
+            payload.set("room_type", roomType);
+            payload.set("person_limit", String(personLimit || ""));
+            payload.set("price_per_night", String(pricePerNight || ""));
+            payload.set("availability_status", String(availabilityStatus || ""));
+            payload.set("current_availability", String(currentAvailability || ""));
+            payload.set("amenities", String(amenities || ""));
+
             $.ajax({
                 type: "POST",
                 url: "{% url 'accom_app:add_room_ajax' %}",
-                data: {
-                    csrfmiddlewaretoken: "{{ csrf_token }}",
-                    room_name: roomName,
-                    person_limit: personLimit,
-                    price_per_night: pricePerNight,
-                    amenities: amenities
-                },
+                data: payload,
+                processData: false,
+                contentType: false,
                 success: function(response) {
                     if(response.status === "success") {
                         var room = response.room || {};
@@ -717,9 +778,13 @@
                         }
                         addRoomModal.style.display = "none";
                         $("#roomName").val(""); // Clear input field
-                        $("#personLimit").val("0");
-                        $("#pricePerNight").val("0.00");
+                        $("#roomType").val("");
+                        $("#personLimit").val("1");
+                        $("#pricePerNight").val("");
+                        $("#addAvailabilityStatus").val("AVAILABLE");
+                        $("#addCurrentAvailability").val("");
                         $("#roomAmenities").val("");
+                        $("#addRoomImage").val("");
                         showToast("Room added successfully.", "success");
                     } else {
                         showToast("Error: " + response.message, "error");
@@ -752,11 +817,22 @@
                     }
                     $("#editRoomId").val(roomId);
                     $("#editRoomName").val(room.room_name || room.name || "");
+                    $("#editRoomType").val(room.room_type || room.room_name || room.name || "");
                     $("#editPersonLimit").val(room.person_limit || room.capacity || 0);
                     $("#editPricePerNight").val(room.price_per_night || "0.00");
                     $("#editAvailabilityStatus").val(String(room.availability_status || room.status || "AVAILABLE").toUpperCase());
                     $("#editCurrentAvailability").val(room.current_availability || room.availability || 0);
                     $("#editAmenities").val(Array.isArray(room.amenities) ? room.amenities.join(", ") : "");
+                    $("#removeRoomImage").prop("checked", false);
+                    $("#editRoomImage").val("");
+                    var roomImageUrl = String(room.room_image_url || "").trim();
+                    if (roomImageUrl) {
+                        $("#editRoomImagePreview").attr("src", roomImageUrl);
+                        $("#editRoomImagePreviewWrap").show();
+                    } else {
+                        $("#editRoomImagePreview").attr("src", "");
+                        $("#editRoomImagePreviewWrap").hide();
+                    }
                     editRoomModal.style.display = "block";
                 },
                 error: function(xhr, status, error) {
@@ -768,33 +844,55 @@
         // Submit edit room form
         $("#editRoomForm").submit(function(e) {
             e.preventDefault();
+            var formEl = document.getElementById("editRoomForm");
             var roomId = $("#editRoomId").val();
             var roomName = String($("#editRoomName").val() || "").trim();
+            var roomType = String($("#editRoomType").val() || "").trim();
             var capacity = $("#editPersonLimit").val();
             var price = $("#editPricePerNight").val();
             var status = $("#editAvailabilityStatus").val();
             var currentAvailability = $("#editCurrentAvailability").val();
             var amenities = $("#editAmenities").val();
+            var removeRoomImage = $("#removeRoomImage").is(":checked") ? "1" : "0";
 
             if (!roomName) {
                 showToast("Room name is required.", "error");
                 return false;
             }
+            if (!roomType) {
+                showToast("Room type is required.", "error");
+                return false;
+            }
+            if (parseInt(capacity || "0", 10) < 1) {
+                showToast("Capacity must be at least 1.", "error");
+                return false;
+            }
+            if (parseFloat(price || "0") <= 0) {
+                showToast("Price per night must be greater than 0.", "error");
+                return false;
+            }
+            if (parseInt(currentAvailability || "0", 10) > parseInt(capacity || "0", 10)) {
+                showToast("Current availability cannot exceed capacity.", "error");
+                return false;
+            }
+
+            var payload = new FormData(formEl);
+            payload.set("room_id", String(roomId || ""));
+            payload.set("room_name", roomName);
+            payload.set("room_type", roomType);
+            payload.set("person_limit", String(capacity || ""));
+            payload.set("price_per_night", String(price || ""));
+            payload.set("availability_status", String(status || ""));
+            payload.set("current_availability", String(currentAvailability || ""));
+            payload.set("amenities", String(amenities || ""));
+            payload.set("remove_room_image", removeRoomImage);
 
             $.ajax({
                 type: "POST",
                 url: "{% url 'accom_app:update_room_ajax' %}",
-                data: {
-                    csrfmiddlewaretoken: "{{ csrf_token }}",
-                    room_id: roomId,
-                    room_name: roomName,
-                    room_type: roomName,
-                    person_limit: capacity,
-                    price_per_night: price,
-                    availability_status: status,
-                    current_availability: currentAvailability,
-                    amenities: amenities
-                },
+                data: payload,
+                processData: false,
+                contentType: false,
                 success: function(updateResp) {
                     if (updateResp.status !== "success" || !updateResp.room) {
                         showToast("Error: " + (updateResp.message || "Unable to update room."), "error");
@@ -818,6 +916,16 @@
                     $row.find(".room-summary").text(updatedName);
                     $row.find(".room-range").text("1 - " + updatedCap + " guest" + (parseInt(updatedCap, 10) > 1 ? "s" : ""));
                     $row.find(".room-status").html("<span class='status-pill " + statusClass + "'>" + statusText + "</span>");
+                    $("#removeRoomImage").prop("checked", false);
+                    $("#editRoomImage").val("");
+                    var updatedRoomImage = String(updated.room_image_url || "").trim();
+                    if (updatedRoomImage) {
+                        $("#editRoomImagePreview").attr("src", updatedRoomImage);
+                        $("#editRoomImagePreviewWrap").show();
+                    } else {
+                        $("#editRoomImagePreview").attr("src", "");
+                        $("#editRoomImagePreviewWrap").hide();
+                    }
                     editRoomModal.style.display = "none";
                     showToast("Room updated successfully.", "success");
                 },

@@ -85,31 +85,35 @@ ROOM_STATUS_SET = {"AVAILABLE", "OCCUPIED", "UNAVAILABLE"}
 
 def _normalize_status(raw_status, *, default="AVAILABLE"):
     status_value = str(raw_status or "").strip().upper()
+    if not status_value:
+        return default
     if status_value in ROOM_STATUS_SET:
         return status_value
-    return default
+    raise ValueError("Room status must be AVAILABLE, OCCUPIED, or UNAVAILABLE.")
 
 
-def _parse_positive_int(raw_value, *, field_label):
+def _parse_positive_int(raw_value, *, field_label, minimum=0):
     try:
         value = int(str(raw_value).strip())
     except (TypeError, ValueError):
         raise ValueError(f"{field_label} must be a valid number.")
-    if value < 0:
-        raise ValueError(f"{field_label} cannot be negative.")
+    if value < minimum:
+        if minimum <= 0:
+            raise ValueError(f"{field_label} cannot be negative.")
+        raise ValueError(f"{field_label} must be at least {minimum}.")
     return value
 
 
 def _parse_price(raw_value):
     raw = str(raw_value if raw_value is not None else "").strip()
     if raw == "":
-        return Decimal("0.00")
+        raise ValueError("Price per night is required.")
     try:
         value = Decimal(raw)
     except (InvalidOperation, ValueError):
         raise ValueError("Price per night must be a valid amount.")
-    if value < 0:
-        raise ValueError("Price per night cannot be negative.")
+    if value <= 0:
+        raise ValueError("Price per night must be greater than 0.")
     return value
 
 
@@ -150,18 +154,20 @@ def _room_field_payload(request):
     status_raw = request.POST.get("availability_status", request.POST.get("status"))
     amenities_raw = request.POST.get("amenities")
 
-    if not room_name and room_type:
-        room_name = room_type
+    if not room_name:
+        raise ValueError("Room name is required.")
+    if not room_type:
+        raise ValueError("Room type is required.")
 
     person_limit_raw = request.POST.get("person_limit", request.POST.get("capacity", 0))
     price_raw = request.POST.get("price_per_night", request.POST.get("price", "0"))
     current_availability_raw = request.POST.get("current_availability")
 
-    person_limit = _parse_positive_int(person_limit_raw, field_label="Capacity")
+    person_limit = _parse_positive_int(person_limit_raw, field_label="Capacity", minimum=1)
     price_per_night = _parse_price(price_raw)
     status_value = _normalize_status(status_raw, default="AVAILABLE")
     amenities = _normalize_amenities(amenities_raw)
-    room_type_value = room_type or room_name
+    room_type_value = room_type
 
     if current_availability_raw in (None, ""):
         current_availability = person_limit
@@ -169,9 +175,10 @@ def _room_field_payload(request):
         current_availability = _parse_positive_int(
             current_availability_raw,
             field_label="Current availability",
+            minimum=0,
         )
         if current_availability > person_limit:
-            current_availability = person_limit
+            raise ValueError("Current availability cannot exceed room capacity.")
 
     return {
         "room_name": room_name,
@@ -182,6 +189,11 @@ def _room_field_payload(request):
         "amenities": amenities,
         "current_availability": current_availability,
     }
+
+
+def _resolve_uploaded_room_image(request):
+    room_image = request.FILES.get("room_image")
+    return room_image if room_image is not None else None
 
 
 def _set_room_details(room, *, room_type, amenities):
@@ -205,6 +217,14 @@ def _serialize_room(room):
         except Exception:
             amenities = []
 
+    room_image_url = ""
+    room_image = getattr(room, "room_image", None)
+    if room_image:
+        try:
+            room_image_url = str(room_image.url or "").strip()
+        except Exception:
+            room_image_url = ""
+
     return {
         "id": room.room_id,
         "room_id": room.room_id,
@@ -219,6 +239,7 @@ def _serialize_room(room):
         "availability": int(room.current_availability or 0),
         "current_availability": int(room.current_availability or 0),
         "amenities": amenities,
+        "room_image_url": room_image_url,
     }
 
 def other_estab_create(request):
@@ -507,6 +528,7 @@ def add_room_ajax(request):
             }, status=400)
 
         # Authoritative write path: admin_app.Room only.
+        room_image = _resolve_uploaded_room_image(request)
         new_room = AdminRoom.objects.create(
             accommodation=accom,
             room_name=payload["room_name"],
@@ -514,6 +536,7 @@ def add_room_ajax(request):
             current_availability=payload["current_availability"],
             price_per_night=payload["price_per_night"],
             status=payload["status"],
+            room_image=room_image,
         )
         _set_room_details(
             new_room,
@@ -599,6 +622,12 @@ def update_room_ajax(request):
             room.person_limit = payload["person_limit"]
             room.price_per_night = payload["price_per_night"]
             room.status = payload["status"]
+            remove_room_image = str(request.POST.get("remove_room_image") or "").strip().lower() in {"1", "true", "yes", "on"}
+            uploaded_room_image = _resolve_uploaded_room_image(request)
+            if remove_room_image:
+                room.room_image = None
+            if uploaded_room_image is not None:
+                room.room_image = uploaded_room_image
 
             desired_availability = min(payload["current_availability"], payload["person_limit"])
             room.current_availability = desired_availability
@@ -608,6 +637,7 @@ def update_room_ajax(request):
                 "price_per_night",
                 "status",
                 "current_availability",
+                "room_image",
                 "updated_at",
             ])
 
@@ -815,6 +845,8 @@ def owner_reports_analytics(request):
     today = timezone.localdate()
     month_raw = request.GET.get("month")
     year_raw = request.GET.get("year")
+    trend_window_raw = str(request.GET.get("trend_window", "6") or "6").strip()
+    trend_metric_raw = str(request.GET.get("trend_metric", "all") or "all").strip().lower()
     has_month_filter = str(month_raw or "").strip() != ""
     has_year_filter = str(year_raw or "").strip() != ""
 
@@ -848,6 +880,13 @@ def owner_reports_analytics(request):
     if selected_year < 2000 or selected_year > 2100:
         selected_year = default_year
 
+    allowed_trend_windows = {"6": 6, "12": 12, "24": 24}
+    selected_trend_window = trend_window_raw if trend_window_raw in allowed_trend_windows else "6"
+    trend_window_months = allowed_trend_windows[selected_trend_window]
+
+    allowed_trend_metrics = {"guests", "nights", "rooms", "all"}
+    selected_trend_metric = trend_metric_raw if trend_metric_raw in allowed_trend_metrics else "all"
+
     first_day = datetime.date(selected_year, selected_month, 1)
     _, last_day_num = calendar.monthrange(selected_year, selected_month)
     last_day = datetime.date(selected_year, selected_month, last_day_num)
@@ -872,7 +911,7 @@ def owner_reports_analytics(request):
     rooms_occupied = len(occupied_room_ids)
     occupancy_rate = (rooms_occupied / room_count * 100.0) if room_count > 0 else 0.0
 
-    # Last 6-month trend data.
+    # Trend data for selectable time window.
     def _shift_month(year_value, month_value, diff):
         absolute = (year_value * 12 + (month_value - 1)) + diff
         return absolute // 12, (absolute % 12) + 1
@@ -881,7 +920,7 @@ def owner_reports_analytics(request):
     trend_checkins = []
     trend_guest_nights = []
     trend_rooms_occupied = []
-    for offset in range(-5, 1):
+    for offset in range(-(trend_window_months - 1), 1):
         y, m = _shift_month(selected_year, selected_month, offset)
         month_cursor = datetime.date(y, m, 1)
         _, end_day_num = calendar.monthrange(y, m)
@@ -899,7 +938,14 @@ def owner_reports_analytics(request):
         trend_guest_nights.append(sum((b.nights() or 0) * (b.num_guests or 0) for b in month_list))
         trend_rooms_occupied.append(len({b.room_id for b in month_list if b.room_id}))
     trend_rows = list(zip(trend_labels, trend_checkins, trend_guest_nights, trend_rooms_occupied))
-    trend_max = max(trend_checkins + trend_guest_nights + trend_rooms_occupied + [1])
+    if selected_trend_metric == "guests":
+        trend_max = max(trend_checkins + [1])
+    elif selected_trend_metric == "nights":
+        trend_max = max(trend_guest_nights + [1])
+    elif selected_trend_metric == "rooms":
+        trend_max = max(trend_rooms_occupied + [1])
+    else:
+        trend_max = max(trend_checkins + trend_guest_nights + trend_rooms_occupied + [1])
 
     # Nationality breakdown (selected period).
     nationality_counts = {
@@ -974,6 +1020,8 @@ def owner_reports_analytics(request):
         "trend_rooms_occupied_json": json.dumps(trend_rooms_occupied),
         "trend_rows": trend_rows,
         "trend_max": trend_max,
+        "selected_trend_window": selected_trend_window,
+        "selected_trend_metric": selected_trend_metric,
         "nationality_labels_json": json.dumps(nationality_labels),
         "nationality_values_json": json.dumps(nationality_values),
         "nationality_rows": list(zip(nationality_labels, nationality_values, nationality_percentages)),

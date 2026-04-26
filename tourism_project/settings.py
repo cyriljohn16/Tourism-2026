@@ -209,6 +209,8 @@ AUTH_USER_MODEL = 'guest_app.Guest'  # Replace 'guest_app' with your app name
 # External payment/billing page used by chatbot booking responses.
 # Set in .env for production, e.g. TOURISM_OFFICE_BILLING_URL=https://billing.example.com/pay
 TOURISM_OFFICE_BILLING_URL = os.environ.get('TOURISM_OFFICE_BILLING_URL', '')
+# Treasurer Office billing handoff for tour package payments.
+TOURISM_TREASURER_BILLING_URL = os.environ.get('TOURISM_TREASURER_BILLING_URL', TOURISM_OFFICE_BILLING_URL)
 
 # Security keys
 RECAPTCHA_SECRET_KEY = os.environ.get('RECAPTCHA_SECRET_KEY', '')

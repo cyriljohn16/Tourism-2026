@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import pickle
 import logging
+import re
 from datetime import date, datetime
 from dataclasses import dataclass
 from decimal import Decimal
@@ -19,6 +20,7 @@ except ModuleNotFoundError:
     pd = None
 
 from admin_app.models import Accomodation, Room
+from admin_app.prototype_scope import allow_prototype_accommodations, prototype_accommodation_q
 from tour_app.models import Tour_Schedule
 
 _DECISION_TREE_MODEL_CACHE = None
@@ -43,6 +45,123 @@ _TOUR_PREFERENCE_ALIASES = {
     "family": ("family", "kids", "child", "children", "friendly"),
     "river": ("river", "riverside"),
 }
+
+_LOCATION_ALIAS_CANONICAL = {
+    "suba": "suba",
+    "barangay suba": "suba",
+    "suba barangay": "suba",
+    "brgy suba": "suba",
+    "poblacion": "poblacion",
+    "barangay poblacion": "poblacion",
+    "poblacion barangay": "poblacion",
+    "city proper": "poblacion",
+    "bayawan city proper": "poblacion",
+    "tinago": "tinago",
+    "ubos": "ubos",
+    "boyco": "boyco",
+    "villareal": "villareal",
+    "villarreal": "villareal",
+    "bayawan": "bayawan city",
+    "bayawan city": "bayawan city",
+}
+
+_LOCATION_GENERIC_TOKENS = {
+    "barangay", "brgy", "city", "bayawan", "negros", "oriental",
+    "street", "st", "road", "rd", "avenue", "ave", "highway",
+    "near", "around", "in", "sa", "proper", "downtown",
+}
+
+_ROOM_TYPE_KEYWORDS = (
+    "standard", "deluxe", "family", "double", "twin",
+    "suite", "queen", "king", "single", "matrimonial",
+    "villa", "executive", "business", "economy", "budget",
+    "premium",
+)
+
+
+def _parse_approved_accommodation_ids() -> list[int]:
+    configured = os.getenv(
+        "TOURISM_APPROVED_ACCOMMODATION_IDS",
+        getattr(settings, "TOURISM_APPROVED_ACCOMMODATION_IDS", ""),
+    )
+    if isinstance(configured, (list, tuple, set)):
+        parsed = []
+        for value in configured:
+            try:
+                parsed.append(int(value))
+            except Exception:
+                continue
+        return sorted({v for v in parsed if v > 0})
+    raw = str(configured or "").strip()
+    if not raw:
+        return []
+    parsed = []
+    for token in raw.split(","):
+        compact = str(token or "").strip()
+        if not compact:
+            continue
+        try:
+            parsed.append(int(compact))
+        except Exception:
+            continue
+    return sorted({v for v in parsed if v > 0})
+
+
+def _parse_approved_accommodation_names() -> list[str]:
+    configured = os.getenv(
+        "TOURISM_APPROVED_ACCOMMODATION_NAMES",
+        getattr(settings, "TOURISM_APPROVED_ACCOMMODATION_NAMES", ""),
+    )
+    if isinstance(configured, (list, tuple, set)):
+        names = []
+        for value in configured:
+            compact = " ".join(str(value or "").strip().lower().split())
+            if compact:
+                names.append(compact)
+        return sorted(set(names))
+    raw = str(configured or "").strip()
+    if not raw:
+        return []
+    names = []
+    for token in raw.split(","):
+        compact = " ".join(str(token or "").strip().lower().split())
+        if compact:
+            names.append(compact)
+    return sorted(set(names))
+
+
+def apply_approved_accommodation_scope(qs, *, accommodation_path: str = "accommodation"):
+    """
+    Enforce Tourism Office-approved accommodation visibility for guest-facing flows.
+    Base scope always requires accepted + active accommodations.
+    Optional strict allowlist can be configured through:
+    - TOURISM_APPROVED_ACCOMMODATION_IDS (comma-separated integer IDs)
+    - TOURISM_APPROVED_ACCOMMODATION_NAMES (comma-separated company names)
+    """
+    if qs is None:
+        return qs
+    if accommodation_path is None:
+        prefix = "accommodation"
+    else:
+        prefix = str(accommodation_path).strip()
+    if prefix:
+        prefix = f"{prefix}__"
+    scoped = (
+        qs.filter(**{f"{prefix}approval_status": "accepted"})
+        .filter(**{f"{prefix}is_active": True})
+    )
+    if not allow_prototype_accommodations():
+        scoped = scoped.exclude(prototype_accommodation_q(accommodation_path=accommodation_path))
+    approved_ids = _parse_approved_accommodation_ids()
+    approved_names = _parse_approved_accommodation_names()
+    if approved_ids:
+        scoped = scoped.filter(**{f"{prefix}accom_id__in": approved_ids})
+    if approved_names:
+        name_q = Q()
+        for company_name in approved_names:
+            name_q |= Q(**{f"{prefix}company_name__iexact": company_name})
+        scoped = scoped.filter(name_q)
+    return scoped
 
 
 @dataclass
@@ -69,6 +188,164 @@ def _to_decimal(value, default=Decimal("0")):
         return Decimal(str(value))
     except Exception:
         return default
+
+
+def _safe_media_url(file_field):
+    if not file_field:
+        return ""
+    try:
+        return str(file_field.url or "").strip()
+    except Exception:
+        return ""
+
+
+def _normalize_location_phrase(value: str) -> str:
+    text = str(value or "").strip().lower()
+    if not text:
+        return ""
+    text = re.sub(r"[^a-z0-9\s]", " ", text)
+    text = " ".join(text.split())
+    if not text:
+        return ""
+    if text.startswith("barangay "):
+        text = text.replace("barangay ", "", 1).strip()
+    elif text.startswith("brgy "):
+        text = text.replace("brgy ", "", 1).strip()
+    if text.endswith(" barangay"):
+        text = text[: -len(" barangay")].strip()
+    elif text.endswith(" brgy"):
+        text = text[: -len(" brgy")].strip()
+    return _LOCATION_ALIAS_CANONICAL.get(text, text)
+
+
+def _expand_location_aliases(raw_location: str) -> list[str]:
+    normalized = _normalize_location_phrase(raw_location)
+    if not normalized:
+        return []
+    aliases = {normalized}
+    for alias, canonical in _LOCATION_ALIAS_CANONICAL.items():
+        if canonical == normalized:
+            aliases.add(alias)
+        if alias and alias in normalized:
+            aliases.add(alias)
+            aliases.add(canonical)
+    if normalized == "bayawan city":
+        aliases.update({"bayawan", "city proper"})
+    # Address-aware token expansion:
+    # convert long user-entered addresses into stable searchable terms
+    # (e.g., "J.P. Rizal St., Barangay Suba, Bayawan City").
+    stop_tokens = {
+        "barangay", "brgy", "city", "bayawan", "negros", "oriental",
+        "st", "street", "rd", "road", "avenue", "ave", "near",
+    }
+    tokens = [token for token in normalized.split() if token]
+    for token in tokens:
+        if len(token) >= 4 and token not in stop_tokens:
+            aliases.add(token)
+    if "j p rizal" in normalized:
+        aliases.update({"j p rizal", "rizal"})
+    if "r t diao" in normalized:
+        aliases.update({"r t diao", "diao"})
+    if "mabini" in normalized:
+        aliases.add("mabini")
+    if "national highway" in normalized:
+        aliases.update({"national highway", "highway"})
+    if "villareal" in normalized or "villarreal" in normalized:
+        aliases.update({"villareal", "villarreal"})
+    return sorted({a for a in aliases if a})
+
+
+def _location_specific_tokens(value: str) -> set[str]:
+    normalized = _normalize_location_phrase(value)
+    if not normalized:
+        return set()
+    tokens = set()
+    for token in normalized.split():
+        cleaned = "".join(ch for ch in token if ch.isalnum())
+        if not cleaned:
+            continue
+        if cleaned in _LOCATION_GENERIC_TOKENS:
+            continue
+        if len(cleaned) < 3:
+            continue
+        tokens.add(cleaned)
+    return tokens
+
+
+def _location_specificity_score(requested_location: str, accom_location: str) -> float:
+    req_tokens = _location_specific_tokens(requested_location)
+    if not req_tokens:
+        return 0.0
+    accom_tokens = _location_specific_tokens(accom_location)
+    if not accom_tokens:
+        return 0.0
+    overlap = req_tokens.intersection(accom_tokens)
+    return max(0.0, min(1.0, float(len(overlap) / max(1, len(req_tokens)))))
+
+
+def _has_exact_location_landmark_match(requested_location: str, accom_location: str) -> bool:
+    """
+    Detect stronger street/landmark agreement (e.g. "Peping Gamo", "J.P. Rizal", "Mabini").
+    This is intentionally stricter than generic location matching to keep
+    exact-place intent ahead of cheaper-but-wrong-location options.
+    """
+    req_tokens = _location_specific_tokens(requested_location)
+    accom_tokens = _location_specific_tokens(accom_location)
+    if not req_tokens or not accom_tokens:
+        return False
+    overlap = req_tokens.intersection(accom_tokens)
+    # Require at least one specific token and good overlap ratio.
+    return bool(overlap) and (len(overlap) / max(1, len(req_tokens))) >= 0.66
+
+
+def _extract_requested_room_type_tokens(params: dict) -> list[str]:
+    if not isinstance(params, dict):
+        return []
+    pieces = [
+        str(params.get("room_type") or "").strip().lower(),
+        str(params.get("room_name") or "").strip().lower(),
+        str(params.get("room_reference") or "").strip().lower(),
+        str(params.get("selected_room_name") or "").strip().lower(),
+    ]
+    merged = " ".join(piece for piece in pieces if piece)
+    if not merged:
+        return []
+    hits = []
+    for keyword in _ROOM_TYPE_KEYWORDS:
+        if re.search(rf"\b{re.escape(keyword)}\b", merged):
+            hits.append(keyword)
+    deduped = []
+    seen = set()
+    for token in hits:
+        if token in seen:
+            continue
+        seen.add(token)
+        deduped.append(token)
+    return deduped
+
+
+def _room_type_match_ratio(room_name: str, requested_tokens: list[str]) -> float:
+    if not requested_tokens:
+        return 1.0
+    normalized_room_name = str(room_name or "").strip().lower()
+    if not normalized_room_name:
+        return 0.0
+    matched = [token for token in requested_tokens if token in normalized_room_name]
+    return max(0.0, min(1.0, float(len(matched) / max(1, len(requested_tokens)))))
+
+
+def _location_matches_requested(requested_location: str, accom_location: str) -> bool:
+    accom_norm = _normalize_location_phrase(accom_location)
+    if not accom_norm:
+        return False
+    aliases = _expand_location_aliases(requested_location)
+    generic_aliases = {"bayawan", "bayawan city", "city proper"}
+    specific_aliases = [alias for alias in aliases if alias not in generic_aliases]
+    probe_aliases = specific_aliases if specific_aliases else aliases
+    for alias in probe_aliases:
+        if alias and (alias in accom_norm or accom_norm in alias):
+            return True
+    return False
 
 
 def _normalize(value: float, min_value: float, max_value: float) -> float:
@@ -417,6 +694,7 @@ def _surrogate_decision_tree_score(
     cnn_confidence: float,
 ) -> float:
     requested_budget = _to_decimal(params.get("budget"), default=Decimal("0"))
+    requested_budget_min = _to_decimal(params.get("budget_min"), default=Decimal("0"))
     requested_guests = _to_int(params.get("guests"), default=1)
     requested_location = str(params.get("location") or "").strip().lower()
     requested_type = str(
@@ -428,37 +706,87 @@ def _surrogate_decision_tree_score(
     room_capacity = _to_int(getattr(room, "person_limit", 0), default=0)
     room_location = str(getattr(room.accommodation, "location", "") or "").strip().lower()
     company_type = str(getattr(room.accommodation, "company_type", "") or "").strip().lower()
+    prefer_low_price = bool(params.get("prefer_low_price"))
+    room_type_tokens = _extract_requested_room_type_tokens(params)
 
-    score = 0.10
-    if requested_budget > 0:
-        if room_price <= requested_budget:
-            score += 0.32
+    score = 0.08
+
+    # 1) Exact accommodation type match (highest priority)
+    if requested_type and requested_type != "either":
+        if requested_type == company_type:
+            score += 0.42
+        elif requested_type in company_type:
+            score += 0.30
         else:
-            score -= 0.25
+            score -= 0.28
     else:
-        score += 0.08
+        score += 0.05
 
+    # 2) Budget closeness (second priority)
+    if requested_budget > 0 or requested_budget_min > 0:
+        budget_floor = requested_budget_min if requested_budget_min > 0 else Decimal("0")
+        budget_ceiling = requested_budget if requested_budget > 0 else Decimal("0")
+        in_range = True
+        if budget_floor > 0 and room_price < budget_floor:
+            in_range = False
+        if budget_ceiling > 0 and room_price > budget_ceiling:
+            in_range = False
+
+        if in_range:
+            # Cap-only intent:
+            # - prioritize lower within-cap prices when explicitly budget-conscious
+            # - otherwise still prefer lower prices, but with softer spread
+            if budget_floor <= 0 and budget_ceiling > 0 and prefer_low_price:
+                closeness = max(
+                    0.0,
+                    min(1.0, float((budget_ceiling - room_price) / budget_ceiling)),
+                )
+            elif budget_floor <= 0 and budget_ceiling > 0:
+                low_price_advantage = max(
+                    0.0,
+                    min(1.0, float((budget_ceiling - room_price) / budget_ceiling)),
+                )
+                closeness = 0.5 + (0.5 * low_price_advantage)
+            else:
+                target = (
+                    (budget_floor + budget_ceiling) / Decimal("2")
+                    if budget_floor > 0 and budget_ceiling > 0
+                    else (budget_ceiling if budget_ceiling > 0 else budget_floor)
+                )
+                if target > 0:
+                    ratio = float(abs(room_price - target) / target)
+                    closeness = max(0.0, min(1.0, 1.0 - ratio))
+                else:
+                    closeness = 1.0
+            score += 0.30 * closeness
+        else:
+            score -= 0.20
+    else:
+        score += 0.06
+
+    # 3) Location match (third priority)
     if requested_location:
         if requested_location in room_location:
-            score += 0.24
-        else:
-            score -= 0.16
-    else:
-        score += 0.05
-
-    if requested_type and requested_type != "either":
-        if requested_type in company_type:
             score += 0.16
         else:
-            score -= 0.12
+            score -= 0.14
+        score += 0.12 * _location_specificity_score(requested_location, room_location)
     else:
         score += 0.05
 
+    # 4) Capacity fit (fourth priority)
     if requested_guests > 0 and room_capacity > 0:
         if requested_guests <= room_capacity:
-            score += 0.18
+            fit_ratio = min(1.0, float(requested_guests / max(1, room_capacity)))
+            score += 0.10 * fit_ratio
         else:
             score -= 0.30
+
+    if room_type_tokens:
+        type_ratio = _room_type_match_ratio(getattr(room, "room_name", ""), room_type_tokens)
+        score += 0.12 * type_ratio
+        if type_ratio <= 0:
+            score -= 0.12
 
     if shown_rank <= 3:
         score += 0.06
@@ -611,7 +939,13 @@ def _normalize_amenity_tokens(value) -> List[str]:
     if value is None:
         return []
     if isinstance(value, (list, tuple, set)):
-        raw = " ".join(str(item) for item in value)
+        tokens = []
+        for item in value:
+            for token in str(item).replace(";", ",").split(","):
+                cleaned = token.strip().lower()
+                if cleaned:
+                    tokens.append(cleaned)
+        return tokens
     else:
         raw = str(value)
     return [token.strip().lower() for token in raw.replace(";", ",").split(",") if token.strip()]
@@ -647,64 +981,143 @@ def build_accommodation_recommendation_trace(room: Room, params: dict) -> dict:
     """
     guests = _to_int(params.get("guests"), default=1)
     budget = _to_decimal(params.get("budget"), default=Decimal("0"))
+    budget_min = _to_decimal(params.get("budget_min"), default=Decimal("0"))
     location = str(params.get("location") or "").strip()
     location_anchor = str(params.get("location_anchor") or "").strip()
     company_type = str(params.get("company_type") or "").strip().lower()
+    room_type_tokens = _extract_requested_room_type_tokens(params)
 
     accom = room.accommodation
     price = Decimal(str(room.price_per_night or 0))
     reasons: List[str] = []
     score = 0.0
 
-    if budget > 0:
-        if price <= budget:
-            reasons.append(f"Within your budget (PHP {price:.2f} <= PHP {budget:.2f})")
-            score += 0.35
-        else:
-            reasons.append(f"Above your budget (PHP {price:.2f} > PHP {budget:.2f})")
-            score -= 0.45
-    else:
-        reasons.append("No budget limit provided")
-        score += 0.10
-
-    location_match = True
-    if location_anchor:
-        reasons.append(f"Map anchor considered: {location_anchor} (city-proper coverage)")
-        score += 0.05
-    if location:
-        if location.lower() in str(accom.location or "").lower():
-            reasons.append(f"Location match: {accom.location}")
-            score += 0.30
-        else:
-            location_match = False
-            reasons.append(f"Outside preferred location: {accom.location}")
-            score -= 0.25
-    else:
-        reasons.append(f"Located in: {accom.location}")
-        score += 0.05
-
+    # 1) Exact accommodation type match (highest ranking priority)
     type_match = True
-    if company_type:
-        if company_type in str(accom.company_type or "").lower():
-            reasons.append(f"{company_type.title()} type match")
-            score += 0.20
+    if company_type and company_type != "either":
+        accom_type = str(accom.company_type or "").strip().lower()
+        if company_type == accom_type:
+            reasons.append(f"Exact {company_type.title()} type match")
+            score += 0.40
+        elif company_type in accom_type:
+            reasons.append(f"{company_type.title()} type partial match")
+            score += 0.28
         else:
             type_match = False
             reasons.append(f"Different type: {accom.company_type}")
-            score -= 0.20
+            score -= 0.26
     else:
         reasons.append(f"Type: {accom.company_type}")
         score += 0.05
 
+    # 2) Budget closeness (second ranking priority)
+    if budget > 0 or budget_min > 0:
+        budget_floor = budget_min if budget_min > 0 else Decimal("0")
+        budget_ceiling = budget if budget > 0 else Decimal("0")
+        in_budget_range = True
+        if budget_floor > 0 and price < budget_floor:
+            in_budget_range = False
+        if budget_ceiling > 0 and price > budget_ceiling:
+            in_budget_range = False
+
+        if in_budget_range:
+            if budget_floor <= 0 and budget_ceiling > 0 and bool(params.get("prefer_low_price")):
+                # Explicit budget-conscious intent: lower within-cap prices are preferred.
+                closeness = max(
+                    0.0,
+                    min(1.0, float((budget_ceiling - price) / budget_ceiling)),
+                )
+            elif budget_floor <= 0 and budget_ceiling > 0:
+                # General cap intent: still prefer lower valid prices, but avoid extreme dominance.
+                low_price_advantage = max(
+                    0.0,
+                    min(1.0, float((budget_ceiling - price) / budget_ceiling)),
+                )
+                closeness = 0.5 + (0.5 * low_price_advantage)
+            else:
+                target = (
+                    (budget_floor + budget_ceiling) / Decimal("2")
+                    if budget_floor > 0 and budget_ceiling > 0
+                    else (budget_ceiling if budget_ceiling > 0 else budget_floor)
+                )
+                closeness = 1.0
+                if target > 0:
+                    closeness = max(0.0, min(1.0, 1.0 - float(abs(price - target) / target)))
+            if budget_floor > 0 and budget_ceiling > 0:
+                reasons.append(
+                    f"Budget range fit (PHP {budget_floor:.2f}-{budget_ceiling:.2f}); closeness {closeness:.2f}"
+                )
+            elif budget_ceiling > 0:
+                reasons.append(f"Within budget cap (PHP {price:.2f} <= PHP {budget_ceiling:.2f}); closeness {closeness:.2f}")
+            else:
+                reasons.append(f"Meets minimum budget floor (PHP {price:.2f} >= PHP {budget_floor:.2f}); closeness {closeness:.2f}")
+            score += 0.30 * closeness
+        else:
+            if budget_floor > 0 and price < budget_floor:
+                reasons.append(f"Below preferred minimum budget (PHP {price:.2f} < PHP {budget_floor:.2f})")
+            elif budget_ceiling > 0 and price > budget_ceiling:
+                reasons.append(f"Above budget cap (PHP {price:.2f} > PHP {budget_ceiling:.2f})")
+            score -= 0.20
+    else:
+        reasons.append("No budget limit provided")
+        score += 0.06
+
+    location_match = True
+    # 3) Location match (third ranking priority)
+    if location_anchor:
+        reasons.append(f"Map anchor considered: {location_anchor} (city-proper coverage)")
+        score += 0.05
+    if location:
+        specificity = _location_specificity_score(location, str(accom.location or ""))
+        exact_landmark_match = _has_exact_location_landmark_match(location, str(accom.location or ""))
+        if _location_matches_requested(location, str(accom.location or "")):
+            reasons.append(f"Location match: {accom.location}")
+            score += 0.18
+            if exact_landmark_match:
+                reasons.append("Exact street/landmark alignment")
+                score += 0.16
+            if specificity > 0:
+                reasons.append(f"Specific location overlap {specificity:.2f}")
+                score += 0.16 * specificity
+            elif not exact_landmark_match:
+                score -= 0.04
+        else:
+            location_match = False
+            reasons.append(f"Outside preferred location: {accom.location}")
+            score -= 0.15
+        if specificity < 0.34 and not exact_landmark_match:
+            score -= 0.08
+    else:
+        reasons.append(f"Located in: {accom.location}")
+        score += 0.05
+
+    # 4) Capacity fit (fourth ranking priority)
     guest_fit = True
     if room.person_limit and guests > 0:
         if guests <= room.person_limit:
-            reasons.append(f"Fits your guest count ({guests}/{room.person_limit} pax)")
-            score += 0.15
+            fit_ratio = min(1.0, float(guests / max(1, room.person_limit)))
+            reasons.append(
+                f"Capacity fit ({guests}/{room.person_limit} pax); closeness {fit_ratio:.2f}"
+            )
+            score += 0.10 * fit_ratio
         else:
             reasons.append(f"Capacity limit ({room.person_limit} pax)")
             guest_fit = False
             score -= 0.40
+
+    room_type_match_ratio = _room_type_match_ratio(room.room_name, room_type_tokens)
+    if room_type_tokens:
+        if room_type_match_ratio >= 1.0:
+            reasons.append(f"Room type match: {', '.join(room_type_tokens)}")
+            score += 0.22
+        elif room_type_match_ratio > 0:
+            reasons.append(
+                f"Partial room type match ({room_type_match_ratio:.2f}) for {', '.join(room_type_tokens)}"
+            )
+            score += 0.10
+        else:
+            reasons.append(f"Room type mismatch for requested: {', '.join(room_type_tokens)}")
+            score -= 0.18
 
     requested_amenities = _normalize_amenity_tokens(
         params.get("amenities") or params.get("amenity")
@@ -720,18 +1133,20 @@ def build_accommodation_recommendation_trace(room: Room, params: dict) -> dict:
                 str(accom.company_name or ""),
                 str(accom.location or ""),
                 str(accom.company_type or ""),
+                str(getattr(accom, "description", "") or ""),
+                str(getattr(accom, "accommodation_amenities", "") or ""),
             ]
         ).lower()
         matched = [token for token in normalized_requested if token in searchable_text]
         amenity_match_ratio = (len(matched) / len(normalized_requested)) if normalized_requested else 0.0
         if amenity_match_ratio >= 1.0:
             reasons.append(f"Amenity match: {', '.join(matched)}")
-            score += 0.20
+            score += 0.35
         elif amenity_match_ratio > 0:
             reasons.append(
                 f"Partial amenity match ({len(matched)}/{len(normalized_requested)}): {', '.join(matched)}"
             )
-            score += 0.08
+            score += 0.18
         else:
             reasons.append("No amenity keyword match found in available details")
             score -= 0.15
@@ -816,6 +1231,13 @@ def build_accommodation_recommendation_trace(room: Room, params: dict) -> dict:
         "location_match": location_match,
         "type_match": type_match,
         "guest_fit": guest_fit,
+        "exact_location_landmark_match": bool(
+            _has_exact_location_landmark_match(location, str(accom.location or ""))
+        ) if location else False,
+        "location_specificity": round(float(_location_specificity_score(location, str(accom.location or ""))), 3)
+        if location
+        else 0.0,
+        "room_type_match_ratio": round(float(room_type_match_ratio), 3),
         "amenity_match_ratio": round(float(amenity_match_ratio), 3),
         "preference_match_ratio": round(float(preference_match_ratio), 3),
     }
@@ -924,6 +1346,7 @@ def _build_accommodation_room_queryset(
 ):
     guests = _to_int(params.get("guests"), default=1)
     budget = _to_decimal(params.get("budget"), default=Decimal("0"))
+    budget_min = _to_decimal(params.get("budget_min"), default=Decimal("0"))
     location = str(params.get("location") or "").strip().lower()
     company_type = str(params.get("company_type") or "").strip().lower()
 
@@ -931,14 +1354,13 @@ def _build_accommodation_room_queryset(
         Room.objects.select_related("accommodation")
         .filter(status="AVAILABLE")
         .filter(current_availability__gte=1)
-        .filter(accommodation__approval_status="accepted")
-        .filter(accommodation__is_active=True)
         .filter(accommodation__owner__isnull=False)
         .filter(accommodation__owner__is_active=True)
         .filter(accommodation__owner__groups__name__iexact="accommodation_owner")
         .exclude(accommodation__owner__groups__name__iexact="accommodation_owner_pending")
         .exclude(accommodation__owner__groups__name__iexact="accommodation_owner_declined")
     )
+    room_qs = apply_approved_accommodation_scope(room_qs, accommodation_path="accommodation")
 
     for keyword in _owner_exclusion_keywords():
         room_qs = room_qs.exclude(accommodation__owner__email__icontains=keyword)
@@ -951,30 +1373,46 @@ def _build_accommodation_room_queryset(
         if apply_company_type:
             if company_type == "either":
                 room_qs = room_qs.filter(
-                    Q(accommodation__company_type__icontains="hotel") |
-                    Q(accommodation__company_type__icontains="inn")
+                    Q(accommodation__company_type__iexact="hotel") |
+                    Q(accommodation__company_type__iexact="inn")
                 )
+            elif company_type in {"hotel", "inn"}:
+                # Strict type filter: only exact Hotel/Inn matches are allowed.
+                room_qs = room_qs.filter(accommodation__company_type__iexact=company_type)
             else:
                 room_qs = room_qs.filter(accommodation__company_type__icontains=company_type)
     else:
         room_qs = room_qs.filter(
-            Q(accommodation__company_type__icontains="hotel") |
-            Q(accommodation__company_type__icontains="inn")
+            Q(accommodation__company_type__iexact="hotel") |
+            Q(accommodation__company_type__iexact="inn")
         )
 
     if apply_location and location:
-        room_qs = room_qs.filter(accommodation__location__icontains=location)
+        aliases = _expand_location_aliases(location)
+        generic_aliases = {"bayawan", "bayawan city", "city proper"}
+        specific_aliases = [alias for alias in aliases if alias not in generic_aliases]
+        probe_aliases = specific_aliases if specific_aliases else aliases
+        if probe_aliases:
+            location_filter = Q()
+            for alias in probe_aliases:
+                location_filter |= Q(accommodation__location__icontains=alias)
+            room_qs = room_qs.filter(location_filter)
+        else:
+            room_qs = room_qs.filter(accommodation__location__icontains=location)
 
-    # If the user explicitly provides a budget, apply a strict DB-level filter so
-    # over-budget rooms are not returned in the recommendation list.
+    # Budget guard:
+    # strict passes enforce a hard budget cap; controlled soft recovery handles
+    # no-match scenarios separately in the fallback phase.
     if apply_budget and budget > 0:
-        room_qs = room_qs.filter(price_per_night__lte=budget)
+        room_qs = room_qs.filter(price_per_night__lte=Decimal(budget))
+    if apply_budget and budget_min > 0:
+        room_qs = room_qs.filter(price_per_night__gte=budget_min)
 
     return room_qs.distinct(), guests
 
 
 def _build_accommodation_results(room_qs, *, guests: int, params: dict) -> List[RecommendationResult]:
-    results = []
+    best_by_accom: dict[int, RecommendationResult] = {}
     predicted_type = str(params.get("predicted_accommodation_type") or "").strip().lower()
     cnn_confidence = float(max(0.0, min(1.0, float(params.get("predicted_accommodation_confidence") or 0.0))))
 
@@ -1002,7 +1440,7 @@ def _build_accommodation_results(room_qs, *, guests: int, params: dict) -> List[
             score = max(0.0, min(1.0, base_score + cnn_alignment))
             scoring_mode = "hybrid_fallback_heuristic"
         else:
-            score = max(0.0, min(1.0, (0.55 * float(dt_score)) + (0.35 * base_score) + (0.10 * cnn_alignment)))
+            score = max(0.0, min(1.0, (0.35 * float(dt_score)) + (0.60 * base_score) + (0.05 * cnn_alignment)))
             scoring_mode = (
                 "hybrid_textcnn_decisiontree"
                 if str(dt_source).startswith("model")
@@ -1016,44 +1454,81 @@ def _build_accommodation_results(room_qs, *, guests: int, params: dict) -> List[
         trace["cnn_confidence"] = round(float(cnn_confidence), 4)
         trace["cnn_type_match"] = bool(cnn_type_match)
         trace["scoring_mode"] = scoring_mode
-        results.append(
-            RecommendationResult(
-                title=f"{accom.company_name} - {room.room_name}",
-                subtitle=f"{accom.location} | PHP {room.price_per_night} per night | {room.person_limit} pax",
-                score=score,
-                meta={
-                    "room_id": room.room_id,
-                    "accom_id": accom.accom_id,
-                    "trace": trace,
-                    "decision_tree_score": None if dt_score is None else round(float(dt_score), 6),
-                    "decision_tree_source": dt_source,
-                    "cnn_alignment": round(float(cnn_alignment), 6),
-                    "scoring_mode": scoring_mode,
-                },
-            )
+        candidate = RecommendationResult(
+            title=f"{accom.company_name} - {room.room_name}",
+            subtitle=f"{accom.location} | PHP {room.price_per_night} per night | {room.person_limit} pax",
+            score=score,
+            meta={
+                "room_id": room.room_id,
+                "accom_id": accom.accom_id,
+                "company_name": str(getattr(accom, "company_name", "") or "").strip(),
+                "room_name": str(getattr(room, "room_name", "") or "").strip(),
+                "location": str(getattr(accom, "location", "") or "").strip(),
+                "description": str(getattr(accom, "description", "") or "").strip(),
+                "price_per_night": str(getattr(room, "price_per_night", "") or "").strip(),
+                "person_limit": _to_int(getattr(room, "person_limit", 0), default=0),
+                "phone_number": str(getattr(accom, "phone_number", "") or "").strip(),
+                "email_address": str(getattr(accom, "email_address", "") or "").strip(),
+                "official_booking_url": str(getattr(accom, "official_booking_url", "") or "").strip(),
+                "official_contact_url": str(getattr(accom, "official_contact_url", "") or "").strip(),
+                "profile_image_url": _safe_media_url(getattr(accom, "profile_picture", None)),
+                "trace": trace,
+                "decision_tree_score": None if dt_score is None else round(float(dt_score), 6),
+                "decision_tree_source": dt_source,
+                "cnn_alignment": round(float(cnn_alignment), 6),
+                "scoring_mode": scoring_mode,
+            },
         )
+        accom_id = _to_int(getattr(accom, "accom_id", 0), default=0)
+        existing = best_by_accom.get(accom_id)
+        if existing is None:
+            best_by_accom[accom_id] = candidate
+            continue
+        candidate_price = _to_decimal(candidate.meta.get("price_per_night"), default=Decimal("0"))
+        existing_price = _to_decimal(existing.meta.get("price_per_night"), default=Decimal("0"))
+        if candidate.score > existing.score + 1e-9:
+            best_by_accom[accom_id] = candidate
+        elif abs(candidate.score - existing.score) <= 1e-9 and candidate_price < existing_price:
+            best_by_accom[accom_id] = candidate
 
-    results.sort(key=lambda item: item.score, reverse=True)
+    results = list(best_by_accom.values())
+    results.sort(
+        key=lambda item: (
+            -item.score,
+            -int(bool(((item.meta or {}).get("trace") or {}).get("exact_location_landmark_match"))),
+            -float(((item.meta or {}).get("trace") or {}).get("location_specificity") or 0.0),
+            -float(((item.meta or {}).get("trace") or {}).get("room_type_match_ratio") or 0.0),
+            -float(((item.meta or {}).get("trace") or {}).get("amenity_match_ratio") or 0.0),
+            -int(bool(((item.meta or {}).get("trace") or {}).get("location_match"))),
+            -int(bool(((item.meta or {}).get("trace") or {}).get("guest_fit"))),
+            _to_decimal((item.meta or {}).get("price_per_night"), default=Decimal("0")),
+            str((item.meta or {}).get("company_name") or "").lower(),
+        )
+    )
     return results
 
 
 def recommend_accommodations_with_diagnostics(params: dict, limit: int = 3):
     diagnostics = {
         "fallback_applied": "none",
+        "fallback_reason": "",
+        "fallback_reason_codes": [],
         "no_match_reasons": [],
         "suggested_budget_min": None,
     }
 
     broaden_location = _to_bool(params.get("broaden_location"), default=False)
     broaden_type = _to_bool(params.get("broaden_company_type"), default=False)
+    enable_soft_recovery = _to_bool(params.get("enable_soft_recovery"), default=True)
 
-    passes = [("strict", True, True)]
+    # Pass tuple: (name, apply_location, apply_company_type, apply_budget)
+    passes = [("strict", True, True, True)]
     if broaden_location:
-        passes.append(("relaxed_location", False, True))
+        passes.append(("relaxed_location", False, True, True))
     if broaden_type:
-        passes.append(("relaxed_type", True, False))
+        passes.append(("relaxed_type", True, False, True))
     if broaden_location and broaden_type:
-        passes.append(("relaxed_location_and_type", False, False))
+        passes.append(("relaxed_location_and_type", False, False, True))
 
     seen_passes = set()
     final_results: List[RecommendationResult] = []
@@ -1064,12 +1539,12 @@ def recommend_accommodations_with_diagnostics(params: dict, limit: int = 3):
         "relaxed_location_and_type": 0.20,
     }
 
-    for pass_name, apply_location, apply_company_type in passes:
+    for pass_name, apply_location, apply_company_type, apply_budget in passes:
         room_qs, guests = _build_accommodation_room_queryset(
             params,
             apply_location=apply_location,
             apply_company_type=apply_company_type,
-            apply_budget=True,
+            apply_budget=apply_budget,
         )
         results = _build_accommodation_results(room_qs, guests=guests, params=params)
         if results:
@@ -1079,7 +1554,89 @@ def recommend_accommodations_with_diagnostics(params: dict, limit: int = 3):
                 diagnostics["fallback_applied"] = pass_name
                 final_results = results[:limit]
                 break
-        seen_passes.add((apply_location, apply_company_type))
+        seen_passes.add((apply_location, apply_company_type, apply_budget))
+
+    # Strict-then-soft recovery:
+    # If strict (and optional explicit broaden passes) fails, run controlled relaxations
+    # to recover servable recommendations without changing metric formulas.
+    if not final_results and enable_soft_recovery:
+        soft_recovery_passes = [
+            (
+                "soft_budget_recovery",
+                True,
+                True,
+                False,
+                ["budget_relaxed_after_strict_no_match"],
+            ),
+            (
+                "soft_type_recovery",
+                True,
+                False,
+                True,
+                ["type_relaxed_after_strict_no_match"],
+            ),
+            (
+                "soft_location_recovery",
+                False,
+                True,
+                True,
+                ["location_relaxed_after_strict_no_match"],
+            ),
+            (
+                "soft_budget_type_recovery",
+                True,
+                False,
+                False,
+                ["budget_relaxed_after_strict_no_match", "type_relaxed_after_strict_no_match"],
+            ),
+            (
+                "soft_budget_location_recovery",
+                False,
+                True,
+                False,
+                ["budget_relaxed_after_strict_no_match", "location_relaxed_after_strict_no_match"],
+            ),
+        ]
+        min_score_by_soft_pass = {
+            "soft_budget_recovery": 0.14,
+            "soft_type_recovery": 0.14,
+            "soft_location_recovery": 0.14,
+            "soft_budget_type_recovery": 0.16,
+            "soft_budget_location_recovery": 0.16,
+        }
+
+        for (
+            pass_name,
+            apply_location,
+            apply_company_type,
+            apply_budget,
+            reason_codes,
+        ) in soft_recovery_passes:
+            pass_key = (apply_location, apply_company_type, apply_budget)
+            if pass_key in seen_passes:
+                continue
+
+            room_qs, guests = _build_accommodation_room_queryset(
+                params,
+                apply_location=apply_location,
+                apply_company_type=apply_company_type,
+                apply_budget=apply_budget,
+            )
+            results = _build_accommodation_results(room_qs, guests=guests, params=params)
+            seen_passes.add(pass_key)
+            if not results:
+                continue
+
+            top_score = float(results[0].score) if results else 0.0
+            min_required = float(min_score_by_soft_pass.get(pass_name, 0.0))
+            if top_score < min_required:
+                continue
+
+            diagnostics["fallback_applied"] = pass_name
+            diagnostics["fallback_reason_codes"] = list(reason_codes)
+            diagnostics["fallback_reason"] = ", ".join(list(reason_codes))
+            final_results = results[:limit]
+            break
 
     if final_results:
         return final_results, diagnostics

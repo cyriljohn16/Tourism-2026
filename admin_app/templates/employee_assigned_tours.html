@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+{% load static %}
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Assigned Tours</title>
+  <link rel="stylesheet" href="{% static 'css/navigation.css' %}">
+  <link rel="stylesheet" href="{% static 'css/admin_page_polish.css' %}">
+  <style>
+    :root {
+      --bg: #f3f6fb;
+      --panel: #ffffff;
+      --line: #e7edf6;
+      --text: #1f2a37;
+      --muted: #64748b;
+      --blue: #2f80ed;
+      --green: #34a853;
+      --yellow: #f2b94b;
+      --red: #ea4335;
+      --shadow: 0 12px 28px rgba(21, 44, 85, 0.08);
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: "Segoe UI", Arial, sans-serif;
+      background: linear-gradient(180deg, #f8fbff 0%, var(--bg) 42%);
+      color: var(--text);
+    }
+
+    .dashboard-container { display: flex; min-height: 100vh; }
+    .content { flex: 1; padding: clamp(16px, 2.4vw, 28px); }
+    .shell { max-width: 1200px; margin: 0 auto; display: grid; gap: 16px; }
+
+    .page-hero {
+      background: linear-gradient(135deg, #ffffff 0%, #f4f9ff 100%);
+      border: 1px solid #dce7f6;
+      border-radius: 14px;
+      box-shadow: var(--shadow);
+      padding: 18px 20px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .page-eyebrow {
+      margin: 0 0 4px;
+      font-size: .78rem;
+      font-weight: 700;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      color: #5c738f;
+    }
+
+    .page-title {
+      margin: 0;
+      font-size: clamp(1.45rem, 2.6vw, 2rem);
+      letter-spacing: .01em;
+    }
+
+    .page-meta {
+      font-size: .95rem;
+      color: #43556c;
+      font-weight: 600;
+      white-space: nowrap;
+    }
+
+    .section {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      box-shadow: var(--shadow);
+      padding: 16px;
+    }
+
+    .section-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 12px;
+    }
+
+    .section-title {
+      margin: 0;
+      font-size: 1.08rem;
+      font-weight: 800;
+      color: #1f2a37;
+    }
+
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      padding: 5px 10px;
+      border-radius: 999px;
+      border: 1px solid #d7e4f8;
+      background: #f7fbff;
+      color: #1f4fa3;
+      font-size: .74rem;
+      font-weight: 700;
+    }
+
+    .tour-list {
+      display: grid;
+      gap: 10px;
+    }
+
+    .tour-card {
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: #fff;
+      padding: 12px;
+      display: grid;
+      grid-template-columns: 1.35fr 1fr auto;
+      gap: 12px;
+      align-items: center;
+    }
+
+    .tour-name {
+      margin: 0 0 4px;
+      font-size: 1rem;
+      font-weight: 800;
+      color: #172439;
+    }
+
+    .tour-meta,
+    .tour-submeta {
+      margin: 0;
+      font-size: .84rem;
+      color: var(--muted);
+      line-height: 1.5;
+    }
+
+    .status-badge {
+      display: inline-block;
+      padding: 4px 9px;
+      border-radius: 999px;
+      font-size: .72rem;
+      font-weight: 700;
+      text-transform: capitalize;
+      margin-bottom: 6px;
+    }
+
+    .status-active {
+      background: #eaf8ef;
+      color: #2e8d4e;
+      border: 1px solid #cdeed8;
+    }
+
+    .status-completed {
+      background: #eef4ff;
+      color: #285bb8;
+      border: 1px solid #d6e3ff;
+    }
+
+    .status-cancelled {
+      background: #fff1f1;
+      color: #c13f3f;
+      border: 1px solid #f5d2d2;
+    }
+
+    .tour-price {
+      font-size: .9rem;
+      font-weight: 800;
+      color: #23364f;
+    }
+
+    .actions {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      justify-content: flex-end;
+      flex-wrap: wrap;
+    }
+
+    .status-form {
+      margin: 0;
+    }
+
+    .btn {
+      text-decoration: none;
+      border: 1px solid #b6d2ff;
+      background: #edf5ff;
+      color: #1d4ea0;
+      border-radius: 8px;
+      font-size: .74rem;
+      font-weight: 700;
+      padding: 7px 10px;
+      transition: background .2s ease, border-color .2s ease;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 110px;
+    }
+
+    .btn:hover {
+      background: #dfeeff;
+      border-color: #97bff8;
+    }
+
+    .btn.secondary {
+      background: #fff;
+      border-color: #d7e0ec;
+      color: #334155;
+    }
+
+    .btn.secondary:hover {
+      background: #f8fafc;
+      border-color: #c6d2e2;
+    }
+
+    .empty-state {
+      border: 1px dashed #cfdbeb;
+      border-radius: 10px;
+      background: #fafcff;
+      padding: 22px;
+      text-align: center;
+      color: #5f7087;
+      font-size: .9rem;
+    }
+
+    @media (max-width: 1100px) {
+      .tour-card {
+        grid-template-columns: 1fr;
+      }
+      .actions {
+        justify-content: flex-start;
+      }
+    }
+
+    @media (max-width: 760px) {
+      .page-hero {
+        flex-direction: column;
+        align-items: flex-start;
+      }
+      .page-meta {
+        white-space: normal;
+      }
+    }
+  </style>
+</head>
+<body class="employee-assigned-tours-page">
+  <div class="dashboard-container">
+    <div class="navigation">
+      {% include "components/employee_navigation.html" %}
+    </div>
+
+    <main class="content">
+      <div class="shell">
+        <div class="page-hero">
+          <div>
+            <p class="page-eyebrow">Operations Workspace</p>
+            <h1 class="page-title">Assigned Tours</h1>
+          </div>
+          <div class="page-meta">Welcome, {{ request.session.first_name|default:'Staff' }}</div>
+        </div>
+
+        <section class="section">
+          <div class="section-head">
+            <h2 class="section-title">Your Assigned Tour Schedules</h2>
+            <span class="pill">{{ assignments|length }} assignment{{ assignments|length|pluralize }}</span>
+          </div>
+
+          {% if assignments %}
+            <div class="tour-list">
+              {% for assignment in assignments %}
+                <article class="tour-card">
+                  <div>
+                    <h3 class="tour-name">{{ assignment.schedule.tour.tour_name }}</h3>
+                    <p class="tour-meta">
+                      Schedule ID: {{ assignment.schedule.sched_id }}
+                    </p>
+                    <p class="tour-submeta">
+                      {{ assignment.schedule.start_time|date:"M d, Y h:i A" }} to {{ assignment.schedule.end_time|date:"M d, Y h:i A" }}
+                    </p>
+                  </div>
+
+                  <div>
+                    <span class="status-badge status-{{ assignment.schedule.status }}">{{ assignment.schedule.status }}</span>
+                    <p class="tour-meta">Assigned on: {{ assignment.assigned_date|date:"M d, Y h:i A" }}</p>
+                    <p class="tour-meta">Duration: {{ assignment.schedule.duration_days|default:1 }} day{{ assignment.schedule.duration_days|pluralize }}</p>
+                    <p class="tour-price">Price: PHP {{ assignment.schedule.price|floatformat:2 }}</p>
+                  </div>
+
+                  <div class="actions">
+                    <a class="btn" href="{% url 'tour_app:itinerary' assignment.schedule.sched_id %}">View Itinerary</a>
+                    <a class="btn secondary" href="{% url 'admin_app:employee_dashboard' %}">Back to Dashboard</a>
+                  </div>
+                </article>
+              {% endfor %}
+            </div>
+          {% else %}
+            <div class="empty-state">
+              No assigned tours yet for your account.
+            </div>
+          {% endif %}
+        </section>
+
+        <section class="section">
+          <div class="section-head">
+            <h2 class="section-title">Pending Booking Requests For Your Schedules</h2>
+            <span class="pill">{{ pending_requests|length }} pending</span>
+          </div>
+
+          {% if pending_requests %}
+            <div class="tour-list">
+              {% for booking in pending_requests %}
+                <article class="tour-card">
+                  <div>
+                    <h3 class="tour-name">{{ booking.tour_id.tour_name }}</h3>
+                    <p class="tour-meta">Guest: {{ booking.guest_id.first_name }} {{ booking.guest_id.last_name }}</p>
+                    <p class="tour-submeta">
+                      {{ booking.sched_id.start_time|date:"M d, Y h:i A" }} to {{ booking.sched_id.end_time|date:"M d, Y h:i A" }}
+                    </p>
+                    <p class="tour-submeta">Reference: #{{ booking.pk }} | Guests: {{ booking.total_guests }}</p>
+                  </div>
+
+                  <div>
+                    <span class="status-badge status-active">pending</span>
+                    <p class="tour-meta">Adults: {{ booking.num_adults }} | Children: {{ booking.num_children }}</p>
+                    <p class="tour-meta">Email: {{ booking.your_email }}</p>
+                    <p class="tour-meta">Phone: {{ booking.your_phone }}</p>
+                  </div>
+
+                  <div class="actions">
+                    <form class="status-form" method="POST" action="{% url 'tour_app:status_update' booking.pk %}">
+                      {% csrf_token %}
+                      <input type="hidden" name="guest_email" value="{{ booking.your_email }}">
+                      <input type="hidden" name="guest_name" value="{{ booking.your_name }}">
+                      <input type="hidden" name="status" value="Accepted">
+                      <button type="submit" class="btn">Accept</button>
+                    </form>
+                    <form class="status-form" method="POST" action="{% url 'tour_app:status_update' booking.pk %}">
+                      {% csrf_token %}
+                      <input type="hidden" name="guest_email" value="{{ booking.your_email }}">
+                      <input type="hidden" name="guest_name" value="{{ booking.your_name }}">
+                      <input type="hidden" name="status" value="Declined">
+                      <button type="submit" class="btn secondary">Decline</button>
+                    </form>
+                  </div>
+                </article>
+              {% endfor %}
+            </div>
+          {% else %}
+            <div class="empty-state">
+              No pending booking requests are currently linked to your assigned schedules.
+            </div>
+          {% endif %}
+        </section>
+      </div>
+    </main>
+  </div>
+</body>
+</html>

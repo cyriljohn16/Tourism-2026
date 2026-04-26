@@ -18,8 +18,27 @@
         .btn-success { background: #1f7a47; color: #fff; }
         .btn-warning { background: #c43131; color: #fff; }
         .btn-muted { background: #6c757d; color: #fff; }
-        table { width: 100%; border-collapse: collapse; border: 1px solid #e4e8ef; border-radius: 10px; overflow: hidden; }
-        th, td { text-align: left; padding: 10px; border-bottom: 1px solid #e9ecef; vertical-align: top; }
+        .table-wrap {
+            width: 100%;
+            overflow-x: auto;
+            border: 1px solid #e4e8ef;
+            border-radius: 10px;
+            background: #fff;
+        }
+        table {
+            width: 100%;
+            min-width: 980px;
+            border-collapse: collapse;
+            table-layout: auto;
+        }
+        th, td {
+            text-align: left;
+            padding: 10px;
+            border-bottom: 1px solid #e9ecef;
+            vertical-align: top;
+            font-size: clamp(0.82rem, 0.26vw + 0.70rem, 0.93rem);
+            overflow-wrap: break-word;
+        }
         th { background: #f9fafb; color: #374151; }
         .status { font-weight: 700; text-transform: uppercase; font-size: 12px; }
         .status-draft { color: #495057; }
@@ -28,10 +47,16 @@
         .actions { display: flex; gap: 8px; flex-wrap: wrap; }
         .messages { margin-bottom: 12px; }
         .messages .msg { background: #e7f5ff; color: #0b7285; padding: 8px 10px; border-radius: 6px; margin-bottom: 8px; }
+        .col-spot { min-width: 180px; }
+        .col-location { min-width: 190px; }
+        .col-contact { min-width: 160px; }
+        .col-hours { min-width: 140px; }
+        .col-actions { min-width: 230px; }
         @media (max-width: 768px) {
             .content { padding: 12px; }
             .card { padding: 14px; }
-            th, td { font-size: 13px; padding: 8px; }
+            table { min-width: 920px; }
+            th, td { padding: 8px; }
         }
     </style>
 </head>
@@ -64,6 +89,7 @@
                 <a href="{% url 'admin_app:tourism_information_create' %}" class="btn btn-primary">Add Tourism Information</a>
             </form>
 
+            <div class="table-wrap">
             <table>
                 <thead>
                     <tr>
@@ -79,13 +105,13 @@
                 <tbody>
                     {% for row in tourism_rows %}
                     <tr>
-                        <td>{{ row.spot_name }}</td>
-                        <td>{{ row.location|default:"-" }}</td>
-                        <td>{{ row.contact_information|default:"-" }}</td>
-                        <td>{{ row.operating_hours|default:"-" }}</td>
+                        <td class="col-spot">{{ row.spot_name }}</td>
+                        <td class="col-location">{{ row.location|default:"-" }}</td>
+                        <td class="col-contact">{{ row.contact_information|default:"-" }}</td>
+                        <td class="col-hours">{{ row.operating_hours|default:"-" }}</td>
                         <td><span class="status status-{{ row.publication_status }}">{{ row.publication_status }}</span></td>
                         <td>{{ row.is_active|yesno:"Yes,No" }}</td>
-                        <td>
+                        <td class="col-actions">
                             <div class="actions">
                                 <a class="btn btn-muted" href="{% url 'admin_app:tourism_information_edit' row.tourism_info_id %}">Edit</a>
                                 <form method="post" action="{% url 'admin_app:tourism_information_publish' row.tourism_info_id %}">
@@ -106,6 +132,7 @@
                     {% endfor %}
                 </tbody>
             </table>
+            </div>
         </div>
     </div>
 </div>

@@ -4,19 +4,36 @@
     <meta charset="UTF-8">
     <title>Hotel Additional Information</title>
     <style>
-        /* Basic Styles matching other_estab_form.html */
+        :root {
+            --bg: #f4f7fc;
+            --panel: #ffffff;
+            --ink: #1f2937;
+            --muted: #6b7280;
+            --line: #e8d7c7;
+            --brand: #875a34;
+            --brand-dark: #6d4827;
+        }
         body {
-            font-family: Arial, sans-serif;
-            background-color: #f1f1f1;
+            font-family: "Poppins", "Segoe UI", Tahoma, Arial, sans-serif;
+            background:
+                radial-gradient(circle at 85% -10%, rgba(177, 116, 63, 0.16), transparent 32%),
+                radial-gradient(circle at -5% 35%, rgba(111, 78, 55, 0.12), transparent 26%),
+                var(--bg);
             margin: 0;
             padding: 20px;
+            color: var(--ink);
         }
         .container {
-            max-width: 1000px;
+            max-width: 1200px;
             margin: 0 auto;
-            background: #fff;
+            background: linear-gradient(180deg, #fffefc 0%, #fff9f2 100%);
             padding: 20px;
-            border-radius: 8px;
+            border-radius: 14px;
+            border: 1px solid #ead9c9;
+            box-shadow: 0 10px 24px rgba(56, 33, 16, 0.10);
+        }
+        h1, h2, h3 {
+            color: #3f2f26;
         }
         .entry {
             margin-bottom: 15px;
@@ -29,23 +46,27 @@
         .entry input[type="text"],
         .entry textarea {
             width: 100%;
-            padding: 8px;
-            border: 1px solid #ccc;
-            border-radius: 4px;
+            padding: 9px;
+            border: 1px solid #decab7;
+            border-radius: 8px;
         }
         .submit-btn {
             display: block;
             padding: 12px 20px;
             font-size: 16px;
-            background: #4CAF50;
+            background: linear-gradient(135deg, var(--brand), #b77744);
             color: #fff;
             border: none;
-            border-radius: 6px;
+            border-radius: 10px;
             margin: 20px auto 0;
             cursor: pointer;
+            font-weight: 700;
+            transition: all 0.2s ease;
         }
         .submit-btn:hover {
-            background: #45a049;
+            background: linear-gradient(135deg, var(--brand-dark), #a96f3f);
+            transform: translateY(-1px);
+            box-shadow: 0 8px 16px rgba(122, 79, 45, 0.22);
         }
         .summary {
             margin-top: 40px;
@@ -53,14 +74,19 @@
         .summary table {
             width: 100%;
             border-collapse: collapse;
+            table-layout: auto;
+            min-width: 860px;
         }
         .summary th, .summary td {
-            border: 1px solid #ccc;
-            padding: 8px;
+            border: 1px solid var(--line);
+            padding: 9px;
             text-align: center;
+            font-size: clamp(0.82rem, 0.24vw + 0.70rem, 0.92rem);
+            overflow-wrap: break-word;
         }
         .summary th {
-            background: #f8f8f8;
+            background: #efe1d4;
+            color: #5d4332;
         }
         .summary ul {
             list-style: none;
@@ -78,36 +104,53 @@
             margin-right: 10px;
         }
         #summary_filter_form select {
-            padding: 5px;
-            border-radius: 4px;
-            border: 1px solid #ccc;
+            padding: 8px 10px;
+            border-radius: 8px;
+            border: 1px solid #decab7;
+            background: #fff;
         }
         #summary_filter_form button {
-            padding: 5px 10px;
+            padding: 8px 10px;
             margin-left: 10px;
             border: none;
-            border-radius: 4px;
-            background: #007BFF;
+            border-radius: 8px;
+            background: #875a34;
             color: white;
             cursor: pointer;
+            font-weight: 700;
         }
         #summary_filter_form button:hover {
-            background: #0056b3;
+            background: #6d4827;
         }
         .scrollable-table {
             max-height: 300px;
-            overflow-y: auto;
-            border: 1px solid #ccc;
+            overflow: auto;
+            border: 1px solid var(--line);
+            border-radius: 10px;
             margin-top: 20px;
+            background: #fff;
         }
         .scrollable-table table {
             width: 100%;
             border-collapse: collapse;
+            min-width: 860px;
         }
         .scrollable-table th, .scrollable-table td {
-            padding: 8px;
+            padding: 9px;
             text-align: center;
-            border: 1px solid #ccc;
+            border: 1px solid var(--line);
+            font-size: clamp(0.82rem, 0.24vw + 0.70rem, 0.92rem);
+            overflow-wrap: break-word;
+        }
+        .scrollable-table th {
+            background: #efe1d4;
+            color: #5d4332;
+        }
+        @media (max-width: 900px) {
+            body { padding: 12px; }
+            .container { padding: 14px; border-radius: 12px; }
+            .summary table, .scrollable-table table { min-width: 760px; }
+            .submit-btn { width: 100%; }
         }
     </style>
 </head>

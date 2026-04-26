@@ -159,15 +159,20 @@
         left: 12px;
         max-width: calc(100vw - 24px);
       }
+      .category-filters {
+        top: calc(var(--map-nav-height) + 124px);
+        left: 12px;
+        width: calc(100vw - 24px);
+      }
       .legend {
         left: 12px;
         bottom: 12px;
         max-width: calc(100vw - 24px);
       }
       .gps-controls {
-        top: calc(var(--map-nav-height) + 64px);
+        top: calc(var(--map-nav-height) + 124px);
         right: 12px;
-        width: min(220px, calc(100vw - 24px));
+        width: min(248px, calc(100vw - 24px));
       }
       .custom-marker-controls {
         right: 12px;
@@ -279,6 +284,42 @@
       border-radius: 12px;
       box-shadow: var(--panel-shadow);
       font-size: 0.95rem;
+    }
+    .category-filters {
+      position: absolute;
+      top: calc(var(--map-nav-height) + 64px);
+      left: 20px;
+      z-index: 1001;
+      width: min(320px, calc(100vw - 40px));
+      background: var(--panel-bg);
+      border: 1px solid var(--panel-border);
+      backdrop-filter: blur(6px);
+      padding: 10px 12px;
+      border-radius: 12px;
+      box-shadow: var(--panel-shadow);
+    }
+    .category-filters h4 {
+      margin: 0 0 8px;
+      font-size: 0.9rem;
+      color: #1f2f46;
+    }
+    .filter-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+    }
+    .filter-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 0.83rem;
+      color: #1f2f46;
+    }
+    .filter-chip input[type="checkbox"] {
+      width: 17px;
+      height: 17px;
+      margin: 0;
+      accent-color: #1A67D2;
     }
     .edit-form button {
       padding: 8px;
@@ -510,10 +551,23 @@
   <!-- Map Container -->
   <div id="map-status-banner" class="map-status-banner"></div>
   <div id="map"></div>
+  {{ guest_hidden_place_names|json_script:"guest-hidden-place-names" }}
   
   <!-- Search Box -->
   <div class="search-box">
     <input type="text" id="search-input" placeholder="Search for locations...">
+  </div>
+
+  <div class="category-filters" aria-label="Category filters">
+    <h4>Filter Categories</h4>
+    <div class="filter-grid">
+      <label class="filter-chip"><input type="checkbox" class="category-filter" data-category="restaurant" checked> Dining</label>
+      <label class="filter-chip"><input type="checkbox" class="category-filter" data-category="hotel" checked> Hotels</label>
+      <label class="filter-chip"><input type="checkbox" class="category-filter" data-category="landmark" checked> Landmarks</label>
+      <label class="filter-chip"><input type="checkbox" class="category-filter" data-category="public" checked> Public</label>
+      <label class="filter-chip"><input type="checkbox" class="category-filter" data-category="shopping" checked> Shopping</label>
+      <label class="filter-chip"><input type="checkbox" class="category-filter" data-category="custom" checked> Other</label>
+    </div>
   </div>
   
   <!-- Legend -->
@@ -578,6 +632,7 @@
     <button class="control-button" id="locate-me">
       <i class="fas fa-location-arrow"></i> Find My Location
     </button>
+    {% if map_mode != 'guest' %}
     <button class="control-button purple" id="show-calibration-points">
       <i class="fas fa-map-pin"></i> Show Calibration Points
     </button>
@@ -593,6 +648,11 @@
     <button class="control-button" id="start-calibration">
       <i class="fas fa-compass"></i> Calibrate Map
     </button>
+    {% else %}
+    <button class="control-button ghost" id="clear-search">
+      <i class="fas fa-eraser"></i> Clear Search
+    </button>
+    {% endif %}
     <button class="control-button" id="start-navigation" style="display: none;">
       <i class="fas fa-directions"></i> Navigate
     </button>
@@ -649,6 +709,76 @@
     var bounds = [[0, 0], [1500, 1200]];
     L.imageOverlay("{% static 'images/bayawan_map.png' %}", bounds).addTo(map);
     map.fitBounds(bounds);
+    const MAP_COORD_BOUNDS = {
+      latMin: bounds[0][0],
+      latMax: bounds[1][0],
+      lngMin: bounds[0][1],
+      lngMax: bounds[1][1]
+    };
+
+    function isMapCoordinateWithinBounds(lat, lng, padding = 0) {
+      const latVal = Number(lat);
+      const lngVal = Number(lng);
+      if (!Number.isFinite(latVal) || !Number.isFinite(lngVal)) {
+        return false;
+      }
+      return (
+        latVal >= (MAP_COORD_BOUNDS.latMin - padding) &&
+        latVal <= (MAP_COORD_BOUNDS.latMax + padding) &&
+        lngVal >= (MAP_COORD_BOUNDS.lngMin - padding) &&
+        lngVal <= (MAP_COORD_BOUNDS.lngMax + padding)
+      );
+    }
+
+    function normalizePlaceName(value) {
+      return String(value || "")
+        .toLowerCase()
+        .replace(/[^a-z0-9\s]/g, " ")
+        .replace(/\s+/g, " ")
+        .trim();
+    }
+
+    let configuredGuestHiddenPlaces = [];
+    const hiddenPlacesScript = document.getElementById('guest-hidden-place-names');
+    if (hiddenPlacesScript) {
+      try {
+        const parsed = JSON.parse(hiddenPlacesScript.textContent || "[]");
+        if (Array.isArray(parsed)) {
+          configuredGuestHiddenPlaces = parsed;
+        }
+      } catch (err) {
+        console.warn("Could not parse guest hidden place names config:", err);
+      }
+    }
+    if (!configuredGuestHiddenPlaces.length) {
+      configuredGuestHiddenPlaces = ["Bayawan City Hall"];
+    }
+    const GUEST_HIDDEN_PLACE_PATTERNS = configuredGuestHiddenPlaces
+      .map(name => normalizePlaceName(name))
+      .filter(name => Boolean(name));
+
+    function shouldHideGuestMarkerByName(name) {
+      if (MAP_MODE !== "guest") return false;
+      const normalized = normalizePlaceName(name);
+      if (!normalized) return false;
+      return GUEST_HIDDEN_PLACE_PATTERNS.some(pattern => (
+        normalized === pattern ||
+        normalized.includes(pattern) ||
+        pattern.includes(normalized)
+      ));
+    }
+
+    function normalizeCategoryKey(rawCategory) {
+      const normalized = normalizePlaceName(rawCategory);
+      if (!normalized) return "custom";
+      if (normalized.includes("restaurant") || normalized.includes("food") || normalized.includes("dining")) return "restaurant";
+      if (normalized.includes("hotel") || normalized.includes("inn") || normalized.includes("accommodation")) return "hotel";
+      if (normalized.includes("public") || normalized.includes("service")) return "public";
+      if (normalized.includes("shop") || normalized.includes("market")) return "shopping";
+      if (normalized.includes("landmark") || normalized.includes("tourist") || normalized.includes("spot")) return "landmark";
+      if (normalized.includes("custom") || normalized.includes("other")) return "custom";
+      return "custom";
+    }
     
     // Local visual pin icons (no external marker image dependencies)
     function createCategoryIcon(colorHex) {
@@ -681,20 +811,60 @@
       landmark: L.layerGroup(),
       custom: L.layerGroup()
     };
+
+    function collectEnabledCategories() {
+      const enabled = new Set();
+      document.querySelectorAll('.category-filter').forEach(function(filterEl) {
+        const category = String(filterEl.getAttribute('data-category') || '').trim().toLowerCase();
+        if (filterEl.checked && category) {
+          enabled.add(category);
+        }
+      });
+      return enabled;
+    }
+
+    function applyCategoryFilterState() {
+      const enabled = collectEnabledCategories();
+      Object.entries(markerLayers).forEach(([category, layer]) => {
+        if (enabled.has(category)) {
+          if (!map.hasLayer(layer)) {
+            map.addLayer(layer);
+          }
+        } else if (map.hasLayer(layer)) {
+          map.removeLayer(layer);
+        }
+      });
+    }
     
     // Add all layer groups to the map
     Object.values(markerLayers).forEach(layer => layer.addTo(map));
+    document.querySelectorAll('.category-filter').forEach(function(filterEl) {
+      filterEl.addEventListener('change', function() {
+        applyCategoryFilterState();
+      });
+    });
+    applyCategoryFilterState();
     
     // Function to add a marker to the map
     function addMarkerToMap(loc, isDraggable = false, id = null) {
+      if (shouldHideGuestMarkerByName(loc.name)) {
+        console.info("Guest marker hidden by configured rule:", loc.name);
+        return null;
+      }
+      if (!isMapCoordinateWithinBounds(loc.lat, loc.lng)) {
+        console.warn("Skipping marker outside map bounds:", loc.name, loc.lat, loc.lng);
+        return null;
+      }
+      const categoryKey = normalizeCategoryKey(loc.category);
       const allowEdit = Boolean(CAN_EDIT_BOOKMARKS && id);
       var marker = L.marker([loc.lat, loc.lng], {
-        icon: icons[loc.category] || icons.custom,
+        icon: icons[categoryKey] || icons.custom,
         draggable: Boolean(isDraggable && CAN_EDIT_BOOKMARKS)
       });
       
       // Store the location's name and GPS coordinates in the marker's options for later use
       marker.options.locationName = loc.name;
+      marker.options.categoryKey = categoryKey;
       
       // Find corresponding GPS coordinates if this is a known location
       let gpsCoords = null;
@@ -717,7 +887,7 @@
       // Create popup content
       var popupContent = `<div style="max-width: 300px;">
         <h3 style="margin-top: 0; margin-bottom: 5px;">${loc.name}</h3>
-        <div style="color: #666; margin-bottom: 10px;">${getCategoryName(loc.category)}</div>`;
+        <div style="color: #666; margin-bottom: 10px;">${getCategoryName(categoryKey)}</div>`;
       
       // Add details if available
       if (loc.details) {
@@ -754,8 +924,8 @@
       marker.bindPopup(popupContent, { minWidth: 250 });
       
       // Add to appropriate layer group and set up popup events
-      if (markerLayers[loc.category]) {
-        marker.addTo(markerLayers[loc.category]);
+      if (markerLayers[categoryKey]) {
+        marker.addTo(markerLayers[categoryKey]);
         
         // Store reference if it has an ID
         if (id) {
@@ -817,7 +987,7 @@
     
     // Helper function to get human-readable category name
     function getCategoryName(category) {
-      switch(category) {
+      switch(normalizeCategoryKey(category)) {
         case 'restaurant': return 'Food & Restaurant';
         case 'hotel': return 'Hotel & Accommodation';
         case 'public': return 'Public Service';
@@ -916,6 +1086,7 @@
         } else {
           console.log("No bookmarks found in the response");
         }
+        applyCategoryFilterState();
       })
       .catch(error => {
         console.error("Error loading bookmarks:", error);
@@ -955,6 +1126,7 @@
           if (imageFile) {
             uploadBookmarkImage(data.id, imageFile);
           }
+          applyCategoryFilterState();
         } else {
           alert("Error creating bookmark: " + data.message);
         }
@@ -1201,7 +1373,12 @@
               }, true, id);
               
               // Update reference
-              markersById[id] = newMarker;
+              if (newMarker) {
+                markersById[id] = newMarker;
+              } else {
+                delete markersById[id];
+              }
+              applyCategoryFilterState();
               
               // Close popup
               map.closePopup();
@@ -1640,6 +1817,70 @@
         map: { lat: 9.3, lng: 431.0 }
       }
     ];
+
+    function haversineDistanceKm(lat1, lng1, lat2, lng2) {
+      const toRad = value => (Number(value) * Math.PI) / 180;
+      const r = 6371;
+      const dLat = toRad(lat2 - lat1);
+      const dLng = toRad(lng2 - lng1);
+      const a =
+        Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+        Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) *
+        Math.sin(dLng / 2) * Math.sin(dLng / 2);
+      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+      return r * c;
+    }
+
+    function isGpsInsideMapCoverage(gpsLat, gpsLng) {
+      if (!referencePoints || referencePoints.length < 3) {
+        return true;
+      }
+
+      const latVals = referencePoints.map(point => Number(point.gps.lat));
+      const lngVals = referencePoints.map(point => Number(point.gps.lng));
+      const latMin = Math.min(...latVals);
+      const latMax = Math.max(...latVals);
+      const lngMin = Math.min(...lngVals);
+      const lngMax = Math.max(...lngVals);
+      const bboxPadding = 0.01;
+      const inBoundingBox = (
+        gpsLat >= (latMin - bboxPadding) &&
+        gpsLat <= (latMax + bboxPadding) &&
+        gpsLng >= (lngMin - bboxPadding) &&
+        gpsLng <= (lngMax + bboxPadding)
+      );
+
+      let centroidLat = 0;
+      let centroidLng = 0;
+      referencePoints.forEach(point => {
+        centroidLat += Number(point.gps.lat);
+        centroidLng += Number(point.gps.lng);
+      });
+      centroidLat /= referencePoints.length;
+      centroidLng /= referencePoints.length;
+
+      let maxRadiusKm = 0;
+      referencePoints.forEach(point => {
+        const distanceKm = haversineDistanceKm(
+          centroidLat,
+          centroidLng,
+          Number(point.gps.lat),
+          Number(point.gps.lng)
+        );
+        if (distanceKm > maxRadiusKm) {
+          maxRadiusKm = distanceKm;
+        }
+      });
+
+      const distanceFromCentroidKm = haversineDistanceKm(
+        centroidLat,
+        centroidLng,
+        gpsLat,
+        gpsLng
+      );
+      const radialLimitKm = maxRadiusKm + 2.0;
+      return inBoundingBox && distanceFromCentroidKm <= radialLimitKm;
+    }
     
     // Variables for GPS and navigation
     let userMarker = null;
@@ -1862,11 +2103,32 @@
             // Got GPS coordinates
             const { latitude, longitude } = position.coords;
             console.log("GPS coordinates detected:", latitude, longitude);
+
+            if (!isGpsInsideMapCoverage(latitude, longitude)) {
+              statusDiv.textContent = "Your current location is outside this map coverage area.";
+              document.getElementById('locate-me').textContent = "Find My Location";
+              document.getElementById('start-navigation').style.display = 'none';
+              setStatusMessage(
+                "Location detected, but it is outside this Bayawan map coverage. No marker was placed.",
+                "warn"
+              );
+              return;
+            }
             
             // Convert to map coordinates
             try {
               const mapCoords = gpsToMapCoordinates(latitude, longitude);
               console.log("Converted to map coordinates:", mapCoords);
+              if (!isMapCoordinateWithinBounds(mapCoords.lat, mapCoords.lng, 24)) {
+                statusDiv.textContent = "Location is outside this map coverage area.";
+                document.getElementById('locate-me').textContent = "Find My Location";
+                document.getElementById('start-navigation').style.display = 'none';
+                setStatusMessage(
+                  "Detected GPS point is outside the rendered map coverage. No marker was placed.",
+                  "warn"
+                );
+                return;
+              }
               
               // Create user marker at detected position
               userMarker = L.marker(mapCoords, {
@@ -1896,9 +2158,10 @@
               map.setView(mapCoords, 1);
               
               // Update status
-              statusDiv.textContent = "✓ Location detected automatically";
               document.getElementById('locate-me').textContent = "Refresh Location";
               document.getElementById('start-navigation').style.display = 'block';
+              statusDiv.textContent = "Location detected automatically (inside map coverage).";
+              setStatusMessage("");
             } catch (err) {
               console.error("Error converting coordinates:", err);
               fallbackToManualPlacement("Could not convert GPS coordinates. Click to set location manually.");
@@ -2077,42 +2340,67 @@
     }
     
     // Set up event listeners
-    document.getElementById('locate-me').addEventListener('click', function() {
-      if (!userMarker) {
-        startLocationTracking();
-      } else {
-        stopLocationTracking();
-      }
-    });
-    
-    document.getElementById('start-navigation').addEventListener('click', startNavigationMode);
-    document.getElementById('stop-navigation').addEventListener('click', stopNavigationMode);
-    document.getElementById('close-route').addEventListener('click', function() {
-      document.getElementById('route-info').style.display = 'none';
-    });
-    document.getElementById('show-calibration-points').addEventListener('click', function() {
-      showCalibrationPoints();
-      document.getElementById('gps-status').textContent = "Calibration points displayed";
-    });
-    document.getElementById('deploy-bookmarks').addEventListener('click', function() {
-      loadBookmarks();
-      document.getElementById('gps-status').textContent = "Bookmarks reloaded";
-    });
-    document.getElementById('reset-map-view').addEventListener('click', function() {
-      map.fitBounds(bounds);
-      setStatusMessage("");
-      document.getElementById('gps-status').textContent = "Map view reset";
-    });
-    document.getElementById('clear-search').addEventListener('click', function() {
-      document.getElementById('search-input').value = '';
-      setStatusMessage("");
-      map.fitBounds(bounds);
-    });
+    const locateMeBtn = document.getElementById('locate-me');
+    if (locateMeBtn) {
+      locateMeBtn.addEventListener('click', function() {
+        if (!userMarker) {
+          startLocationTracking();
+        } else {
+          stopLocationTracking();
+        }
+      });
+    }
+
+    const startNavBtn = document.getElementById('start-navigation');
+    if (startNavBtn) {
+      startNavBtn.addEventListener('click', startNavigationMode);
+    }
+    const stopNavBtn = document.getElementById('stop-navigation');
+    if (stopNavBtn) {
+      stopNavBtn.addEventListener('click', stopNavigationMode);
+    }
+    const closeRouteBtn = document.getElementById('close-route');
+    if (closeRouteBtn) {
+      closeRouteBtn.addEventListener('click', function() {
+        document.getElementById('route-info').style.display = 'none';
+      });
+    }
+    const showCalibrationBtn = document.getElementById('show-calibration-points');
+    if (showCalibrationBtn) {
+      showCalibrationBtn.addEventListener('click', function() {
+        showCalibrationPoints();
+        document.getElementById('gps-status').textContent = "Calibration points displayed";
+      });
+    }
+    const deployBookmarksBtn = document.getElementById('deploy-bookmarks');
+    if (deployBookmarksBtn) {
+      deployBookmarksBtn.addEventListener('click', function() {
+        loadBookmarks();
+        document.getElementById('gps-status').textContent = "Bookmarks reloaded";
+      });
+    }
+    const resetMapBtn = document.getElementById('reset-map-view');
+    if (resetMapBtn) {
+      resetMapBtn.addEventListener('click', function() {
+        map.fitBounds(bounds);
+        setStatusMessage("");
+        document.getElementById('gps-status').textContent = "Map view reset";
+      });
+    }
+    const clearSearchBtn = document.getElementById('clear-search');
+    if (clearSearchBtn) {
+      clearSearchBtn.addEventListener('click', function() {
+        document.getElementById('search-input').value = '';
+        setStatusMessage("");
+        map.fitBounds(bounds);
+      });
+    }
     
     // Uncomment this line to show calibration points:
     // showCalibrationPoints();
   </script>
   
+  {% if map_mode != 'guest' %}
   <!-- Calibration Panel -->
   <div class="calibration-panel" style="display: none; position: absolute; right: 20px; top: 200px; background: white; padding: 15px; border-radius: 5px; box-shadow: 0 0 10px rgba(0,0,0,0.2); z-index: 1000; max-width: 350px;">
     <h4>Map Calibration</h4>
@@ -2314,6 +2602,7 @@
       });
     });
   </script>
+  {% endif %}
 
   <script>
     // Function to launch navigation using Google Maps app or website
@@ -2412,3 +2701,4 @@
   {% endif %}
 </body>
 </html>
+

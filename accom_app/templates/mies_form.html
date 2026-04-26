@@ -300,12 +300,47 @@
         }
         
         /* Table styles */
+        .records-table-wrap {
+            width: 100%;
+            overflow-x: auto;
+            border: 1px solid #e4e8ef;
+            border-radius: 10px;
+            background: #fff;
+        }
+        .records-table {
+            width: 100%;
+            min-width: 980px;
+            border-collapse: collapse;
+            table-layout: auto;
+        }
+        .records-table th,
+        .records-table td {
+            padding: 9px;
+            border: 1px solid #ddd;
+            font-size: clamp(0.82rem, 0.22vw + 0.72rem, 0.92rem);
+            overflow-wrap: break-word;
+            vertical-align: top;
+        }
+        .records-table th {
+            background-color: var(--primary-light);
+            font-weight: bold;
+            text-align: left;
+            color: #2f2418;
+        }
+        .records-table td.num-col,
+        .records-table th.num-col {
+            text-align: right;
+            white-space: nowrap;
+        }
         .even-row {
             background-color: #f9f9f9;
         }
         
         .odd-row {
             background-color: #ffffff;
+        }
+        @media (max-width: 900px) {
+            .records-table { min-width: 860px; }
         }
     </style>
     <!-- Include jQuery -->
@@ -473,34 +508,35 @@
             <h2>All Meeting Records</h2>
             
             <div class="form-section">
-                <table style="width: 100%; border-collapse: collapse;">
+                <div class="records-table-wrap">
+                <table class="records-table">
                     <thead>
-                        <tr style="background-color: var(--primary-light); font-weight: bold;">
-                            <th style="padding: 8px; border: 1px solid #ddd; text-align: left;">ID</th>
-                            <th style="padding: 8px; border: 1px solid #ddd; text-align: left;">Company</th>
-                            <th style="padding: 8px; border: 1px solid #ddd; text-align: left;">Representative</th>
-                            <th style="padding: 8px; border: 1px solid #ddd; text-align: left;">Event Name</th>
-                            <th style="padding: 8px; border: 1px solid #ddd; text-align: left;">Meeting Place</th>
-                            <th style="padding: 8px; border: 1px solid #ddd; text-align: left;">Time Start</th>
-                            <th style="padding: 8px; border: 1px solid #ddd; text-align: left;">Time End</th>
-                            <th style="padding: 8px; border: 1px solid #ddd; text-align: right;">Subtotal</th>
-                            <th style="padding: 8px; border: 1px solid #ddd; text-align: right;">Total</th>
-                            <th style="padding: 8px; border: 1px solid #ddd; text-align: right;">Grand Total</th>
+                        <tr>
+                            <th>ID</th>
+                            <th>Company</th>
+                            <th>Representative</th>
+                            <th>Event Name</th>
+                            <th>Meeting Place</th>
+                            <th>Time Start</th>
+                            <th>Time End</th>
+                            <th class="num-col">Subtotal</th>
+                            <th class="num-col">Total</th>
+                            <th class="num-col">Grand Total</th>
                         </tr>
                     </thead>
                     <tbody>
                         {% for event in events %}
                             <tr class="{% cycle 'even-row' 'odd-row' %}">
-                                <td style="padding: 8px; border: 1px solid #ddd;">{{ event.event_id }}</td>
-                                <td style="padding: 8px; border: 1px solid #ddd;">{{ event.company }}</td>
-                                <td style="padding: 8px; border: 1px solid #ddd;">{{ event.representative }}</td>
-                                <td style="padding: 8px; border: 1px solid #ddd;">{{ event.event_name }}</td>
-                                <td style="padding: 8px; border: 1px solid #ddd;">{{ event.meeting_place }}</td>
-                                <td style="padding: 8px; border: 1px solid #ddd;">{{ event.time_start|date:"F d, Y h:i A" }}</td>
-                                <td style="padding: 8px; border: 1px solid #ddd;">{{ event.time_end|date:"F d, Y h:i A" }}</td>
-                                <td style="padding: 8px; border: 1px solid #ddd; text-align: right;">{{ event.subtotal }}</td>
-                                <td style="padding: 8px; border: 1px solid #ddd; text-align: right;">{{ event.total }}</td>
-                                <td style="padding: 8px; border: 1px solid #ddd; text-align: right;">{{ event.grandtotal }}</td>
+                                <td>{{ event.event_id }}</td>
+                                <td>{{ event.company }}</td>
+                                <td>{{ event.representative }}</td>
+                                <td>{{ event.event_name }}</td>
+                                <td>{{ event.meeting_place }}</td>
+                                <td>{{ event.time_start|date:"F d, Y h:i A" }}</td>
+                                <td>{{ event.time_end|date:"F d, Y h:i A" }}</td>
+                                <td class="num-col">{{ event.subtotal }}</td>
+                                <td class="num-col">{{ event.total }}</td>
+                                <td class="num-col">{{ event.grandtotal }}</td>
                             </tr>
                         {% empty %}
                             <tr>
@@ -509,6 +545,7 @@
                         {% endfor %}
                     </tbody>
                 </table>
+                </div>
             </div>
         </div>
     </div>

@@ -14,9 +14,13 @@ urlpatterns = [
     path('employee_dashboard/', views.employee_dashboard, name='employee_dashboard'),
     path('admin_dashboard/', views.admin_dashboard, name='admin_dashboard'),
     path('accommodation_dashboard/', views.accommodation_dashboard, name='accommodation_dashboard'),
+    path('owner/dashboard/', views.owner_dashboard_entry, name='owner_dashboard_entry'),
     path('owner/hub/', views.owner_hub, name='owner_hub'),
+    path('owner/accommodation/<int:accom_id>/edit/', views.owner_edit_accommodation, name='owner_edit_accommodation'),
     path('owner/bookings/', views.owner_accommodation_bookings, name='owner_accommodation_bookings'),
     path('owner/bookings/<int:booking_id>/update/', views.owner_accommodation_booking_update, name='owner_accommodation_booking_update'),
+    path('owner/reports/submit/', views.owner_report_submit, name='owner_report_submit'),
+    path('owner/reports/review/', views.owner_reports_review, name='owner_reports_review'),
     path('owner/room-bookings/<int:room_id>/', views.owner_room_bookings_json, name='owner_room_bookings_json'),
     path('owner/room-bookings/check-in/', views.owner_room_bookings_check_in, name='owner_room_bookings_check_in'),
     path('establishment_dashboard/', views.establishment_summary, name='establishment_dashboard'),
@@ -38,6 +42,9 @@ urlpatterns = [
     path('employee/accommodations/', views.employee_accommodations, name='employee_accommodations'),
     path('employee/map/', views.employee_map_view, name='employee_map'),
     path('employee/notifications/', views.employee_notifications, name='employee_notifications'),
+    path('notifications/feed/', views.notifications_feed, name='notifications_feed'),
+    path('notifications/open/<int:notification_id>/', views.notification_open, name='notification_open'),
+    path('notifications/mark-all-read/', views.notifications_mark_all_read, name='notifications_mark_all_read'),
     path('employee/profile/', views.employee_profile, name='employee_profile'),
 
     # Employee management routes

@@ -7,8 +7,18 @@ from .forms import (
     EmployeeRegistrationForm,
     AccommodationRegistrationForm,
     AdminAccommodationEncodeForm,
+    OwnerAccommodationEditForm,
 )
-from .models import AdminInfo, Accomodation, Employee, UserActivity
+from .models import (
+    AdminInfo,
+    Accomodation,
+    Employee,
+    UserActivity,
+    InAppNotification,
+    OwnerMonthlyReport,
+    MonthlyReportRoomUsage,
+    Room,
+)
 from accom_app.forms import OtherEstabForm
 from accom_app.models import mies_table
 from django.http import HttpResponse
@@ -21,7 +31,7 @@ from .forms import EstablishmentFormAdmin, TourismInformationForm
 from .models import Region, Country, Entry, HotelConfirmation, TourismInformation
 from accom_app.models import Summary
 from django.http import JsonResponse, HttpResponseForbidden
-from django.views.decorators.http import require_POST
+from django.views.decorators.http import require_POST, require_http_methods
 from django.shortcuts import get_object_or_404
 from django.urls import reverse
 from django.conf import settings
@@ -51,9 +61,34 @@ from guest_app.models import Guest, Pending, AccommodationBooking
 from guest_app.booking_integrity import sync_room_current_availability
 from .models import TourAssignment
 from ai_chatbot.models import UsabilitySurveyResponse
+from admin_app.notification_service import (
+    create_notification,
+    notify_accommodation_owner,
+    notify_admins,
+    notify_assigned_employees_for_schedule,
+    serialize_notification_rows,
+)
 
 
 PASSWORD_RESET_SALT = "admin_app.password_reset"
+
+
+def _clear_admin_panel_session_state(request):
+    """
+    Clear admin/accommodation panel session markers without flushing the whole
+    session. This preserves Django messages across redirects from failed logins.
+    """
+    for key in (
+        "user_type",
+        "employee_id",
+        "user_id",
+        "is_admin",
+        "accom_id",
+        "company_name",
+        "company_type",
+    ):
+        request.session.pop(key, None)
+
 
 def _verify_recaptcha_response(request):
     """
@@ -139,6 +174,35 @@ def _find_reset_account_by_email(email):
         return {"type": "accommodation", "obj": accom, "email": accom.email_address}
 
     return None
+
+
+def _find_owner_login_candidate(username_or_email):
+    """
+    Identify a potential accommodation owner account from either username or email.
+    This is intentionally broader than `is_accommodation_owner` so pending/declined
+    owners receive the correct approval-status message instead of generic invalid login.
+    """
+    identifier = str(username_or_email or "").strip()
+    if not identifier:
+        return None
+
+    owner_candidate = Guest.objects.filter(
+        Q(email__iexact=identifier) | Q(username__iexact=identifier)
+    ).first()
+    if not owner_candidate:
+        return None
+
+    role_value = str(getattr(owner_candidate, "role", "") or "").strip().lower()
+    owner_group_names = {
+        "accommodation_owner",
+        "accommodation_owner_pending",
+        "accommodation_owner_declined",
+    }
+    in_owner_group = owner_candidate.groups.filter(name__in=owner_group_names).exists()
+    has_owner_role = role_value in {"accommodation_owner", "accommodation owner", "owner"}
+    has_owned_accommodation = Accomodation.objects.filter(owner=owner_candidate).exists()
+
+    return owner_candidate if (in_owner_group or has_owner_role or has_owned_accommodation) else None
 
 
 def forgot_password(request):
@@ -279,8 +343,8 @@ def accomodation_required(view_func):
             .first()
         )
         if owned_accommodation is None:
-            messages.error(request, "No approved accommodation is linked to your owner account.")
-            return redirect('admin_app:login')
+            messages.info(request, "No approved accommodation is linked yet. Please submit an accommodation first.")
+            return redirect("admin_app:owner_hub")
         request.current_accommodation = owned_accommodation
         return view_func(request, *args, **kwargs)
     return wrapped_view
@@ -299,6 +363,161 @@ def admin_required(view_func):
     return wrapped_view
 
 
+def _resolve_notification_recipient(request):
+    if request.session.get("user_type") == "employee" and request.session.get("employee_id"):
+        employee = Employee.objects.filter(emp_id=request.session.get("employee_id")).first()
+        if employee:
+            return {"employee": employee, "guest": None}
+    if request.user.is_authenticated:
+        return {"employee": None, "guest": request.user}
+    return {"employee": None, "guest": None}
+
+
+@require_http_methods(["GET", "POST"])
+def notifications_feed(request):
+    recipient = _resolve_notification_recipient(request)
+    employee = recipient["employee"]
+    guest_user = recipient["guest"]
+    if not employee and not guest_user:
+        return JsonResponse({"success": False, "message": "Unauthorized."}, status=401)
+
+    base_qs = InAppNotification.objects.all()
+    if employee:
+        base_qs = base_qs.filter(recipient_employee=employee)
+    else:
+        base_qs = base_qs.filter(recipient_guest=guest_user)
+
+    if request.method == "POST":
+        try:
+            payload = json.loads(request.body.decode("utf-8") or "{}")
+        except Exception:
+            payload = {}
+
+        action = str(payload.get("action") or "").strip().lower()
+        notif_id = str(payload.get("notification_id") or "").strip()
+        notif_ids = payload.get("notification_ids") if isinstance(payload.get("notification_ids"), list) else []
+
+        if action == "mark_all_read":
+            scoped = base_qs.filter(is_read=False)
+            if notif_ids:
+                normalized_ids = []
+                for value in notif_ids:
+                    try:
+                        normalized_ids.append(int(str(value).strip()))
+                    except Exception:
+                        continue
+                if normalized_ids:
+                    scoped = scoped.filter(id__in=normalized_ids)
+            scoped.update(is_read=True)
+            unread_count = base_qs.filter(is_read=False).count()
+            return JsonResponse({"success": True, "unread_count": unread_count})
+
+        if notif_id:
+            try:
+                target_id = int(notif_id)
+            except Exception:
+                return JsonResponse({"success": False, "message": "Invalid notification id."}, status=400)
+            updated = base_qs.filter(id=target_id).update(is_read=True)
+            if not updated:
+                return JsonResponse({"success": False, "message": "Notification not found."}, status=404)
+            unread_count = base_qs.filter(is_read=False).count()
+            return JsonResponse({"success": True, "unread_count": unread_count})
+        return JsonResponse({"success": False, "message": "No notification action applied."}, status=400)
+
+    rows = list(base_qs.order_by("-created_at")[:20])
+    unread_count = base_qs.filter(is_read=False).count()
+    return JsonResponse(
+        {
+            "success": True,
+            "notifications": serialize_notification_rows(rows),
+            "unread_count": unread_count,
+        }
+    )
+
+
+@require_http_methods(["GET"])
+def notification_open(request, notification_id):
+    recipient = _resolve_notification_recipient(request)
+    employee = recipient["employee"]
+    guest_user = recipient["guest"]
+    if not employee and not guest_user:
+        return redirect("admin_app:login")
+    scoped = InAppNotification.objects.filter(id=notification_id)
+    if employee:
+        scoped = scoped.filter(recipient_employee=employee)
+    else:
+        scoped = scoped.filter(recipient_guest=guest_user)
+    row = scoped.first()
+    if row is None:
+        return redirect(request.GET.get("next") or request.META.get("HTTP_REFERER") or "/")
+    if not row.is_read:
+        row.is_read = True
+        row.save(update_fields=["is_read"])
+    target = str(request.GET.get("next") or row.url or request.META.get("HTTP_REFERER") or "/").strip()
+    return redirect(target)
+
+
+@require_http_methods(["GET"])
+def notifications_mark_all_read(request):
+    recipient = _resolve_notification_recipient(request)
+    employee = recipient["employee"]
+    guest_user = recipient["guest"]
+    if not employee and not guest_user:
+        return redirect("admin_app:login")
+    if employee:
+        InAppNotification.objects.filter(recipient_employee=employee, is_read=False).update(is_read=True)
+    elif guest_user:
+        InAppNotification.objects.filter(recipient_guest=guest_user, is_read=False).update(is_read=True)
+    target = str(request.GET.get("next") or request.META.get("HTTP_REFERER") or "/").strip()
+    return redirect(target)
+
+
+def _validate_accommodation_booking_confirmation(booking):
+    """
+    Validate whether an accommodation booking is eligible to move from pending
+    to confirmed.
+    Returns: (is_valid: bool, reason: str)
+    """
+    if booking.status != "pending":
+        return False, "Only pending bookings can be confirmed."
+    if booking.room_id is None:
+        return False, "Booking has no room assigned."
+    if booking.check_out <= booking.check_in:
+        return False, "Invalid stay dates: check-out must be after check-in."
+
+    accommodation = booking.accommodation
+    if not accommodation:
+        return False, "Booking has no accommodation record."
+    if str(accommodation.approval_status or "").lower() != "accepted" or not accommodation.is_active:
+        return False, "Accommodation is not active/accepted for booking approval."
+
+    room = booking.room
+    if not room:
+        return False, "Room record was not found."
+    if room.accommodation_id != booking.accommodation_id:
+        return False, "Selected room does not belong to this accommodation."
+    if str(room.status or "").upper() != "AVAILABLE":
+        return False, "Room is not currently marked as available."
+
+    try:
+        person_limit = int(room.person_limit or 0)
+    except Exception:
+        person_limit = 0
+    if person_limit < 1 or int(booking.num_guests or 0) > person_limit:
+        return False, "Room capacity is insufficient for this booking."
+
+    overlapping_confirmed = AccommodationBooking.objects.filter(
+        room=room,
+        status="confirmed",
+        check_in__lt=booking.check_out,
+        check_out__gt=booking.check_in,
+    ).exclude(booking_id=booking.booking_id).exists()
+    if overlapping_confirmed:
+        return False, "Room has an overlapping confirmed booking for the same date range."
+
+    return True, ""
+
+
 def is_accommodation_owner(user):
     if not user or not getattr(user, "is_authenticated", False):
         return False
@@ -308,6 +527,46 @@ def is_accommodation_owner(user):
         return True
 
     return user.groups.filter(name__iexact="accommodation_owner").exists()
+
+
+@login_required
+def owner_dashboard_entry(request):
+    """
+    Safe dashboard entry for accommodation owners.
+    If an accepted accommodation is linked, open the accommodation dashboard.
+    Otherwise keep owner in owner hub so they can register one.
+    """
+    pending_group, _ = Group.objects.get_or_create(name="accommodation_owner_pending")
+    approved_group, _ = Group.objects.get_or_create(name="accommodation_owner")
+    declined_group, _ = Group.objects.get_or_create(name="accommodation_owner_declined")
+
+    if request.user.groups.filter(id=declined_group.id).exists():
+        messages.error(request, "Your accommodation owner account was declined. Please contact admin.")
+        return redirect("admin_app:login")
+    if request.user.groups.filter(id=pending_group.id).exists() and not request.user.groups.filter(id=approved_group.id).exists():
+        messages.error(request, "Your accommodation owner account is pending admin approval.")
+        return redirect("admin_app:login")
+    if not request.user.groups.filter(id=approved_group.id).exists():
+        messages.error(request, "Please sign up as an accommodation owner first from the admin login page.")
+        return redirect("admin_app:login")
+
+    owned_accom = (
+        Accomodation.objects.filter(owner=request.user, approval_status="accepted")
+        .order_by("accom_id")
+        .first()
+    )
+    if owned_accom is None:
+        messages.info(
+            request,
+            "No accepted accommodation is linked yet. Please submit an accommodation first.",
+        )
+        return redirect("admin_app:owner_hub")
+
+    request.session["accom_id"] = owned_accom.accom_id
+    request.session["company_name"] = owned_accom.company_name
+    request.session["company_type"] = owned_accom.company_type
+    request.session["user_type"] = "accomodation"
+    return redirect("admin_app:accommodation_dashboard")
 
 def map_view(request):
     """
@@ -325,9 +584,15 @@ def map_view(request):
     except Employee.DoesNotExist:
         pass
     
+    hidden_places = getattr(
+        settings,
+        "TOURISM_MAP_GUEST_HIDDEN_PLACES",
+        ["Bayawan City Hall"],
+    )
     return render(request, 'map.html', {
         'map_mode': 'admin',
         'can_edit_bookmarks': True,
+        'guest_hidden_place_names': hidden_places if isinstance(hidden_places, (list, tuple)) else [],
     })
 
 
@@ -342,9 +607,15 @@ def employee_map_view(request):
         return redirect('admin_app:login')
 
     log_activity(request, employee, 'view_page', description='Viewed employee map page')
+    hidden_places = getattr(
+        settings,
+        "TOURISM_MAP_GUEST_HIDDEN_PLACES",
+        ["Bayawan City Hall"],
+    )
     return render(request, 'map.html', {
         'map_mode': 'employee',
         'can_edit_bookmarks': True,
+        'guest_hidden_place_names': hidden_places if isinstance(hidden_places, (list, tuple)) else [],
     })
 
 # Employee registration view
@@ -366,8 +637,8 @@ def employee_register(request):
 
 
 def login(request):
-    # Clear any existing session data.
-    request.session.flush()
+    # Clear only panel-related session markers.
+    _clear_admin_panel_session_state(request)
 
     if request.method == 'POST':
         recaptcha_ok, recaptcha_error = _verify_recaptcha_response(request)
@@ -425,8 +696,8 @@ def login(request):
                 messages.error(request, "Invalid username or password")
         else:
             # Not found in Employee table; try Accommodation Owner account (Guest model).
-            owner_candidate = Guest.objects.filter(email__iexact=username_or_email).first()
-            if owner_candidate and is_accommodation_owner(owner_candidate):
+            owner_candidate = _find_owner_login_candidate(username_or_email)
+            if owner_candidate:
                 auth_user = authenticate(
                     request,
                     username=owner_candidate.username,
@@ -465,8 +736,13 @@ def login(request):
                     request.session['accom_id'] = owned_accom.accom_id
                     request.session['company_name'] = owned_accom.company_name
                     request.session['company_type'] = owned_accom.company_type
+                    return redirect('admin_app:accommodation_dashboard')
 
-                return redirect('admin_app:accommodation_dashboard')
+                messages.info(
+                    request,
+                    "Owner account login successful. Please register your accommodation to continue.",
+                )
+                return redirect("admin_app:owner_hub")
 
             # Fallback compatibility: legacy accommodation account credential login.
             try:
@@ -563,6 +839,9 @@ def accommodation_register(request):
         messages.error(request, "Please log in first to register your accommodation.")
         login_url = f"{reverse('admin_app:login')}?next={quote(request.get_full_path(), safe='')}"
         return redirect(login_url)
+    if not request.user.is_active:
+        messages.error(request, "Your account is inactive. Please contact admin.")
+        return redirect("admin_app:login")
     pending_group, _ = Group.objects.get_or_create(name="accommodation_owner_pending")
     approved_group, _ = Group.objects.get_or_create(name="accommodation_owner")
     declined_group, _ = Group.objects.get_or_create(name="accommodation_owner_declined")
@@ -593,6 +872,22 @@ def accommodation_register(request):
         form = AccommodationRegistrationForm(request.POST, request.FILES, owner=request.user)
         if form.is_valid():
             accommodation = form.save()
+            notify_admins(
+                title="New accommodation pending approval",
+                message=f"{accommodation.company_name} was submitted and is awaiting review.",
+                notification_type="approval",
+                url=reverse("admin_app:pending_accommodation"),
+                dedupe_key=f"accom-pending-{accommodation.accom_id}",
+            )
+            create_notification(
+                recipient_guest=request.user,
+                title="Accommodation submission received",
+                message=f"{accommodation.company_name} is now pending admin approval.",
+                notification_type="approval",
+                url=reverse("admin_app:owner_hub"),
+                dedupe_key=f"owner-submitted-accom-{accommodation.accom_id}",
+                related_object_id=str(accommodation.accom_id),
+            )
             messages.success(request, "Accommodation submitted successfully. Await admin approval.")
             return redirect("admin_app:accommodation_register")
         else:
@@ -697,7 +992,7 @@ def owner_hub(request):
 
 
 @login_required
-def owner_accommodation_bookings(request):
+def owner_edit_accommodation(request, accom_id):
     pending_group, _ = Group.objects.get_or_create(name="accommodation_owner_pending")
     approved_group, _ = Group.objects.get_or_create(name="accommodation_owner")
     declined_group, _ = Group.objects.get_or_create(name="accommodation_owner_declined")
@@ -712,49 +1007,61 @@ def owner_accommodation_bookings(request):
         messages.error(request, "Please sign up as an accommodation owner first from the admin login page.")
         return redirect("admin_app:login")
 
-    bookings = (
-        AccommodationBooking.objects.select_related("guest", "accommodation", "room")
-        .filter(accommodation__owner=request.user)
-        .order_by("-booking_date")
+    accommodation = get_object_or_404(
+        Accomodation,
+        accom_id=accom_id,
+        owner=request.user,
     )
 
-    status_filter = str(request.GET.get("status") or "").strip().lower()
-    date_from_raw = str(request.GET.get("date_from") or "").strip()
-    date_to_raw = str(request.GET.get("date_to") or "").strip()
+    if request.method == "POST":
+        form = OwnerAccommodationEditForm(
+            request.POST,
+            request.FILES,
+            instance=accommodation,
+        )
+        if form.is_valid():
+            updated = form.save()
+            request.session["company_name"] = updated.company_name
+            request.session["company_type"] = updated.company_type
+            messages.success(request, "Accommodation profile updated successfully.")
+            return redirect("admin_app:owner_hub")
+        messages.error(request, "Please correct the highlighted fields.")
+    else:
+        form = OwnerAccommodationEditForm(instance=accommodation)
 
-    if status_filter in {"pending", "confirmed", "declined", "cancelled"}:
-        bookings = bookings.filter(status=status_filter)
+    return render(
+        request,
+        "owner_accommodation_edit.html",
+        {
+            "form": form,
+            "accommodation": accommodation,
+        },
+    )
 
-    try:
-        if date_from_raw:
-            date_from = dt.date.fromisoformat(date_from_raw)
-            bookings = bookings.filter(booking_date__date__gte=date_from)
-    except Exception:
-        date_from_raw = ""
 
-    try:
-        if date_to_raw:
-            date_to = dt.date.fromisoformat(date_to_raw)
-            bookings = bookings.filter(booking_date__date__lte=date_to)
-    except Exception:
-        date_to_raw = ""
-
-    context = {
-        "bookings": bookings,
-        "pending_count": bookings.filter(status="pending").count(),
-        "confirmed_count": bookings.filter(status="confirmed").count(),
-        "declined_count": bookings.filter(status="declined").count(),
-        "cancelled_count": bookings.filter(status="cancelled").count(),
-        "status_filter": status_filter,
-        "date_from": date_from_raw,
-        "date_to": date_to_raw,
-    }
-    return render(request, "owner_accommodation_bookings.html", context)
+@login_required
+def owner_accommodation_bookings(request):
+    messages.info(
+        request,
+        "Accommodation booking operations are no longer handled in-system. "
+        "Please use the Tourism Office reporting module.",
+    )
+    return redirect("admin_app:owner_report_submit")
 
 
 @login_required
 @require_POST
 def owner_accommodation_booking_update(request, booking_id):
+    messages.info(
+        request,
+        "Accommodation booking operations are disabled. "
+        "Use the Tourism Office reporting module instead.",
+    )
+    return redirect("admin_app:owner_report_submit")
+
+
+@login_required
+def owner_report_submit(request):
     pending_group, _ = Group.objects.get_or_create(name="accommodation_owner_pending")
     approved_group, _ = Group.objects.get_or_create(name="accommodation_owner")
     declined_group, _ = Group.objects.get_or_create(name="accommodation_owner_declined")
@@ -769,66 +1076,151 @@ def owner_accommodation_booking_update(request, booking_id):
         messages.error(request, "Please sign up as an accommodation owner first from the admin login page.")
         return redirect("admin_app:login")
 
-    booking = get_object_or_404(
-        AccommodationBooking.objects.select_related("accommodation", "room"),
-        booking_id=booking_id,
-        accommodation__owner=request.user,
-    )
-    action = str(request.POST.get("action") or "").strip().lower()
+    owner_accommodations_qs = Accomodation.objects.filter(
+        owner=request.user,
+        approval_status="accepted",
+        is_active=True,
+    ).order_by("company_name").prefetch_related("rooms")
+    owner_accommodations = list(owner_accommodations_qs)
+    owner_accommodation_room_rows = []
+    for accom in owner_accommodations:
+        room_rows = list(accom.rooms.all().order_by("room_name", "room_id"))
+        owner_accommodation_room_rows.append(
+            {
+                "accom_id": accom.accom_id,
+                "rooms": room_rows,
+            }
+        )
 
-    if action == "confirm":
-        booking.status = "confirmed"
-        messages.success(request, "Booking confirmed.")
-    elif action == "edit":
-        if booking.status not in {"pending", "confirmed"}:
-            messages.error(request, "Only pending or confirmed bookings can be edited.")
-            return redirect("admin_app:owner_accommodation_bookings")
-
-        check_in_raw = str(request.POST.get("check_in") or "").strip()
-        check_out_raw = str(request.POST.get("check_out") or "").strip()
-        guests_raw = str(request.POST.get("num_guests") or "").strip()
-
-        try:
-            check_in_value = dt.date.fromisoformat(check_in_raw)
-            check_out_value = dt.date.fromisoformat(check_out_raw)
-        except Exception:
-            messages.error(request, "Invalid check-in or check-out date.")
-            return redirect("admin_app:owner_accommodation_bookings")
+    if request.method == "POST":
+        accom_id = str(request.POST.get("accommodation_id") or "").strip()
+        period_raw = str(request.POST.get("reporting_period") or "").strip()
+        status_raw = str(request.POST.get("status") or "submitted").strip().lower()
 
         try:
-            num_guests_value = int(guests_raw)
+            accommodation = owner_accommodations.get(accom_id=accom_id)
+        except Accomodation.DoesNotExist:
+            messages.error(request, "Please select a valid accommodation listing.")
+            return redirect("admin_app:owner_report_submit")
+
+        try:
+            period_value = dt.date.fromisoformat(f"{period_raw}-01")
         except Exception:
-            messages.error(request, "Number of guests must be a valid number.")
-            return redirect("admin_app:owner_accommodation_bookings")
+            messages.error(request, "Reporting period must use YYYY-MM format.")
+            return redirect("admin_app:owner_report_submit")
 
-        if num_guests_value < 1:
-            messages.error(request, "Number of guests must be at least 1.")
-            return redirect("admin_app:owner_accommodation_bookings")
-        if check_out_value <= check_in_value:
-            messages.error(request, "Check-out date must be after check-in date.")
-            return redirect("admin_app:owner_accommodation_bookings")
+        def _to_non_negative_int(raw_value):
+            try:
+                value = int(str(raw_value or "0").strip())
+            except Exception:
+                return 0
+            return max(value, 0)
 
-        booking.check_in = check_in_value
-        booking.check_out = check_out_value
-        booking.num_guests = num_guests_value
-        messages.success(request, "Booking details updated.")
-    elif action == "decline":
-        booking.status = "declined"
-        messages.success(request, "Booking declined.")
-    elif action == "cancel":
-        booking.status = "cancelled"
-        booking.cancellation_reason = request.POST.get("reason") or "Cancelled by accommodation owner."
-        booking.cancellation_date = timezone.now()
-        messages.success(request, "Booking cancelled.")
-    else:
-        messages.error(request, "Invalid booking action.")
-        return redirect("admin_app:owner_accommodation_bookings")
+        room_rows = list(
+            Room.objects.filter(accommodation=accommodation).order_by("room_name", "room_id")
+        )
+        has_room_inputs = any(
+            (
+                f"room_checkins_{room.room_id}" in request.POST
+                or f"room_checkouts_{room.room_id}" in request.POST
+                or f"room_guests_{room.room_id}" in request.POST
+            )
+            for room in room_rows
+        )
 
-    booking.save()
-    if booking.room_id:
+        room_usage_payload = []
+        for room in room_rows:
+            check_ins = _to_non_negative_int(request.POST.get(f"room_checkins_{room.room_id}"))
+            check_outs = _to_non_negative_int(request.POST.get(f"room_checkouts_{room.room_id}"))
+            guests_count = _to_non_negative_int(request.POST.get(f"room_guests_{room.room_id}"))
+            room_usage_payload.append(
+                {
+                    "room": room,
+                    "room_name_snapshot": str(room.room_name or "").strip(),
+                    "check_ins": check_ins,
+                    "check_outs": check_outs,
+                    "guests_count": guests_count,
+                }
+            )
+
+        if has_room_inputs:
+            guests_checked_in = sum(int(row.get("check_ins") or 0) for row in room_usage_payload)
+            guests_checked_out = sum(int(row.get("check_outs") or 0) for row in room_usage_payload)
+            rooms_used = sum(
+                1
+                for row in room_usage_payload
+                if int(row.get("check_ins") or 0) > 0 or int(row.get("check_outs") or 0) > 0
+            )
+        else:
+            guests_checked_in = _to_non_negative_int(request.POST.get("guests_checked_in"))
+            guests_checked_out = _to_non_negative_int(request.POST.get("guests_checked_out"))
+            rooms_used = _to_non_negative_int(request.POST.get("rooms_used"))
+
+        defaults = {
+            "owner": request.user,
+            "guests_checked_in": guests_checked_in,
+            "guests_checked_out": guests_checked_out,
+            "rooms_used": rooms_used,
+            "room_usage_notes": str(request.POST.get("room_usage_notes") or "").strip(),
+            "nationality_breakdown": str(request.POST.get("nationality_breakdown") or "").strip(),
+            "additional_remarks": str(request.POST.get("additional_remarks") or "").strip(),
+            "status": status_raw if status_raw in {"draft", "submitted"} else "submitted",
+            "review_notes": "",
+            "reviewed_by": None,
+        }
         with transaction.atomic():
-            sync_room_current_availability(booking.room)
-    return redirect("admin_app:owner_accommodation_bookings")
+            report, created = OwnerMonthlyReport.objects.update_or_create(
+                accommodation=accommodation,
+                reporting_period=period_value,
+                defaults=defaults,
+            )
+            if has_room_inputs:
+                MonthlyReportRoomUsage.objects.filter(monthly_report=report).delete()
+                rows_to_create = []
+                for row in room_usage_payload:
+                    if (
+                        int(row.get("check_ins") or 0) <= 0
+                        and int(row.get("check_outs") or 0) <= 0
+                        and int(row.get("guests_count") or 0) <= 0
+                    ):
+                        continue
+                    rows_to_create.append(
+                        MonthlyReportRoomUsage(
+                            monthly_report=report,
+                            room=row.get("room"),
+                            room_name_snapshot=str(row.get("room_name_snapshot") or "").strip(),
+                            check_ins=int(row.get("check_ins") or 0),
+                            check_outs=int(row.get("check_outs") or 0),
+                            guests_count=int(row.get("guests_count") or 0),
+                        )
+                    )
+                if rows_to_create:
+                    MonthlyReportRoomUsage.objects.bulk_create(rows_to_create)
+        if created:
+            messages.success(request, "Monthly report submitted successfully.")
+        else:
+            messages.success(request, "Monthly report updated successfully.")
+        return redirect("admin_app:owner_report_submit")
+
+    report_rows_qs = OwnerMonthlyReport.objects.select_related("accommodation").prefetch_related(
+        "room_usage_rows",
+        "room_usage_rows__room",
+    ).filter(
+        owner=request.user
+    ).order_by("-reporting_period", "-submitted_at")
+    report_paginator = Paginator(report_rows_qs, 12)
+    report_page = request.GET.get("page")
+    report_rows = report_paginator.get_page(report_page)
+    return render(
+        request,
+        "owner_report_submit.html",
+        {
+            "owner_accommodations": owner_accommodations,
+            "owner_accommodation_room_rows": owner_accommodation_room_rows,
+            "report_rows": report_rows,
+            "report_paginator": report_paginator,
+        },
+    )
 
 
 @login_required
@@ -946,6 +1338,15 @@ def accommodation_owner_update(request, user_id):
     if action == "accept":
         owner_user.groups.remove(pending_group, declined_group)
         owner_user.groups.add(approved_group)
+        create_notification(
+            recipient_guest=owner_user,
+            title="Owner account approved",
+            message="Your accommodation owner account was approved. You may now access the Owner Hub.",
+            notification_type="approval",
+            url=reverse("admin_app:owner_hub"),
+            dedupe_key=f"owner-account-accepted-{owner_user.pk}",
+            related_object_id=str(owner_user.pk),
+        )
         messages.success(request, f"Approved accommodation owner account: {owner_user.email}")
     elif action == "decline":
         owner_user.groups.remove(pending_group, approved_group)
@@ -956,6 +1357,15 @@ def accommodation_owner_update(request, user_id):
             rejection_reason="Owner account was declined by admin.",
             reviewed_at=timezone.now(),
         )
+        create_notification(
+            recipient_guest=owner_user,
+            title="Owner account declined",
+            message="Your accommodation owner account request was declined. Please contact tourism office staff.",
+            notification_type="approval",
+            url=reverse("admin_app:login"),
+            dedupe_key=f"owner-account-declined-{owner_user.pk}",
+            related_object_id=str(owner_user.pk),
+        )
         messages.success(request, f"Declined accommodation owner account: {owner_user.email}")
     else:
         messages.error(request, "Invalid owner approval action.")
@@ -965,57 +1375,69 @@ def accommodation_owner_update(request, user_id):
 
 @admin_required
 def accommodation_bookings(request):
-    pending_bookings = AccommodationBooking.objects.select_related(
-        "guest", "accommodation", "room"
-    ).filter(status="pending").order_by("-booking_date")
-
-    confirmed_bookings = AccommodationBooking.objects.select_related(
-        "guest", "accommodation", "room"
-    ).filter(status="confirmed").order_by("-booking_date")
-
-    declined_bookings = AccommodationBooking.objects.select_related(
-        "guest", "accommodation", "room"
-    ).filter(status="declined").order_by("-booking_date")
-
-    cancelled_bookings = AccommodationBooking.objects.select_related(
-        "guest", "accommodation", "room"
-    ).filter(status="cancelled").order_by("-booking_date")
-
-    context = {
-        "pending_bookings": pending_bookings,
-        "confirmed_bookings": confirmed_bookings,
-        "declined_bookings": declined_bookings,
-        "cancelled_bookings": cancelled_bookings,
-    }
-    return render(request, "pending_accommodation_bookings.html", context)
+    messages.info(
+        request,
+        "Accommodation booking operations are no longer in-system. "
+        "You are now viewing owner-submitted monthly tourism reports.",
+    )
+    return redirect("admin_app:owner_reports_review")
 
 
 @admin_required
 @require_POST
 def accommodation_booking_update(request, booking_id):
-    booking = get_object_or_404(AccommodationBooking, booking_id=booking_id)
-    action = request.POST.get("action")
+    messages.info(
+        request,
+        "Accommodation booking operations are disabled in this release scope.",
+    )
+    return redirect("admin_app:owner_reports_review")
 
-    if action == "confirm":
-        booking.status = "confirmed"
-        messages.success(request, "Booking confirmed.")
-    elif action == "decline":
-        booking.status = "declined"
-        messages.success(request, "Booking declined.")
-    elif action == "cancel":
-        booking.status = "cancelled"
-        booking.cancellation_reason = request.POST.get("reason") or "Cancelled by admin."
-        booking.cancellation_date = timezone.now()
-        messages.success(request, "Booking cancelled.")
-    else:
-        messages.error(request, "Invalid action.")
-        return redirect('admin_app:accommodation_bookings')
 
-    booking.save()
-    if booking.room_id:
-        with transaction.atomic():
-            sync_room_current_availability(booking.room)
-    return redirect('admin_app:accommodation_bookings')
+@admin_required
+def owner_reports_review(request):
+    if request.method == "POST":
+        report_id = request.POST.get("report_id")
+        action = str(request.POST.get("action") or "").strip().lower()
+        report = get_object_or_404(OwnerMonthlyReport, report_id=report_id)
+        reviewer = None
+        employee_id = request.session.get("employee_id")
+        if employee_id:
+            reviewer = Employee.objects.filter(emp_id=employee_id).first()
+
+        if action == "mark_reviewed":
+            report.status = "reviewed"
+            report.review_notes = str(request.POST.get("review_notes") or "").strip()
+            report.reviewed_by = reviewer
+            report.save(update_fields=["status", "review_notes", "reviewed_by", "updated_at"])
+            messages.success(request, "Report marked as reviewed.")
+        elif action == "return_revision":
+            report.status = "returned"
+            report.review_notes = str(request.POST.get("review_notes") or "").strip() or "Please revise and resubmit."
+            report.reviewed_by = reviewer
+            report.save(update_fields=["status", "review_notes", "reviewed_by", "updated_at"])
+            messages.success(request, "Report returned for revision.")
+        else:
+            messages.error(request, "Invalid report review action.")
+        return redirect("admin_app:owner_reports_review")
+
+    rows_qs = OwnerMonthlyReport.objects.select_related("owner", "accommodation", "reviewed_by").prefetch_related(
+        "room_usage_rows",
+        "room_usage_rows__room",
+    ).order_by(
+        "-reporting_period",
+        "-submitted_at",
+    )
+    review_paginator = Paginator(rows_qs, 20)
+    review_page = request.GET.get("page")
+    rows = review_paginator.get_page(review_page)
+    return render(
+        request,
+        "owner_reports_review.html",
+        {
+            "report_rows": rows,
+            "review_paginator": review_paginator,
+        },
+    )
 
 @admin_required
 def accommodation_update(request, pk):
@@ -1051,6 +1473,22 @@ def accommodation_update(request, pk):
                     "rejection_reason",
                 ]
             )
+            if accom.owner_id:
+                owner_title = "Accommodation listing approved" if new_status == "accepted" else "Accommodation listing declined"
+                owner_message = (
+                    f"{accom.company_name} has been approved and is now eligible for recommendations/bookings."
+                    if new_status == "accepted"
+                    else f"{accom.company_name} was declined. Review notes from admin for next steps."
+                )
+                create_notification(
+                    recipient_guest=accom.owner,
+                    title=owner_title,
+                    message=owner_message,
+                    notification_type="approval",
+                    url=reverse("admin_app:owner_hub"),
+                    dedupe_key=f"accom-review-{accom.accom_id}-{new_status}",
+                    related_object_id=str(accom.accom_id),
+                )
             messages.success(request, "Status updated successfully.")
         else:
             messages.error(request, "Invalid status selected.")
@@ -1068,16 +1506,43 @@ from .models import Employee
 def update_employees(request, emp_id):
     employee = get_object_or_404(Employee, emp_id=emp_id)
     if request.method == 'POST':
-        # Update all editable fields
-        employee.first_name = request.POST.get('first_name')
-        employee.last_name = request.POST.get('last_name')
-        employee.middle_name = request.POST.get('middle_name')
-        employee.phone_number = request.POST.get('phone_number')
-        employee.email = request.POST.get('email')
-        employee.age = request.POST.get('age')
-        employee.sex = request.POST.get('sex')
-        employee.role = request.POST.get('role')
-        employee.status = request.POST.get('status')
+        # Update editable fields safely: do not overwrite required columns with NULL/blank.
+        first_name = str(request.POST.get('first_name') or "").strip()
+        last_name = str(request.POST.get('last_name') or "").strip()
+        middle_name = str(request.POST.get('middle_name') or "").strip()
+        phone_number = str(request.POST.get('phone_number') or "").strip()
+        email = str(request.POST.get('email') or "").strip()
+        age_raw = str(request.POST.get('age') or "").strip()
+        sex_raw = str(request.POST.get('sex') or "").strip().upper()
+        role_raw = str(request.POST.get('role') or "").strip()
+        status_raw = str(request.POST.get('status') or "").strip().lower()
+
+        if first_name:
+            employee.first_name = first_name
+        if last_name:
+            employee.last_name = last_name
+        # middle_name is optional; allow clearing to blank.
+        employee.middle_name = middle_name or None
+        if phone_number:
+            employee.phone_number = phone_number
+        if email:
+            employee.email = email
+        if age_raw:
+            try:
+                employee.age = int(age_raw)
+            except (TypeError, ValueError):
+                messages.error(request, "Invalid age value.")
+                return redirect('admin_app:pending_employees')
+        if sex_raw in {"M", "F"}:
+            employee.sex = sex_raw
+        if role_raw:
+            employee.role = role_raw
+        # status is required in DB; preserve existing status when missing/invalid.
+        if status_raw in {"accepted", "declined", "pending"}:
+            employee.status = status_raw
+        else:
+            employee.status = str(employee.status or "pending").strip().lower() or "pending"
+
         # Handle file upload for profile picture if provided
         if request.FILES.get('profile_picture'):
             employee.profile_picture = request.FILES.get('profile_picture')
@@ -1316,15 +1781,30 @@ def employee_assigned_tours(request):
     except Employee.DoesNotExist:
         return redirect('admin_app:login')
     
-    # Get assigned tours
-    assignments = TourAssignment.objects.filter(employee=employee).select_related('schedule', 'schedule__tour')
+    # Get assigned tours for this employee only
+    assignments = (
+        TourAssignment.objects
+        .filter(employee=employee)
+        .select_related('schedule', 'schedule__tour')
+        .order_by('schedule__start_time')
+    )
+    assigned_schedule_ids = list(assignments.values_list("schedule_id", flat=True))
+    pending_requests = (
+        Pending.objects.select_related("guest_id", "tour_id", "sched_id")
+        .filter(sched_id_id__in=assigned_schedule_ids, status__iexact="pending")
+        .exclude(sched_id__status__iexact="cancelled")
+        .order_by("sched_id__start_time", "-id")
+    )
     
     # Log the activity
     log_activity(request, employee, 'view_page', description='Viewed assigned tours')
     
-    # Route keeps compatibility, but sends users to the complete dashboard view
-    # so all KPI cards and analytics load consistently.
-    return redirect('admin_app:employee_dashboard')
+    context = {
+        'employee': employee,
+        'assignments': assignments,
+        'pending_requests': pending_requests,
+    }
+    return render(request, 'employee_assigned_tours.html', context)
 
 
 def employee_tour_calendar(request):
@@ -1370,9 +1850,7 @@ def employee_tour_calendar(request):
             "description": sched.tour.description or "",
         })
 
-    initial_calendar_date = timezone.localdate().isoformat()
-    if calendar_tours:
-        initial_calendar_date = calendar_tours[0]["start"]
+    initial_calendar_date = ""
 
     context = {
         'employee': employee,
@@ -2064,13 +2542,31 @@ def owner_room_bookings_check_in(request):
             }
         )
 
+    skip_reasons = {
+        str(item.get("reason") or "").strip().lower()
+        for item in skipped
+        if isinstance(item, dict)
+    }
+    if skip_reasons == {"not_confirmed"}:
+        message_text = (
+            "Selected booking(s) are still pending admin confirmation. "
+            "Check-in is disabled until the booking status becomes Confirmed."
+        )
+    elif skip_reasons == {"outside_checkin_window"}:
+        message_text = (
+            "Selected booking(s) are outside the check-in window. "
+            "Check-in is only allowed from check-in date until before check-out date."
+        )
+    else:
+        message_text = "No selected bookings are currently eligible for check-in."
+
     return JsonResponse(
         {
             "status": "error",
             "checked_in_count": 0,
             "checked_in_ids": [],
             "skipped": skipped,
-            "message": "No selected bookings are currently eligible for check-in.",
+            "message": message_text,
         },
         status=400,
     )
@@ -2898,6 +3394,15 @@ def assign_employee_direct(request):
             TourAssignment.objects.create(
                 employee=employee,
                 schedule=tour_schedule
+            )
+            create_notification(
+                recipient_employee=employee,
+                title="New tour assignment",
+                message=f"You were assigned to {tour_schedule.tour.tour_name} ({tour_schedule.sched_id}).",
+                notification_type="assignment",
+                url=reverse("tour_app:pending_view"),
+                dedupe_key=f"tour-assignment-{tour_schedule.sched_id}-emp-{employee.emp_id}",
+                related_object_id=str(tour_schedule.sched_id),
             )
             messages.success(request, f"Successfully assigned {employee.first_name} {employee.last_name} to {tour_schedule.tour.tour_name}.")
 

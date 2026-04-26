@@ -20,13 +20,17 @@
     .error { color: #b71c1c; font-size: 0.85rem; margin-top: 4px; }
     .btn { border: none; border-radius: 7px; background: #875a34; color: #fff; padding: 10px 14px; font-weight: 700; cursor: pointer; }
     .btn:hover { background: #6f4e37; }
-    table { width: 100%; border-collapse: collapse; margin-top: 10px; }
-    th, td { border-bottom: 1px solid #ececec; padding: 10px; text-align: left; font-size: 0.92rem; }
+    .table-wrap { width: 100%; overflow-x: auto; border: 1px solid #ececec; border-radius: 8px; background: #fff; }
+    table { width: 100%; min-width: 920px; border-collapse: collapse; margin-top: 10px; table-layout: auto; }
+    th, td { border-bottom: 1px solid #ececec; padding: 10px; text-align: left; font-size: clamp(0.84rem, 0.24vw + 0.72rem, 0.92rem); vertical-align: top; overflow-wrap: break-word; }
     th { background: #fafafa; }
     .messages { margin-bottom: 10px; }
     .msg { border-radius: 6px; padding: 9px 10px; margin-bottom: 8px; }
     .msg.success { background: #e8f5e9; color: #1b5e20; }
     .msg.error { background: #ffebee; color: #b71c1c; }
+    @media (max-width: 900px) {
+      table { min-width: 860px; }
+    }
   </style>
 </head>
 <body>
@@ -51,6 +55,17 @@
 
         <form method="post" enctype="multipart/form-data">
           {% csrf_token %}
+          <datalist id="canonical-bayawan-locations">
+            <option value="Bayawan City"></option>
+            <option value="Bayawan City Proper"></option>
+            <option value="Poblacion, Bayawan City"></option>
+            <option value="Terminal Area, Bayawan City"></option>
+            <option value="Tinago, Bayawan City"></option>
+            <option value="Ubos, Bayawan City"></option>
+            <option value="Villareal, Bayawan City"></option>
+            <option value="Suba, Bayawan City"></option>
+            <option value="Boyco, Bayawan City"></option>
+          </datalist>
           {% for field in form %}
           <div class="field">
             <label for="{{ field.id_for_label }}">{{ field.label }}</label>
@@ -65,6 +80,7 @@
 
       <div class="panel">
         <h1>Recently Encoded Accommodations</h1>
+        <div class="table-wrap">
         <table>
           <thead>
             <tr>
@@ -91,6 +107,7 @@
             {% endfor %}
           </tbody>
         </table>
+        </div>
       </div>
     </div>
   </div>

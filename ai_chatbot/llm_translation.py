@@ -30,7 +30,7 @@ def _gemini_client():
 
 
 def _gemini_model():
-    return str(os.getenv("GEMINI_MODEL", "gemini-1.5-flash") or "").strip() or "gemini-1.5-flash"
+    return str(os.getenv("GEMINI_MODEL", "gemini-2.5-flash-lite") or "").strip() or "gemini-2.5-flash-lite"
 
 
 def _extract_json_payload(text):
@@ -71,6 +71,37 @@ def _normalize_language_code(value):
     return normalized if normalized in {"en", "tl", "ceb", "es"} else "en"
 
 
+def _looks_like_english_chat_command(text):
+    normalized = re.sub(r"\s+", " ", str(text or "").strip().lower())
+    if not normalized:
+        return False
+    if not normalized.isascii():
+        return False
+    # Performance fast-path: common English command vocabulary used by the app.
+    command_markers = (
+        "help",
+        "plan",
+        "trip",
+        "budget",
+        "hotel",
+        "inn",
+        "accommodation",
+        "stay",
+        "tour",
+        "book",
+        "directions",
+        "how to",
+        "how far",
+        "where",
+        "show",
+        "summary",
+        "report",
+        "yes",
+        "no",
+    )
+    return any(marker in normalized for marker in command_markers)
+
+
 def translate_to_english(user_input):
     text = str(user_input or "").strip()
     if not text:
@@ -78,6 +109,8 @@ def translate_to_english(user_input):
     # Numeric/ID-only replies (e.g., "2", "1500", "room 12") should not trigger
     # language detection because they can be misclassified by external models.
     if not re.search(r"[A-Za-z]", text):
+        return text, "en"
+    if _looks_like_english_chat_command(text):
         return text, "en"
 
     client = _gemini_client()

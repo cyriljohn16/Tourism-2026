@@ -1,0 +1,506 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>{{ accommodation.company_name }} | Accommodation Details</title>
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --detail-bg: #f2f6fc;
+      --detail-panel: #ffffff;
+      --detail-text: #223247;
+      --detail-muted: #4e6279;
+      --detail-border: #d6e3f2;
+      --detail-accent: #1f66d0;
+      --detail-accent-soft: #edf4ff;
+      --detail-warm: #6f4e37;
+      --detail-warm-soft: #b1743f;
+      --detail-radius: 18px;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: "Poppins", Arial, sans-serif;
+      background: var(--detail-bg);
+      color: var(--detail-text);
+    }
+
+    .detail-wrap {
+      width: min(1120px, 100%);
+      margin: 0 auto;
+      padding: 20px 18px 32px;
+      display: grid;
+      gap: 14px;
+    }
+
+    .detail-topbar {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 10px;
+      justify-content: space-between;
+    }
+
+    .detail-back-links {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      align-items: center;
+    }
+
+    .detail-back-link {
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 36px;
+      padding: 8px 12px;
+      border-radius: 999px;
+      border: 1px solid var(--detail-border);
+      background: #fff;
+      color: #244870;
+      font-size: 0.8rem;
+      font-weight: 700;
+      transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    .detail-back-link:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 18px rgba(22, 55, 96, 0.14);
+    }
+
+    .detail-hero {
+      border-radius: 22px;
+      padding: clamp(14px, 2.4vw, 22px);
+      background: linear-gradient(135deg, var(--detail-warm), var(--detail-warm-soft));
+      color: #fff;
+      box-shadow: 0 16px 34px rgba(45, 36, 31, 0.24);
+      display: grid;
+      gap: 10px;
+    }
+
+    .detail-eyebrow {
+      margin: 0;
+      font-size: 0.78rem;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      font-weight: 700;
+      color: rgba(248, 250, 255, 0.9);
+    }
+
+    .detail-title {
+      margin: 0;
+      font-size: clamp(1.4rem, 1.1vw + 1rem, 2rem);
+      line-height: 1.18;
+    }
+
+    .detail-subtitle {
+      margin: 0;
+      font-size: 0.92rem;
+      line-height: 1.45;
+      color: rgba(248, 250, 255, 0.94);
+      max-width: 780px;
+    }
+
+    .detail-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .detail-btn {
+      text-decoration: none;
+      border-radius: 999px;
+      min-height: 38px;
+      padding: 8px 14px;
+      border: 1px solid #dbe5f2;
+      background: linear-gradient(180deg, #ffffff, #edf4ff);
+      color: #174377;
+      font-size: 0.8rem;
+      font-weight: 700;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      transition: transform 0.2s ease, box-shadow 0.2s ease;
+      cursor: pointer;
+    }
+
+    .detail-btn:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 10px 20px rgba(16, 62, 122, 0.18);
+    }
+
+    .detail-btn.primary {
+      background: linear-gradient(135deg, #1f66d0, #1ba0bc);
+      color: #fff;
+      border-color: transparent;
+    }
+
+    .detail-notice {
+      border-radius: 12px;
+      padding: 10px 12px;
+      border: 1px solid #f1d6ab;
+      background: #fff8eb;
+      color: #7a4b11;
+      font-size: 0.82rem;
+      line-height: 1.45;
+      font-weight: 600;
+    }
+
+    .detail-panel {
+      border: 1px solid var(--detail-border);
+      border-radius: var(--detail-radius);
+      background: var(--detail-panel);
+      box-shadow: 0 12px 24px rgba(20, 48, 80, 0.1);
+      padding: 14px;
+      display: grid;
+      gap: 12px;
+    }
+
+    .detail-panel-head {
+      margin: 0;
+      font-size: 1rem;
+      color: #173f6d;
+      font-weight: 800;
+    }
+
+    .detail-gallery-main {
+      border-radius: 14px;
+      overflow: hidden;
+      border: 1px solid #d7e5f3;
+      background: #eaf2fb;
+      aspect-ratio: 16 / 9;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+    }
+
+    .detail-gallery-main img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+
+    .detail-gallery-thumbs {
+      display: grid;
+      grid-auto-flow: column;
+      grid-auto-columns: minmax(96px, 1fr);
+      gap: 8px;
+      overflow-x: auto;
+      padding-bottom: 2px;
+    }
+
+    .detail-gallery-thumbs::-webkit-scrollbar {
+      height: 7px;
+    }
+
+    .detail-gallery-thumbs::-webkit-scrollbar-track {
+      background: #edf4ff;
+      border-radius: 999px;
+    }
+
+    .detail-gallery-thumbs::-webkit-scrollbar-thumb {
+      background: #c2d6ef;
+      border-radius: 999px;
+    }
+
+    .detail-thumb-btn {
+      border: 1px solid #d4e2f2;
+      border-radius: 10px;
+      overflow: hidden;
+      padding: 0;
+      background: #f2f7ff;
+      cursor: pointer;
+      aspect-ratio: 4 / 3;
+    }
+
+    .detail-thumb-btn img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+
+    .detail-thumb-btn.is-active {
+      border-color: #6ea0e1;
+      box-shadow: 0 0 0 2px rgba(110, 160, 225, 0.28);
+    }
+
+    .detail-gallery-empty {
+      color: #5b7394;
+      font-size: 0.82rem;
+      font-weight: 700;
+      text-align: center;
+      padding: 16px;
+    }
+
+    .detail-meta-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 10px;
+    }
+
+    .detail-meta-box {
+      border: 1px solid #dce8f5;
+      border-radius: 12px;
+      background: #f8fbff;
+      padding: 10px;
+      display: grid;
+      gap: 4px;
+    }
+
+    .detail-meta-label {
+      margin: 0;
+      font-size: 0.72rem;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      font-weight: 700;
+      color: #647a94;
+    }
+
+    .detail-meta-value {
+      margin: 0;
+      color: #1f3553;
+      font-size: 0.88rem;
+      line-height: 1.4;
+      font-weight: 700;
+    }
+
+    .detail-amenities {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .detail-amenity-chip {
+      border-radius: 999px;
+      padding: 6px 10px;
+      border: 1px solid #d4e2f3;
+      background: var(--detail-accent-soft);
+      color: #22496f;
+      font-size: 0.75rem;
+      font-weight: 700;
+    }
+
+    .detail-rooms {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 10px;
+    }
+
+    .detail-room-card {
+      border: 1px solid #d8e4f2;
+      border-radius: 12px;
+      padding: 11px;
+      background: linear-gradient(180deg, #fff, #f8fbff);
+      display: grid;
+      gap: 4px;
+    }
+
+    .detail-room-title {
+      margin: 0;
+      font-size: 0.92rem;
+      font-weight: 800;
+      color: #1f3656;
+      line-height: 1.3;
+    }
+
+    .detail-room-line {
+      margin: 0;
+      font-size: 0.79rem;
+      line-height: 1.42;
+      color: var(--detail-muted);
+    }
+
+    .detail-room-image-wrap {
+      border: 1px solid #d8e4f2;
+      border-radius: 10px;
+      overflow: hidden;
+      background: #edf3fb;
+      aspect-ratio: 16 / 10;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 4px;
+    }
+
+    .detail-room-image-wrap img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+
+    .detail-room-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-top: 4px;
+    }
+
+    @media (max-width: 768px) {
+      .detail-wrap {
+        padding: 14px 12px 22px;
+      }
+
+      .detail-hero {
+        border-radius: 18px;
+      }
+
+      .detail-btn {
+        width: 100%;
+      }
+
+      .detail-gallery-thumbs {
+        grid-auto-columns: minmax(88px, 1fr);
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="detail-wrap">
+    <div class="detail-topbar">
+      <div class="detail-back-links">
+        <a class="detail-back-link" href="{% url 'main-page' %}#approved-stays">Back to Main Page</a>
+        <a class="detail-back-link" href="{% url 'accommodation_page' %}">View All Accommodations</a>
+      </div>
+    </div>
+
+    <section class="detail-hero">
+      <p class="detail-eyebrow">Approved Accommodation</p>
+      <h1 class="detail-title">{{ accommodation.company_name }}</h1>
+      <p class="detail-subtitle">{{ accommodation.location }}</p>
+      <div class="detail-actions">
+        <a href="#" class="detail-btn open-chat-query" data-query="create booking preview for {{ accommodation.company_name|escape }}">Create Booking Preview</a>
+        {% if official_page_url %}
+        <a href="{{ official_page_url }}" target="_blank" rel="noopener noreferrer" class="detail-btn primary">Open Official Page</a>
+        {% endif %}
+        {% if facebook_url %}
+        <a href="{{ facebook_url }}" target="_blank" rel="noopener noreferrer" class="detail-btn">View Facebook</a>
+        {% endif %}
+      </div>
+    </section>
+
+    <div class="detail-notice">
+      This system provides booking previews only. Final booking is completed directly with the accommodation.
+    </div>
+
+    <section class="detail-panel">
+      <h2 class="detail-panel-head">Accommodation Gallery</h2>
+      {% if gallery_images %}
+      <figure class="detail-gallery-main">
+        <img id="detailGalleryMainImage" src="{{ gallery_images.0.url }}" alt="{{ gallery_images.0.label }}" loading="lazy" onerror="this.style.display='none'; if(this.nextElementSibling){this.nextElementSibling.style.display='block';}">
+        <figcaption class="detail-gallery-empty" style="display:none;">No image available</figcaption>
+      </figure>
+      {% if gallery_images|length > 1 %}
+      <div class="detail-gallery-thumbs">
+        {% for image in gallery_images %}
+        <button type="button"
+                class="detail-thumb-btn {% if forloop.first %}is-active{% endif %}"
+                data-gallery-thumb="1"
+                data-gallery-url="{{ image.url }}"
+                data-gallery-alt="{{ image.label }}">
+          <img src="{{ image.url }}" alt="{{ image.label }}" loading="lazy" onerror="this.style.display='none'; this.parentElement.textContent='No image';">
+        </button>
+        {% endfor %}
+      </div>
+      {% endif %}
+      {% else %}
+      <div class="detail-gallery-main">
+        <div class="detail-gallery-empty">No image available</div>
+      </div>
+      {% endif %}
+    </section>
+
+    <section class="detail-panel">
+      <h2 class="detail-panel-head">Accommodation Details</h2>
+      <div class="detail-meta-grid">
+        <article class="detail-meta-box">
+          <p class="detail-meta-label">Location</p>
+          <p class="detail-meta-value">{{ accommodation.location }}</p>
+        </article>
+        <article class="detail-meta-box">
+          <p class="detail-meta-label">Starting Rate</p>
+          <p class="detail-meta-value">
+            {% if lowest_rate %}
+              PHP {{ lowest_rate|floatformat:0 }} / night
+            {% else %}
+              To be confirmed
+            {% endif %}
+          </p>
+        </article>
+      </div>
+      <p class="detail-room-line">{{ accommodation.description|default:"No detailed description available yet." }}</p>
+      <div class="detail-amenities">
+        {% if amenities %}
+          {% for amenity in amenities %}
+          <span class="detail-amenity-chip">{{ amenity }}</span>
+          {% endfor %}
+        {% else %}
+          <span class="detail-amenity-chip">Amenities will be updated soon</span>
+        {% endif %}
+      </div>
+    </section>
+
+    <section class="detail-panel">
+      <h2 class="detail-panel-head">Room Options</h2>
+      <div class="detail-rooms">
+        {% for room in room_rows %}
+        <article class="detail-room-card">
+          <div class="detail-room-image-wrap">
+            {% if room.image_url %}
+            <img src="{{ room.image_url }}" alt="{{ room.room_name }}" loading="lazy" onerror="this.style.display='none'; if(this.nextElementSibling){this.nextElementSibling.style.display='flex';}">
+            <div class="detail-gallery-empty" style="display:none;">No room image</div>
+            {% else %}
+            <div class="detail-gallery-empty">No room image</div>
+            {% endif %}
+          </div>
+          <h3 class="detail-room-title">{{ room.room_name }}</h3>
+          <p class="detail-room-line">Rate: PHP {{ room.price_per_night|default_if_none:0|floatformat:0 }} / night</p>
+          <p class="detail-room-line">Capacity: up to {{ room.person_limit|default_if_none:0 }} guests</p>
+          {% if room.description %}
+          <p class="detail-room-line">{{ room.description|truncatechars:120 }}</p>
+          {% endif %}
+          <p class="detail-room-line">Status: {{ room.status }}</p>
+          <div class="detail-room-actions">
+            <a href="#"
+               class="detail-btn open-chat-query"
+               data-query="create booking preview for {{ accommodation.company_name|escape }} {{ room.room_name|escape }}">Create Booking Preview</a>
+          </div>
+        </article>
+        {% empty %}
+        <article class="detail-room-card">
+          <h3 class="detail-room-title">No room listings yet</h3>
+          <p class="detail-room-line">Room information will appear once published by the accommodation.</p>
+        </article>
+        {% endfor %}
+      </div>
+    </section>
+  </main>
+
+  {% include "components/guest_chat_widget.html" %}
+  <script>
+    (function() {
+      const mainImage = document.getElementById('detailGalleryMainImage');
+      const thumbs = Array.from(document.querySelectorAll('[data-gallery-thumb="1"]'));
+      if (!mainImage || thumbs.length <= 1) return;
+      thumbs.forEach((btn) => {
+        btn.addEventListener('click', function() {
+          const imageUrl = String(btn.getAttribute('data-gallery-url') || '').trim();
+          const imageAlt = String(btn.getAttribute('data-gallery-alt') || '').trim();
+          if (!imageUrl) return;
+          mainImage.src = imageUrl;
+          if (imageAlt) mainImage.alt = imageAlt;
+          thumbs.forEach((entry) => entry.classList.remove('is-active'));
+          btn.classList.add('is-active');
+        });
+      });
+    })();
+  </script>
+</body>
+</html>

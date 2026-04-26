@@ -6,23 +6,27 @@
     <title>Registration</title>
     <style>
         body {
-            font-family: 'Arial', sans-serif;
-            background-color: #f5f5f5;
+            font-family: "Poppins", "Segoe UI", Tahoma, Arial, sans-serif;
+            background:
+                radial-gradient(circle at 85% -10%, rgba(177, 116, 63, 0.18), transparent 32%),
+                radial-gradient(circle at -5% 35%, rgba(111, 78, 55, 0.14), transparent 26%),
+                #f8f5f1;
             margin: 0;
             padding: 20px 0;
         }
         .container {
-            background-color: white;
+            background: linear-gradient(180deg, #fffefc 0%, #fff9f2 100%);
             padding: 30px;
-            border-radius: 8px;
-            box-shadow: 0 0 15px rgba(0, 0, 0, 0.1);
+            border-radius: 14px;
+            border: 1px solid #ead9c9;
+            box-shadow: 0 12px 24px rgba(56, 33, 16, 0.12);
             width: 90%;
             max-width: 600px;
             margin: 0 auto;
         }
         h2 {
             text-align: center;
-            color: #333;
+            color: #3f2f26;
             margin-bottom: 25px;
         }
         .messages {
@@ -55,21 +59,25 @@
         input, select {
             width: 100%;
             padding: 10px;
-            border: 1px solid #ddd;
-            border-radius: 4px;
+            border: 1px solid #decab7;
+            border-radius: 8px;
             box-sizing: border-box;
         }
         input[type="submit"] {
-            background-color: #4CAF50;
+            background: linear-gradient(135deg, #875a34, #b77744);
             color: white;
             padding: 12px;
             border: none;
             cursor: pointer;
             font-size: 16px;
-            transition: background-color 0.3s;
+            font-weight: 700;
+            border-radius: 10px;
+            transition: all 0.2s ease;
         }
         input[type="submit"]:hover {
-            background-color: #45a049;
+            background: linear-gradient(135deg, #6d4827, #a96f3f);
+            transform: translateY(-1px);
+            box-shadow: 0 8px 16px rgba(122, 79, 45, 0.22);
         }
         .form-error {
             color: #d32f2f;
@@ -85,7 +93,7 @@
             font-size: 0.9em;
         }
         a {
-            color: #2196F3;
+            color: #875a34;
             text-decoration: none;
         }
         a:hover {
@@ -112,6 +120,7 @@
         <form method="POST" action="{% url 'register' %}" enctype="multipart/form-data" id="registration-form">
             {% csrf_token %}
             <input type="hidden" name="next" value="{{ next_url }}">
+            <input type="hidden" name="owner_signup_intent" value="{% if owner_signup_intent %}1{% else %}0{% endif %}">
 
             <div class="form-group">
                 <label for="first_name" class="required">First Name</label>

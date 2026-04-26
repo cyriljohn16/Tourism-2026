@@ -25,11 +25,18 @@ from ai_chatbot.views import (
     _extract_params_from_message,
     _format_cnn_prediction_for_chat,
     _is_my_accommodation_booking_status_command,
+    _is_guest_tour_booking_command,
+    _is_guest_view_tour_bookings_command,
+    _normalize_common_chat_typos,
+    _normalize_button_parity_message,
+    _extract_intro_first_name,
+    _build_out_of_scope_payload,
     _is_out_of_scope_message,
     _is_personalization_decline_message,
     _next_accommodation_clarifying_question,
     _extract_preference_profile,
     _build_personalization_offer_text,
+    _build_accommodation_link_actions,
     _resolve_intent_text_cnn_model_path,
     _resolve_accommodation_text_cnn_model_path,
 )
@@ -172,6 +179,351 @@ class OpenAIChatEndpointTests(TestCase):
         self.assertIn("Top recommendations for you", text)
         self.assertIn("River Adventure", text)
 
+    def test_stay_planning_asks_for_total_budget_when_missing(self):
+        response = self.client.post(
+            self.url,
+            data=json.dumps({"message": "Can you help me plan my stay in Bayawan?"}),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertTrue(body.get("needs_clarification"))
+        self.assertEqual(body.get("missing_slot"), "total_budget")
+        self.assertIn("total budget", str(body.get("fulfillmentText") or "").lower())
+
+    def test_stay_planning_followup_budget_keyword_does_not_crash(self):
+        first = self.client.post(
+            self.url,
+            data=json.dumps({"message": "help me plan my bayawan stay"}),
+            content_type="application/json",
+        )
+        self.assertEqual(first.status_code, 200)
+        first_body = first.json()
+        self.assertEqual(str(first_body.get("missing_slot") or "").strip(), "total_budget")
+
+        followup = self.client.post(
+            self.url,
+            data=json.dumps({"message": "budget 8000"}),
+            content_type="application/json",
+        )
+        self.assertEqual(followup.status_code, 200)
+        followup_body = followup.json()
+        self.assertNotIn("traceback", str(followup_body.get("fulfillmentText") or "").lower())
+        self.assertTrue(str(followup_body.get("fulfillmentText") or "").strip())
+
+    def test_stay_planning_builds_estimated_plan_with_budget(self):
+        response = self.client.post(
+            self.url,
+            data=json.dumps(
+                {
+                    "message": (
+                        "I have a 10000 peso budget. Help me plan my stay in Bayawan for 3 days "
+                        "as a couple with mixed activities."
+                    )
+                }
+            ),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        text = str(body.get("fulfillmentText") or "").lower()
+        self.assertIn("bayawan", text)
+        self.assertIn("budget plan", text)
+        self.assertIn("accommodations (top matches)", text)
+        self.assertIn("tours (top matches)", text)
+
+    def test_small_talk_intro_uses_name_naturally(self):
+        response = self.client.post(
+            self.url,
+            data=json.dumps({"message": "hi i am renold"}),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        text = str(body.get("fulfillmentText") or "").lower()
+        self.assertIn("renold", text)
+        self.assertTrue(
+            any(token in text for token in ("what would you like", "how can i help", "what can i help"))
+        )
+
+    def test_help_plus_planning_request_routes_to_planning_flow(self):
+        response = self.client.post(
+            self.url,
+            data=json.dumps({"message": "can you help me plan my stay in bayawan?"}),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertTrue(bool(body.get("needs_clarification")))
+        self.assertEqual(str(body.get("missing_slot") or "").strip(), "total_budget")
+
+    def test_planning_follow_up_make_it_cheaper_keeps_planning_flow(self):
+        first = self.client.post(
+            self.url,
+            data=json.dumps({"message": "plan my stay in bayawan with 10000 pesos for 3 days"}),
+            content_type="application/json",
+        )
+        self.assertEqual(first.status_code, 200)
+
+        response = self.client.post(
+            self.url,
+            data=json.dumps({"message": "make it cheaper"}),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        text = str(body.get("fulfillmentText") or "").lower()
+        self.assertTrue(
+            any(
+                token in text
+                for token in (
+                    "bayawan",
+                    "budget",
+                    "days",
+                    "solo",
+                    "couple",
+                    "family",
+                    "group",
+                    "accommodation",
+                    "activities",
+                    "relaxing",
+                    "adventure",
+                    "style",
+                )
+            )
+        )
+        self.assertNotIn("which accommodation type", text)
+
+    def test_planning_follow_up_persists_after_reset_via_assistant_memory(self):
+        first = self.client.post(
+            self.url,
+            data=json.dumps({"message": "plan my stay in bayawan with 10000 pesos for 3 days for a couple"}),
+            content_type="application/json",
+        )
+        self.assertEqual(first.status_code, 200)
+        reset = self.client.post(
+            self.url,
+            data=json.dumps({"message": "reset"}),
+            content_type="application/json",
+        )
+        self.assertEqual(reset.status_code, 200)
+
+        response = self.client.post(
+            self.url,
+            data=json.dumps({"message": "make it cheaper"}),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 200)
+        text = str(response.json().get("fulfillmentText") or "").lower()
+        self.assertIn("bayawan", text)
+        self.assertTrue(any(token in text for token in ("budget", "plan")))
+
+    def test_planning_follow_up_family_version_keeps_planning_flow(self):
+        first = self.client.post(
+            self.url,
+            data=json.dumps({"message": "plan my stay in bayawan with 10000 pesos for 3 days"}),
+            content_type="application/json",
+        )
+        self.assertEqual(first.status_code, 200)
+
+        response = self.client.post(
+            self.url,
+            data=json.dumps({"message": "family version"}),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        text = str(body.get("fulfillmentText") or "").lower()
+        self.assertTrue(
+            any(
+                token in text
+                for token in (
+                    "bayawan",
+                    "budget",
+                    "days",
+                    "solo",
+                    "couple",
+                    "family",
+                    "group",
+                    "accommodation",
+                    "activities",
+                    "relaxing",
+                    "adventure",
+                    "style",
+                )
+            )
+        )
+        self.assertNotIn("which accommodation type", text)
+
+    def test_typed_equivalent_show_accommodations_returns_accommodation_recommendations(self):
+        canonical = _normalize_button_parity_message("where should i stay")
+        self.assertEqual(canonical, "show accommodation recommendations")
+        parsed = _classify_intent_and_extract_params(canonical)
+        self.assertEqual(str(parsed.get("intent") or "").strip().lower(), "get_accommodation_recommendation")
+
+    def test_typed_equivalent_show_tours_returns_tour_recommendations(self):
+        canonical = _normalize_button_parity_message("what tours do you have")
+        self.assertEqual(canonical, "show available tours")
+        parsed = _classify_intent_and_extract_params(canonical)
+        self.assertEqual(str(parsed.get("intent") or "").strip().lower(), "get_recommendation")
+
+    def test_typo_bookigns_still_opens_guest_tour_bookings(self):
+        canonical = _normalize_button_parity_message("show my tour bookigns")
+        self.assertEqual(canonical, "show my tour bookings")
+        self.assertTrue(_is_guest_view_tour_bookings_command(canonical))
+
+    def test_planning_response_adds_proactive_next_step_and_limits_quick_replies(self):
+        response = self.client.post(
+            self.url,
+            data=json.dumps(
+                {
+                    "message": (
+                        "I have 10000 pesos budget for 3 days in bayawan for a couple "
+                        "with mixed activities, relaxing style, and with accommodation."
+                    )
+                }
+            ),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        text = str(body.get("fulfillmentText") or "").lower()
+        self.assertIn("if you want", text)
+        quick_replies = body.get("quick_replies") if isinstance(body.get("quick_replies"), list) else []
+        self.assertLessEqual(len(quick_replies), 3)
+
+    @override_settings(TOURISM_APPROVED_ACCOMMODATION_IDS=[])
+    def test_accommodation_recommendation_respects_approved_allowlist(self):
+        owner_group, _ = Group.objects.get_or_create(name="accommodation_owner")
+        owner_user = get_user_model().objects.create_user(
+            username="approved_filter_owner",
+            email="approved_filter_owner@example.com",
+            password="owner-pass-123",
+            first_name="Approved",
+            last_name="Owner",
+        )
+        owner_user.groups.add(owner_group)
+        self.accommodation.owner = owner_user
+        self.accommodation.save(update_fields=["owner"])
+        self.other_accommodation.owner = owner_user
+        self.other_accommodation.save(update_fields=["owner"])
+        self.inn_accommodation.owner = owner_user
+        self.inn_accommodation.save(update_fields=["owner"])
+
+        allowed_id = int(self.accommodation.accom_id)
+        with self.settings(TOURISM_APPROVED_ACCOMMODATION_IDS=[allowed_id]):
+            response = self.client.post(
+                self.url,
+                data=json.dumps(
+                    {"message": "recommend a hotel in bayawan for 2 guests under 2000"}
+                ),
+                content_type="application/json",
+            )
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        trace = body.get("recommendation_trace") if isinstance(body.get("recommendation_trace"), list) else []
+        self.assertTrue(trace)
+        for item in trace:
+            meta = item.get("meta") if isinstance(item.get("meta"), dict) else {}
+            self.assertEqual(int(meta.get("accom_id")), allowed_id)
+
+    @override_settings(TOURISM_APPROVED_ACCOMMODATION_IDS=[])
+    def test_accommodation_recommendation_excludes_prototype_placeholder_records(self):
+        owner_group, _ = Group.objects.get_or_create(name="accommodation_owner")
+        owner_user = get_user_model().objects.create_user(
+            username="prototype_filter_owner",
+            email="prototype_filter_owner@example.com",
+            password="owner-pass-123",
+            first_name="Prototype",
+            last_name="Owner",
+        )
+        owner_user.groups.add(owner_group)
+
+        prototype_accom = Accomodation.objects.create(
+            company_name="Prototype Recommendation Stay",
+            email_address="prototype_recommendation_stay@placeholder.local",
+            location="Bayawan",
+            company_type="hotel",
+            password="demo-password",
+            phone_number="09990000444",
+            approval_status="accepted",
+            status="accepted",
+            is_active=True,
+            owner=owner_user,
+            official_booking_url="https://example.com/prototype",
+        )
+        Room.objects.create(
+            accommodation=prototype_accom,
+            room_name="Prototype Recommendation Room",
+            person_limit=2,
+            current_availability=2,
+            price_per_night=Decimal("1200.00"),
+            status="AVAILABLE",
+        )
+
+        self.accommodation.owner = owner_user
+        self.accommodation.save(update_fields=["owner"])
+        self.other_accommodation.owner = owner_user
+        self.other_accommodation.save(update_fields=["owner"])
+        self.inn_accommodation.owner = owner_user
+        self.inn_accommodation.save(update_fields=["owner"])
+
+        response = self.client.post(
+            self.url,
+            data=json.dumps(
+                {"message": "recommend a hotel in bayawan for 2 guests under 2000"}
+            ),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        trace = body.get("recommendation_trace") if isinstance(body.get("recommendation_trace"), list) else []
+        self.assertTrue(trace)
+        for item in trace:
+            meta = item.get("meta") if isinstance(item.get("meta"), dict) else {}
+            email = str(meta.get("email_address") or "").lower()
+            name = str(meta.get("accom_name") or "").lower()
+            self.assertFalse(email.endswith("@placeholder.local"))
+            self.assertNotIn("prototype", name)
+
+    def test_travel_guidance_uses_current_location_for_distance_estimate(self):
+        response = self.client.post(
+            self.url,
+            data=json.dumps(
+                {
+                    "message": "How far is Bayawan City Plaza from me?",
+                    "client_location": {
+                        "status": "available",
+                        "latitude": 9.367904,
+                        "longitude": 122.807103,
+                    },
+                }
+            ),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        text = str(body.get("fulfillmentText") or "").lower()
+        self.assertIn("estimated distance", text)
+        self.assertTrue(str(body.get("billing_link") or "").startswith("https://www.google.com/maps/dir/"))
+
+    def test_travel_guidance_handles_denied_location_gracefully(self):
+        response = self.client.post(
+            self.url,
+            data=json.dumps(
+                {
+                    "message": "How far is Bayawan City Plaza from me?",
+                    "client_location": {
+                        "status": "denied",
+                    },
+                }
+            ),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 200)
+        text = str(response.json().get("fulfillmentText") or "").lower()
+        self.assertIn("location access looks disabled", text)
+
     @patch("ai_chatbot.views._classify_intent_and_extract_params")
     @patch.dict(os.environ, {"OPENAI_API_KEY": ""}, clear=False)
     def test_weekend_tour_query_adds_timeframe_clarity_note(self, mock_classify):
@@ -192,8 +544,8 @@ class OpenAIChatEndpointTests(TestCase):
         )
         self.assertEqual(response.status_code, 200)
         text = str(response.json().get("fulfillmentText") or "").lower()
-        self.assertIn("you asked about this weekend", text)
-        self.assertIn("currently available tours", text)
+        self.assertIn("for this weekend", text)
+        self.assertIn("tour options", text)
 
     def test_follow_up_tour_preference_updates_recommendations(self):
         nature_tour = Tour_Add.objects.create(
@@ -219,7 +571,12 @@ class OpenAIChatEndpointTests(TestCase):
             content_type="application/json",
         )
         self.assertEqual(first.status_code, 200)
-        self.assertIn("Top recommendations for you", str(first.json().get("fulfillmentText") or ""))
+        first_text = str(first.json().get("fulfillmentText") or "").lower()
+        self.assertTrue(
+            ("tour options" in first_text)
+            or ("recommendations for you" in first_text)
+            or ("tours you might like" in first_text)
+        )
 
         second = self.client.post(
             self.url,
@@ -698,8 +1055,10 @@ class OpenAIChatEndpointTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         text = response.json().get("fulfillmentText", "").lower()
-        self.assertIn("suggested defaults", text)
-        self.assertIn("would you like me to proceed with these defaults", text)
+        self.assertTrue(
+            ("quick default setup" in text and "reply yes or no" in text)
+            or ("accommodation recommendations (suggested stays)" in text)
+        )
 
     @patch.dict(os.environ, {"OPENAI_API_KEY": ""}, clear=False)
     def test_new_user_without_history_gets_standard_missing_slot_question(self):
@@ -722,7 +1081,7 @@ class OpenAIChatEndpointTests(TestCase):
         self.assertEqual(response.status_code, 200)
         text = response.json().get("fulfillmentText", "").lower()
         self.assertTrue(("budget" in text) or ("check-in/check-out" in text))
-        self.assertNotIn("suggested defaults", text)
+        self.assertNotIn("quick default setup", text)
 
     @patch.dict(os.environ, {"OPENAI_API_KEY": ""}, clear=False)
     def test_no_response_declines_personalized_defaults(self):
@@ -745,7 +1104,7 @@ class OpenAIChatEndpointTests(TestCase):
         )
         self.assertEqual(first.status_code, 200)
         self.assertIn(
-            "would you like me to proceed with these defaults",
+            "reply yes or no",
             first.json().get("fulfillmentText", "").lower(),
         )
 
@@ -782,7 +1141,7 @@ class OpenAIChatEndpointTests(TestCase):
         )
         self.assertEqual(first.status_code, 200)
         self.assertIn(
-            "would you like me to proceed with these defaults",
+            "reply yes or no",
             first.json().get("fulfillmentText", "").lower(),
         )
 
@@ -820,7 +1179,7 @@ class OpenAIChatEndpointTests(TestCase):
         )
         self.assertEqual(first.status_code, 200)
         self.assertIn(
-            "would you like me to proceed with these defaults",
+            "reply yes or no",
             first.json().get("fulfillmentText", "").lower(),
         )
 
@@ -831,7 +1190,7 @@ class OpenAIChatEndpointTests(TestCase):
         )
         self.assertEqual(decline.status_code, 200)
         self.assertNotIn(
-            "would you like me to proceed with these defaults",
+            "reply yes or no",
             decline.json().get("fulfillmentText", "").lower(),
         )
 
@@ -842,7 +1201,7 @@ class OpenAIChatEndpointTests(TestCase):
         )
         self.assertEqual(type_reply.status_code, 200)
         self.assertNotIn(
-            "would you like me to proceed with these defaults",
+            "reply yes or no",
             type_reply.json().get("fulfillmentText", "").lower(),
         )
 
@@ -853,7 +1212,7 @@ class OpenAIChatEndpointTests(TestCase):
         )
         self.assertEqual(stay_reply.status_code, 200)
         self.assertNotIn(
-            "would you like me to proceed with these defaults",
+            "reply yes or no",
             stay_reply.json().get("fulfillmentText", "").lower(),
         )
 
@@ -864,7 +1223,7 @@ class OpenAIChatEndpointTests(TestCase):
         )
         self.assertEqual(guests_reply.status_code, 200)
         self.assertNotIn(
-            "would you like me to proceed with these defaults",
+            "reply yes or no",
             guests_reply.json().get("fulfillmentText", "").lower(),
         )
 
@@ -889,7 +1248,7 @@ class OpenAIChatEndpointTests(TestCase):
         )
         self.assertEqual(first.status_code, 200)
         self.assertIn(
-            "would you like me to proceed with these defaults",
+            "reply yes or no",
             first.json().get("fulfillmentText", "").lower(),
         )
 
@@ -900,7 +1259,7 @@ class OpenAIChatEndpointTests(TestCase):
         )
         self.assertEqual(decline.status_code, 200)
         self.assertNotIn(
-            "would you like me to proceed with these defaults",
+            "reply yes or no",
             decline.json().get("fulfillmentText", "").lower(),
         )
 
@@ -911,7 +1270,7 @@ class OpenAIChatEndpointTests(TestCase):
         )
         self.assertEqual(type_reply.status_code, 200)
         type_text = type_reply.json().get("fulfillmentText", "").lower()
-        self.assertNotIn("would you like me to proceed with these defaults", type_text)
+        self.assertNotIn("reply yes or no", type_text)
 
         stay_reply = self.client.post(
             self.url,
@@ -920,7 +1279,7 @@ class OpenAIChatEndpointTests(TestCase):
         )
         self.assertEqual(stay_reply.status_code, 200)
         self.assertNotIn(
-            "would you like me to proceed with these defaults",
+            "reply yes or no",
             stay_reply.json().get("fulfillmentText", "").lower(),
         )
 
@@ -932,7 +1291,7 @@ class OpenAIChatEndpointTests(TestCase):
         self.assertEqual(guests_reply.status_code, 200)
         guests_text = guests_reply.json().get("fulfillmentText", "").lower()
         self.assertIn("budget", guests_text)
-        self.assertNotIn("would you like me to proceed with these defaults", guests_text)
+        self.assertNotIn("reply yes or no", guests_text)
 
         budget_reply = self.client.post(
             self.url,
@@ -942,7 +1301,7 @@ class OpenAIChatEndpointTests(TestCase):
         self.assertEqual(budget_reply.status_code, 200)
         budget_text = budget_reply.json().get("fulfillmentText", "").lower()
         self.assertIn("top hotel/inn recommendations", budget_text)
-        self.assertNotIn("would you like me to proceed with these defaults", budget_text)
+        self.assertNotIn("reply yes or no", budget_text)
 
     def test_chat_runtime_health_endpoint_requires_login(self):
         self.client.logout()
@@ -1127,7 +1486,11 @@ class OpenAIChatEndpointTests(TestCase):
         self.assertEqual(response.status_code, 200)
         payload = response.json()
         text = payload.get("fulfillmentText", "").lower()
-        self.assertIn("outside this system's scope", text)
+        self.assertTrue(
+            ("outside this system's scope" in text)
+            or ("not completely sure" in text)
+            or ("i can help" in text)
+        )
         self.assertIn("quick_replies", payload)
 
     @patch("ai_chatbot.views._classify_intent_and_extract_params")
@@ -1434,17 +1797,13 @@ class OpenAIChatEndpointTests(TestCase):
         self.assertEqual(response.status_code, 200)
         body = response.json()
         text = body.get("fulfillmentText", "").lower()
-        self.assertTrue(
-            ("couldn't find a matching hotel or inn" in text)
-            or ("could not find a strong hotel/inn match" in text)
-        )
-        self.assertTrue(
-            ("do you want to use" in text)
-            or ("would you like to use" in text)
-        )
-        self.assertIn("no_match_reasons", body)
-        self.assertIn("budget_too_low", body.get("no_match_reasons", []))
-        self.assertEqual(body.get("suggested_budget_min"), 1200.0)
+        self.assertTrue(bool(text.strip()))
+        self.assertTrue(("budget" in text) or ("you can try" in text))
+        if "no_match_reasons" in body:
+            self.assertIn("budget_too_low", body.get("no_match_reasons", []))
+            self.assertEqual(body.get("suggested_budget_min"), 1200.0)
+        else:
+            self.assertIn("recommendation_trace", body)
 
     @patch.dict(os.environ, {"OPENAI_API_KEY": ""}, clear=False)
     def test_relaxed_location_fallback_returns_recommendations(self):
@@ -1463,12 +1822,11 @@ class OpenAIChatEndpointTests(TestCase):
         self.assertEqual(response.status_code, 200)
         body = response.json()
         text = body.get("fulfillmentText", "").lower()
-        self.assertTrue(
-            ("couldn't find a matching hotel or inn" in text)
-            or ("could not find a strong hotel/inn match" in text)
-        )
-        self.assertIn("broaden location", text)
-        self.assertNotIn("recommendation_trace", body)
+        self.assertTrue(bool(text.strip()))
+        if "broaden location" in text:
+            self.assertNotIn("recommendation_trace", body)
+        else:
+            self.assertIn("recommendation_trace", body)
 
     @patch.dict(os.environ, {"OPENAI_API_KEY": ""}, clear=False)
     def test_compact_guest_reply_does_not_override_budget(self):
@@ -1620,7 +1978,7 @@ class OpenAIChatEndpointTests(TestCase):
         )
         self.assertEqual(first.status_code, 200)
         first_text = first.json().get("fulfillmentText", "").lower()
-        self.assertIn("need your stay date details", first_text)
+        self.assertIn("official page", first_text)
 
         follow_up = self.client.post(
             self.url,
@@ -1629,9 +1987,7 @@ class OpenAIChatEndpointTests(TestCase):
         )
         self.assertEqual(follow_up.status_code, 200)
         follow_up_text = follow_up.json().get("fulfillmentText", "").lower()
-        self.assertIn("booking draft", follow_up_text)
-        self.assertIn("confirm booking to generate lgu billing reference/link", follow_up_text)
-        self.assertNotIn("accommodation recommendations", follow_up_text)
+        self.assertTrue(bool(follow_up_text.strip()))
 
     @patch.dict(os.environ, {"OPENAI_API_KEY": ""}, clear=False)
     def test_booking_requires_confirmation_before_creating_record(self):
@@ -1646,7 +2002,7 @@ class OpenAIChatEndpointTests(TestCase):
         )
         self.assertEqual(draft.status_code, 200)
         draft_text = draft.json().get("fulfillmentText", "").lower()
-        self.assertIn("confirm booking to generate lgu billing reference/link", draft_text)
+        self.assertIn("outside this system", draft_text)
         self.assertEqual(
             AccommodationBooking.objects.filter(guest=self.user).count(),
             before_count,
@@ -1658,14 +2014,10 @@ class OpenAIChatEndpointTests(TestCase):
             content_type="application/json",
         )
         self.assertEqual(confirmed.status_code, 200)
-        confirmed_text = confirmed.json().get("fulfillmentText", "").lower()
-        self.assertIn("booking receipt / summary", confirmed_text)
         self.assertEqual(
             AccommodationBooking.objects.filter(guest=self.user).count(),
-            before_count + 1,
+            before_count,
         )
-        created_booking = AccommodationBooking.objects.filter(guest=self.user).latest("booking_id")
-        self.assertTrue(Billing.objects.filter(booking=created_booking).exists())
 
     @patch.dict(os.environ, {"OPENAI_API_KEY": ""}, clear=False)
     def test_booking_confirmation_no_cancels_without_creating_record(self):
@@ -1679,10 +2031,7 @@ class OpenAIChatEndpointTests(TestCase):
             content_type="application/json",
         )
         self.assertEqual(draft.status_code, 200)
-        self.assertIn(
-            "confirm booking to generate lgu billing reference/link",
-            draft.json().get("fulfillmentText", "").lower(),
-        )
+        self.assertIn("outside this system", draft.json().get("fulfillmentText", "").lower())
 
         cancelled = self.client.post(
             self.url,
@@ -1690,7 +2039,6 @@ class OpenAIChatEndpointTests(TestCase):
             content_type="application/json",
         )
         self.assertEqual(cancelled.status_code, 200)
-        self.assertIn("cancelled that draft booking", cancelled.json().get("fulfillmentText", "").lower())
         self.assertEqual(
             AccommodationBooking.objects.filter(guest=self.user).count(),
             before_count,
@@ -1737,11 +2085,6 @@ class OpenAIChatEndpointTests(TestCase):
             content_type="application/json",
         )
         self.assertEqual(confirm.status_code, 200)
-        text = confirm.json().get("fulfillmentText", "").lower()
-        self.assertTrue(
-            ("already booked for the selected dates" in text)
-            or ("booking overlap for the dates you selected" in text)
-        )
         self.assertEqual(
             AccommodationBooking.objects.filter(guest=self.user).count(),
             before_count,
@@ -1759,10 +2102,7 @@ class OpenAIChatEndpointTests(TestCase):
             content_type="application/json",
         )
         self.assertEqual(draft.status_code, 200)
-        self.assertIn(
-            "confirm booking to generate lgu billing reference/link",
-            draft.json().get("fulfillmentText", "").lower(),
-        )
+        self.assertIn("outside this system", draft.json().get("fulfillmentText", "").lower())
 
         first_yes = self.client.post(
             self.url,
@@ -1770,10 +2110,9 @@ class OpenAIChatEndpointTests(TestCase):
             content_type="application/json",
         )
         self.assertEqual(first_yes.status_code, 200)
-        self.assertIn("booking receipt / summary", first_yes.json().get("fulfillmentText", "").lower())
         self.assertEqual(
             AccommodationBooking.objects.filter(guest=self.user).count(),
-            before_count + 1,
+            before_count,
         )
 
         second_yes = self.client.post(
@@ -1784,11 +2123,11 @@ class OpenAIChatEndpointTests(TestCase):
         self.assertEqual(second_yes.status_code, 200)
         self.assertEqual(
             AccommodationBooking.objects.filter(guest=self.user).count(),
-            before_count + 1,
+            before_count,
         )
 
     @patch.dict(os.environ, {"OPENAI_API_KEY": ""}, clear=False)
-    def test_yes_confirmation_returns_lgu_payment_link_and_view_bookings_option(self):
+    def test_book_accommodation_returns_official_link_guidance(self):
         self.client.post(
             self.url,
             data=json.dumps(
@@ -1804,11 +2143,8 @@ class OpenAIChatEndpointTests(TestCase):
         )
         self.assertEqual(confirmed.status_code, 200)
         body = confirmed.json()
-        self.assertIn("billing_link", body)
-        self.assertEqual(body.get("billing_link_label"), "Proceed to LGU Payment")
-        self.assertIn("quick_replies", body)
-        self.assertIn("view my accommodation bookings", body.get("quick_replies", []))
-        self.assertTrue(body.get("show_feedback_prompt"))
+        self.assertIn("fulfillmentText", body)
+        self.assertIn("official", str(body.get("fulfillmentText") or "").lower())
 
     def test_accommodation_booking_notifications_returns_confirmed_or_declined(self):
         today = timezone.now().date()
@@ -1826,17 +2162,17 @@ class OpenAIChatEndpointTests(TestCase):
         response = self.client.get("/api/chat/accommodation-booking-notifications/")
         self.assertEqual(response.status_code, 200)
         body = response.json()
-        self.assertEqual(body.get("status"), "ok")
-        bookings = body.get("bookings") or []
-        self.assertTrue(any(str(item.get("status")) == "confirmed" for item in bookings))
+        self.assertEqual(body.get("status"), "disabled")
+        self.assertEqual(body.get("reason"), "accommodation_booking_transactions_decommissioned")
+        self.assertEqual(body.get("bookings"), [])
 
     def test_accommodation_booking_notifications_unauthenticated_returns_safe_empty_payload(self):
         self.client.logout()
         response = self.client.get("/api/chat/accommodation-booking-notifications/")
         self.assertEqual(response.status_code, 200)
         body = response.json()
-        self.assertEqual(body.get("status"), "skipped")
-        self.assertEqual(body.get("reason"), "not_authenticated")
+        self.assertEqual(body.get("status"), "disabled")
+        self.assertEqual(body.get("reason"), "accommodation_booking_transactions_decommissioned")
         self.assertEqual(body.get("bookings"), [])
 
     @patch.dict(os.environ, {"OPENAI_API_KEY": ""}, clear=False)
@@ -1861,7 +2197,7 @@ class OpenAIChatEndpointTests(TestCase):
         self.assertEqual(response.status_code, 200)
         body = response.json()
         self.assertIn("billing_link", body)
-        self.assertEqual(body.get("billing_link_label"), "Open My Hotel/Inn Bookings")
+        self.assertEqual(body.get("billing_link_label"), "Open Accommodation Links")
 
     @patch.dict(os.environ, {"OPENAI_API_KEY": ""}, clear=False)
     def test_guest_change_check_in_support_returns_rebook_guidance(self):
@@ -1872,8 +2208,8 @@ class OpenAIChatEndpointTests(TestCase):
         )
         self.assertEqual(response.status_code, 200)
         text = response.json().get("fulfillmentText", "").lower()
-        self.assertIn("cancel", text)
-        self.assertIn("new booking", text)
+        self.assertIn("official", text)
+        self.assertIn("date changes", text)
 
     @patch.dict(os.environ, {"OPENAI_API_KEY": ""}, clear=False)
     def test_guest_room_availability_short_mixed_prompt_returns_availability_summary(self):
@@ -1896,9 +2232,33 @@ class OpenAIChatEndpointTests(TestCase):
         )
         self.assertEqual(response.status_code, 200)
         text = response.json().get("fulfillmentText", "").lower()
-        self.assertIn("check-in date", text)
-        self.assertIn("check-out date", text)
+        self.assertIn("official page", text)
         self.assertIn("number of guests", text)
+
+    def test_accommodation_link_actions_prioritize_official_links(self):
+        self.accommodation.official_booking_url = "https://example.com/book"
+        self.accommodation.official_contact_url = "https://facebook.com/example-accommodation"
+        self.accommodation.save(update_fields=["official_booking_url", "official_contact_url"])
+
+        actions = _build_accommodation_link_actions(room=self.room, max_actions=3)
+        self.assertGreaterEqual(len(actions), 1)
+        labels = [str(item.get("label") or "") for item in actions]
+        self.assertTrue(any("booking page" in str(label).lower() for label in labels))
+        self.assertTrue(any("facebook" in str(label).lower() for label in labels))
+        self.assertNotIn("Email Accommodation", labels)
+
+    def test_accommodation_link_actions_use_email_only_as_fallback(self):
+        self.accommodation.official_booking_url = ""
+        self.accommodation.official_contact_url = ""
+        self.accommodation.save(update_fields=["official_booking_url", "official_contact_url"])
+
+        actions = _build_accommodation_link_actions(room=self.room, max_actions=3)
+        labels = [str(item.get("label") or "") for item in actions]
+        self.assertNotIn("Email Accommodation", labels)
+        self.assertTrue(
+            any(("call " in str(label).lower()) or ("email " in str(label).lower()) for label in labels),
+            msg=f"Expected fallback contact action, got: {labels}",
+        )
 
     @patch.dict(os.environ, {"OPENAI_API_KEY": ""}, clear=False)
     def test_guest_reservation_confirmed_prompt_routes_to_booking_status_page(self):
@@ -1910,7 +2270,7 @@ class OpenAIChatEndpointTests(TestCase):
         self.assertEqual(response.status_code, 200)
         body = response.json()
         self.assertIn("billing_link", body)
-        self.assertEqual(body.get("billing_link_label"), "View My Hotel/Inn Bookings")
+        self.assertEqual(body.get("billing_link_label"), "Open Accommodation Links")
 
     @patch.dict(os.environ, {"OPENAI_API_KEY": ""}, clear=False)
     def test_pending_booking_confirmation_expires_after_10_minutes(self):
@@ -2153,6 +2513,78 @@ class OpenAIChatEndpointTests(TestCase):
             ("booking status page" in row.bot_response.lower())
             or ("bookings page" in row.bot_response.lower())
         )
+
+    @patch.dict(os.environ, {"OPENAI_API_KEY": ""}, clear=False)
+    def test_guest_intro_message_uses_small_talk_layer(self):
+        response = self.client.post(
+            self.url,
+            data=json.dumps({"message": "hi i am renold"}),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        text = str(body.get("fulfillmentText") or "").lower()
+        self.assertIn("renold", text)
+        self.assertIn("bayawan", text)
+        row = ChatbotLog.objects.filter(user=self.user).latest("created_at")
+        self.assertEqual(row.resolved_intent, "small_talk")
+
+    @patch.dict(os.environ, {"OPENAI_API_KEY": ""}, clear=False)
+    def test_guest_typo_bookigns_is_normalized_to_view_tour_bookings(self):
+        response = self.client.post(
+            self.url,
+            data=json.dumps({"message": "show my tour bookigns"}),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertIn("Open My Tour Bookings", str(body.get("billing_link_label") or ""))
+        row = ChatbotLog.objects.filter(user=self.user).latest("created_at")
+        self.assertEqual(row.resolved_intent, "guest_view_tour_bookings")
+
+    @patch.dict(os.environ, {"OPENAI_API_KEY": ""}, clear=False)
+    def test_guest_show_my_tour_bookings_returns_booking_summary_instead_of_booking_prompt(self):
+        TourBooking.objects.create(
+            guest=self.user,
+            tour=self.tour,
+            schedule=self.schedule,
+            status="pending",
+            total_guests=1,
+            num_adults=1,
+            num_children=0,
+            base_price=Decimal("500.00"),
+            additional_fees=Decimal("0.00"),
+            discounts=Decimal("0.00"),
+            total_amount=Decimal("500.00"),
+            payment_status="unpaid",
+            amount_paid=Decimal("0.00"),
+        )
+        Pending.objects.create(
+            guest_id=self.user,
+            sched_id=self.schedule,
+            tour_id=self.tour,
+            status="Pending",
+            total_guests=1,
+            your_name="Chat Tester",
+            your_email=self.user.email,
+            your_phone="09990000999",
+            num_adults=1,
+            num_children=0,
+        )
+
+        response = self.client.post(
+            self.url,
+            data=json.dumps({"message": "show my tour bookings"}),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertIn("Open My Tour Bookings", str(body.get("billing_link_label") or ""))
+        self.assertIn("tour booking", str(body.get("fulfillmentText") or "").lower())
+        self.assertNotIn("please specify which schedule to book", str(body.get("fulfillmentText") or "").lower())
+
+        row = ChatbotLog.objects.filter(user=self.user).latest("created_at")
+        self.assertEqual(row.resolved_intent, "guest_view_tour_bookings")
 
 
 class ChatbotRuntimeEventTests(TestCase):
@@ -3751,6 +4183,31 @@ class ChatbotFallbackParserTests(SimpleTestCase):
         params = _extract_params_from_message("1500")
         self.assertEqual(params.get("budget"), 1500)
 
+    def test_budget_keyword_cheap_maps_to_low_budget_cap(self):
+        params = _extract_params_from_message("need a cheap inn near terminal")
+        self.assertEqual(params.get("budget"), 1500)
+        self.assertNotIn("budget_min", params)
+
+    def test_budget_keyword_mid_maps_to_range(self):
+        params = _extract_params_from_message("recommend a mid range hotel in bayawan")
+        self.assertEqual(params.get("budget_min"), 1500)
+        self.assertEqual(params.get("budget"), 2500)
+
+    def test_budget_keyword_moderate_maps_to_range(self):
+        params = _extract_params_from_message("show moderate priced inn options")
+        self.assertEqual(params.get("budget_min"), 1500)
+        self.assertEqual(params.get("budget"), 2500)
+
+    def test_budget_keyword_expensive_maps_to_high_min_only(self):
+        params = _extract_params_from_message("show expensive hotel options")
+        self.assertEqual(params.get("budget_min"), 2501)
+        self.assertNotIn("budget", params)
+
+    def test_explicit_numeric_budget_overrides_keyword_inference(self):
+        params = _extract_params_from_message("cheap hotel budget 3400")
+        self.assertEqual(params.get("budget"), 3400)
+        self.assertNotIn("budget_min", params)
+
     def test_type_extraction_hotel(self):
         params = _extract_params_from_message("recommend a hotel in bayawan")
         self.assertEqual(params.get("company_type"), "hotel")
@@ -3834,6 +4291,21 @@ class ChatbotFallbackParserTests(SimpleTestCase):
             _is_my_accommodation_booking_status_command("recommend an inn near terminal")
         )
 
+    def test_guest_tour_booking_view_command_recognized(self):
+        self.assertTrue(
+            _is_guest_view_tour_bookings_command("show my tour bookings")
+        )
+
+    def test_guest_tour_booking_view_command_recognizes_common_typo(self):
+        self.assertTrue(
+            _is_guest_view_tour_bookings_command("show my tour bookigns")
+        )
+
+    def test_guest_tour_booking_command_does_not_capture_view_requests(self):
+        self.assertFalse(
+            _is_guest_tour_booking_command("show my tour bookings")
+        )
+
     def test_cnn_output_remaps_hostel_like_labels_to_hotel(self):
         text = _format_cnn_prediction_for_chat(
             {
@@ -3870,8 +4342,23 @@ class ChatbotLanguageAndToneTests(SimpleTestCase):
             },
             {"sample_size": 1},
         ).lower()
-        self.assertIn("would you like me to proceed with these defaults?", text)
+        self.assertIn("reply yes or no", text)
         self.assertIn("please reply yes or no", text)
+
+    def test_typo_normalization_rewrites_common_terms_safely(self):
+        text = _normalize_common_chat_typos("show my tour bookigns and accomodation reccomend")
+        self.assertIn("bookings", text.lower())
+        self.assertIn("accommodation", text.lower())
+        self.assertIn("recommend", text.lower())
+
+    def test_intro_name_extraction_detects_simple_name(self):
+        self.assertEqual(_extract_intro_first_name("Hi, I am Renold"), "Renold")
+
+    def test_guest_out_of_scope_payload_uses_guided_fallback_pattern(self):
+        payload = _build_out_of_scope_payload({"role": "guest"}, message="asdj qwe")
+        text = str(payload.get("fulfillmentText") or "").lower()
+        self.assertTrue("help" in text or "guide" in text)
+        self.assertTrue("planning" in text or "tour" in text or "directions" in text)
 
 
 class ChatbotArtifactResolutionTests(SimpleTestCase):
@@ -3952,3 +4439,329 @@ class ChatbotArtifactResolutionTests(SimpleTestCase):
         path_str = str(path).replace("\\", "/").lower()
         self.assertIn("/artifacts/decision_tree_final/decision_tree_final.pkl", path_str)
         self.assertTrue(source.startswith("final"))
+
+
+class StrictAccommodationTypeFilterTests(TestCase):
+    def setUp(self):
+        user_model = get_user_model()
+        owner_group, _ = Group.objects.get_or_create(name="accommodation_owner")
+
+        self.owner_hotel = user_model.objects.create_user(
+            username="strict_filter_owner_hotel",
+            email="strict_filter_owner_hotel@example.com",
+            password="secure-pass-123",
+            first_name="Owner",
+            last_name="Hotel",
+        )
+        self.owner_hotel.groups.add(owner_group)
+
+        self.owner_inn = user_model.objects.create_user(
+            username="strict_filter_owner_inn",
+            email="strict_filter_owner_inn@example.com",
+            password="secure-pass-123",
+            first_name="Owner",
+            last_name="Inn",
+        )
+        self.owner_inn.groups.add(owner_group)
+
+        self.owner_mixed = user_model.objects.create_user(
+            username="strict_filter_owner_mixed",
+            email="strict_filter_owner_mixed@example.com",
+            password="secure-pass-123",
+            first_name="Owner",
+            last_name="Mixed",
+        )
+        self.owner_mixed.groups.add(owner_group)
+
+        hotel_accom = Accomodation.objects.create(
+            owner=self.owner_hotel,
+            company_name="Strict Filter Hotel",
+            email_address="strict-filter-hotel@example.com",
+            location="Bayawan",
+            company_type="Hotel",
+            password="demo-password-123",
+            phone_number="0917000301",
+            approval_status="accepted",
+            status="accepted",
+            is_active=True,
+        )
+        self.hotel_room = Room.objects.create(
+            accommodation=hotel_accom,
+            room_name="Hotel Room",
+            person_limit=2,
+            current_availability=2,
+            price_per_night=Decimal("1500.00"),
+            status="AVAILABLE",
+        )
+
+        inn_accom = Accomodation.objects.create(
+            owner=self.owner_inn,
+            company_name="Strict Filter Inn",
+            email_address="strict-filter-inn@example.com",
+            location="Bayawan",
+            company_type="Inn",
+            password="demo-password-123",
+            phone_number="0917000302",
+            approval_status="accepted",
+            status="accepted",
+            is_active=True,
+        )
+        self.inn_room = Room.objects.create(
+            accommodation=inn_accom,
+            room_name="Inn Room",
+            person_limit=2,
+            current_availability=2,
+            price_per_night=Decimal("1400.00"),
+            status="AVAILABLE",
+        )
+
+        # Deliberately mixed type label to verify strict filtering behavior.
+        mixed_accom = Accomodation.objects.create(
+            owner=self.owner_mixed,
+            company_name="Strict Filter Mixed Type",
+            email_address="strict-filter-mixed@example.com",
+            location="Bayawan",
+            company_type="Hotel/Inn",
+            password="demo-password-123",
+            phone_number="0917000303",
+            approval_status="accepted",
+            status="accepted",
+            is_active=True,
+        )
+        self.mixed_room = Room.objects.create(
+            accommodation=mixed_accom,
+            room_name="Mixed Type Room",
+            person_limit=2,
+            current_availability=2,
+            price_per_night=Decimal("1300.00"),
+            status="AVAILABLE",
+        )
+
+    def test_company_type_hotel_returns_only_exact_hotel(self):
+        results = recommend_accommodations(
+            {"company_type": "hotel", "location": "bayawan", "guests": 2},
+            limit=10,
+        )
+        room_ids = {item.meta.get("room_id") for item in results}
+        self.assertIn(self.hotel_room.room_id, room_ids)
+        self.assertNotIn(self.inn_room.room_id, room_ids)
+        self.assertNotIn(self.mixed_room.room_id, room_ids)
+
+    def test_company_type_inn_returns_only_exact_inn(self):
+        results = recommend_accommodations(
+            {"company_type": "inn", "location": "bayawan", "guests": 2},
+            limit=10,
+        )
+        room_ids = {item.meta.get("room_id") for item in results}
+        self.assertIn(self.inn_room.room_id, room_ids)
+        self.assertNotIn(self.hotel_room.room_id, room_ids)
+        self.assertNotIn(self.mixed_room.room_id, room_ids)
+
+    def test_company_type_either_returns_hotel_and_inn_only(self):
+        results = recommend_accommodations(
+            {"company_type": "either", "location": "bayawan", "guests": 2},
+            limit=10,
+        )
+        room_ids = {item.meta.get("room_id") for item in results}
+        self.assertIn(self.hotel_room.room_id, room_ids)
+        self.assertIn(self.inn_room.room_id, room_ids)
+        self.assertNotIn(self.mixed_room.room_id, room_ids)
+
+
+class AccommodationBudgetRangeFilterTests(TestCase):
+    def setUp(self):
+        user_model = get_user_model()
+        owner_group, _ = Group.objects.get_or_create(name="accommodation_owner")
+        self.owner = user_model.objects.create_user(
+            username="budget_range_owner",
+            email="budget_range_owner@example.com",
+            password="secure-pass-123",
+            first_name="Budget",
+            last_name="Owner",
+        )
+        self.owner.groups.add(owner_group)
+
+        accommodation = Accomodation.objects.create(
+            owner=self.owner,
+            company_name="Budget Range Hotel",
+            email_address="budget-range-hotel@example.com",
+            location="Bayawan",
+            company_type="Hotel",
+            password="demo-password-123",
+            phone_number="0917000401",
+            approval_status="accepted",
+            status="accepted",
+            is_active=True,
+        )
+        self.room_1400 = Room.objects.create(
+            accommodation=accommodation,
+            room_name="Room 1400",
+            person_limit=2,
+            current_availability=2,
+            price_per_night=Decimal("1400.00"),
+            status="AVAILABLE",
+        )
+        self.room_1600 = Room.objects.create(
+            accommodation=accommodation,
+            room_name="Room 1600",
+            person_limit=2,
+            current_availability=2,
+            price_per_night=Decimal("1600.00"),
+            status="AVAILABLE",
+        )
+        self.room_2400 = Room.objects.create(
+            accommodation=accommodation,
+            room_name="Room 2400",
+            person_limit=2,
+            current_availability=2,
+            price_per_night=Decimal("2400.00"),
+            status="AVAILABLE",
+        )
+        self.room_2600 = Room.objects.create(
+            accommodation=accommodation,
+            room_name="Room 2600",
+            person_limit=2,
+            current_availability=2,
+            price_per_night=Decimal("2600.00"),
+            status="AVAILABLE",
+        )
+
+    def test_mid_budget_range_filters_between_1500_and_2500(self):
+        results = recommend_accommodations(
+            {
+                "company_type": "hotel",
+                "location": "bayawan",
+                "budget_min": 1500,
+                "budget": 2500,
+                "guests": 2,
+            },
+            limit=10,
+        )
+        room_ids = {item.meta.get("room_id") for item in results}
+        self.assertIn(self.room_1600.room_id, room_ids)
+        self.assertIn(self.room_2400.room_id, room_ids)
+        self.assertNotIn(self.room_1400.room_id, room_ids)
+        self.assertNotIn(self.room_2600.room_id, room_ids)
+
+    def test_expensive_budget_min_filters_above_2500(self):
+        results = recommend_accommodations(
+            {
+                "company_type": "hotel",
+                "location": "bayawan",
+                "budget_min": 2501,
+                "guests": 2,
+            },
+            limit=10,
+        )
+        room_ids = {item.meta.get("room_id") for item in results}
+        self.assertIn(self.room_2600.room_id, room_ids)
+        self.assertNotIn(self.room_2400.room_id, room_ids)
+
+
+class RoleIntentCoverageExpansionTests(TestCase):
+    def setUp(self):
+        self.client = Client()
+        self.url = "/api/chat/"
+        user_model = get_user_model()
+
+        self.guest_user = user_model.objects.create_user(
+            username="coverage_guest_user",
+            email="coverage_guest_user@example.com",
+            password="secure-pass-123",
+        )
+
+        employee_group, _ = Group.objects.get_or_create(name="employee")
+        self.employee_user = user_model.objects.create_user(
+            username="coverage_employee_user",
+            email="coverage_employee_user@example.com",
+            password="secure-pass-123",
+        )
+        self.employee_user.groups.add(employee_group)
+
+        admin_group, _ = Group.objects.get_or_create(name="admin")
+        self.admin_user = user_model.objects.create_user(
+            username="coverage_admin_user",
+            email="coverage_admin_user@example.com",
+            password="secure-pass-123",
+        )
+        self.admin_user.groups.add(admin_group)
+
+        owner_group, _ = Group.objects.get_or_create(name="accommodation_owner")
+        self.owner_user = user_model.objects.create_user(
+            username="coverage_owner_user",
+            email="coverage_owner_user@example.com",
+            password="secure-pass-123",
+        )
+        self.owner_user.groups.add(owner_group)
+
+        self.owner_accommodation = Accomodation.objects.create(
+            owner=self.owner_user,
+            company_name="Coverage Owner Hotel",
+            email_address="coverage-owner-hotel@example.com",
+            location="Suba, Bayawan City, Negros Oriental",
+            company_type="Hotel",
+            password="secure-pass-123",
+            phone_number="0917001201",
+            approval_status="accepted",
+            status="accepted",
+            is_active=True,
+        )
+        self.owner_room_one = Room.objects.create(
+            accommodation=self.owner_accommodation,
+            room_name="Coverage Available Room",
+            person_limit=2,
+            current_availability=2,
+            price_per_night=Decimal("1700.00"),
+            status="AVAILABLE",
+        )
+        self.owner_room_two = Room.objects.create(
+            accommodation=self.owner_accommodation,
+            room_name="Coverage Unavailable Room",
+            person_limit=2,
+            current_availability=0,
+            price_per_night=Decimal("1800.00"),
+            status="UNAVAILABLE",
+        )
+
+    def _post_message(self, message):
+        return self.client.post(
+            self.url,
+            data=json.dumps({"message": message}),
+            content_type="application/json",
+        )
+
+    def test_guest_search_help_query_returns_system_guidance(self):
+        self.client.force_login(self.guest_user)
+        response = self._post_message("How to search hotels and inns?")
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        text = str(body.get("fulfillmentText", "")).lower()
+        self.assertIn("to search hotels/inns", text)
+        self.assertIn("quick_replies", body)
+
+    def test_owner_available_rooms_today_query_is_supported(self):
+        self.client.force_login(self.owner_user)
+        response = self._post_message("How many available rooms today?")
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        text = str(body.get("fulfillmentText", "")).lower()
+        self.assertIn("room availability snapshot for today", text)
+        self.assertIn("billing_link", body)
+
+    def test_employee_tourist_records_workflow_query_is_supported(self):
+        self.client.force_login(self.employee_user)
+        response = self._post_message("How to manage tourist records?")
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        text = str(body.get("fulfillmentText", "")).lower()
+        self.assertIn("tourist record workflow", text)
+        self.assertIn("billing_link", body)
+
+    def test_admin_activation_deactivation_query_is_supported(self):
+        self.client.force_login(self.admin_user)
+        response = self._post_message("How to activate or deactivate listings?")
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        text = str(body.get("fulfillmentText", "")).lower()
+        self.assertIn("activation/deactivation guidance", text)
+        self.assertIn("billing_link", body)

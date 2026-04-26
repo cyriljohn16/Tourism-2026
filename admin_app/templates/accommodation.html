@@ -173,13 +173,15 @@
     }
     table {
       width: 100%;
+      min-width: 920px;
       border-collapse: collapse;
       margin-top: 10px;
+      table-layout: auto;
     }
     th, td {
       border-bottom: 1px solid #eedfce;
       padding: 10px 9px;
-      font-size: 0.9rem;
+      font-size: clamp(0.84rem, 0.24vw + 0.72rem, 0.93rem);
       text-align: left;
       vertical-align: top;
       overflow-wrap: anywhere;
@@ -271,6 +273,7 @@
       .content, .owner-layout { padding: 12px; }
       .container { padding: 14px; border-radius: 14px; }
       .page-header h1 { font-size: 1.3rem; }
+      table { min-width: 860px; }
     }
   </style>
 </head>
@@ -293,7 +296,8 @@
       {% if not request.session.is_admin and request.session.user_type != 'employee' %}
         <a class="owner-hub-link" href="{% url 'admin_app:owner_hub' %}">Back to Accommodation Owner Hub</a>
       {% endif %}
-      <p class="hint">Fill out the form below. Once approved, you can manage your room inventory and bookings from the Owner Hub.</p>
+      <p class="hint">Fill out the form below. Once approved, you can manage your room inventory, publish official booking/contact links, and submit Tourism Office reports from the Owner Hub.</p>
+      <p class="hint">Thesis-safe scope is enforced: only <strong>Hotel</strong> and <strong>Inn</strong> records in Bayawan City are accepted.</p>
 
       {% if messages %}
         {% for message in messages %}
@@ -303,10 +307,24 @@
 
       <form method="post" action="" enctype="multipart/form-data">
         {% csrf_token %}
+        <datalist id="canonical-bayawan-locations">
+          <option value="Bayawan City"></option>
+          <option value="Bayawan City Proper"></option>
+          <option value="Poblacion, Bayawan City"></option>
+          <option value="Terminal Area, Bayawan City"></option>
+          <option value="Tinago, Bayawan City"></option>
+          <option value="Ubos, Bayawan City"></option>
+          <option value="Villareal, Bayawan City"></option>
+          <option value="Suba, Bayawan City"></option>
+          <option value="Boyco, Bayawan City"></option>
+        </datalist>
 
         {% for field in form %}
           <label for="{{ field.id_for_label }}">{{ field.label }}:</label>
           {{ field }}
+          {% if field.help_text %}
+            <div class="hint">{{ field.help_text }}</div>
+          {% endif %}
           {% if field.errors %}
             <div class="field-error">{{ field.errors|striptags }}</div>
           {% endif %}

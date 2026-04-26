@@ -42,8 +42,31 @@
     }
     h1 { margin: 0 0 10px; font-size: 1.4rem; }
     h2 { margin: 0 0 10px; font-size: 1.1rem; }
-    table { width: 100%; border-collapse: collapse; position: relative; z-index: 1; }
-    th, td { border-bottom: 1px solid #e8d7c7; text-align: left; padding: 10px; font-size: 0.95rem; }
+    .table-wrap {
+      width: 100%;
+      overflow-x: auto;
+      border: 1px solid #e8d7c7;
+      border-radius: 12px;
+      background: #fff;
+      position: relative;
+      z-index: 1;
+    }
+    table {
+      width: 100%;
+      min-width: 900px;
+      border-collapse: collapse;
+      position: relative;
+      z-index: 1;
+      table-layout: auto;
+    }
+    th, td {
+      border-bottom: 1px solid #e8d7c7;
+      text-align: left;
+      padding: 10px;
+      font-size: clamp(0.84rem, 0.28vw + 0.72rem, 0.95rem);
+      overflow-wrap: break-word;
+      vertical-align: top;
+    }
     th { background: #efe1d4; color: #5d4332; }
     .btn { border: none; border-radius: 10px; padding: 8px 12px; cursor: pointer; color: #fff; font-weight: 600; }
     .btn-accept { background: linear-gradient(135deg, #875a34, #b77744); }
@@ -58,10 +81,16 @@
     .msg { padding: 10px; border-radius: 6px; margin-bottom: 8px; }
     .msg.success { background: #e8f5e9; color: #1b5e20; }
     .msg.error { background: #ffebee; color: #b71c1c; }
+    .cell-id { min-width: 90px; white-space: nowrap; }
+    .cell-name { min-width: 160px; }
+    .cell-email { min-width: 220px; word-break: break-all; }
+    .cell-company { min-width: 170px; }
+    .cell-date { min-width: 130px; white-space: nowrap; }
+    .cell-actions { min-width: 180px; white-space: nowrap; }
     @media (max-width: 900px) {
       .content { padding: 14px; }
       .panel { padding: 14px; border-radius: 14px; }
-      table { display: block; overflow-x: auto; white-space: nowrap; }
+      table { min-width: 820px; }
     }
   </style>
 </head>
@@ -87,6 +116,7 @@
       <div class="panel">
         <h2>Pending Owners</h2>
         {% if pending_owners %}
+        <div class="table-wrap">
         <table>
           <thead>
             <tr>
@@ -101,12 +131,12 @@
           <tbody>
             {% for owner in pending_owners %}
             <tr>
-              <td>{{ owner.guest_id }}</td>
-              <td>{{ owner.first_name }} {{ owner.last_name }}</td>
-              <td>{{ owner.email }}</td>
-              <td>{{ owner.company_name|default:"-" }}</td>
-              <td>{{ owner.date_joined|date:"M d, Y H:i" }}</td>
-              <td>
+              <td class="cell-id">{{ owner.guest_id }}</td>
+              <td class="cell-name">{{ owner.first_name }} {{ owner.last_name }}</td>
+              <td class="cell-email">{{ owner.email }}</td>
+              <td class="cell-company">{{ owner.company_name|default:"-" }}</td>
+              <td class="cell-date">{{ owner.date_joined|date:"M d, Y H:i" }}</td>
+              <td class="cell-actions">
                 <form method="post" action="{% url 'admin_app:accommodation_owner_update' owner.guest_id %}" style="display:inline;">
                   {% csrf_token %}
                   <input type="hidden" name="action" value="accept">
@@ -122,6 +152,7 @@
             {% endfor %}
           </tbody>
         </table>
+        </div>
         {% else %}
           <p class="muted">No pending accommodation owner accounts.</p>
         {% endif %}
@@ -130,19 +161,21 @@
       <div class="panel">
         <h2>Approved Owners</h2>
         {% if approved_owners %}
+        <div class="table-wrap">
         <table>
           <thead><tr><th>Guest ID</th><th>Name</th><th>Email</th><th>Company Name</th></tr></thead>
           <tbody>
             {% for owner in approved_owners %}
             <tr>
-              <td>{{ owner.guest_id }}</td>
-              <td>{{ owner.first_name }} {{ owner.last_name }}</td>
-              <td>{{ owner.email }}</td>
-              <td>{{ owner.company_name|default:"-" }}</td>
+              <td class="cell-id">{{ owner.guest_id }}</td>
+              <td class="cell-name">{{ owner.first_name }} {{ owner.last_name }}</td>
+              <td class="cell-email">{{ owner.email }}</td>
+              <td class="cell-company">{{ owner.company_name|default:"-" }}</td>
             </tr>
             {% endfor %}
           </tbody>
         </table>
+        </div>
         {% else %}
           <p class="muted">No approved owner accounts yet.</p>
         {% endif %}
@@ -151,19 +184,21 @@
       <div class="panel">
         <h2>Declined Owners</h2>
         {% if declined_owners %}
+        <div class="table-wrap">
         <table>
           <thead><tr><th>Guest ID</th><th>Name</th><th>Email</th><th>Company Name</th></tr></thead>
           <tbody>
             {% for owner in declined_owners %}
             <tr>
-              <td>{{ owner.guest_id }}</td>
-              <td>{{ owner.first_name }} {{ owner.last_name }}</td>
-              <td>{{ owner.email }}</td>
-              <td>{{ owner.company_name|default:"-" }}</td>
+              <td class="cell-id">{{ owner.guest_id }}</td>
+              <td class="cell-name">{{ owner.first_name }} {{ owner.last_name }}</td>
+              <td class="cell-email">{{ owner.email }}</td>
+              <td class="cell-company">{{ owner.company_name|default:"-" }}</td>
             </tr>
             {% endfor %}
           </tbody>
         </table>
+        </div>
         {% else %}
           <p class="muted">No declined owner accounts.</p>
         {% endif %}

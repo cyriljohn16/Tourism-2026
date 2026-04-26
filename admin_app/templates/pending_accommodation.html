@@ -8,6 +8,9 @@
   <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="{% static 'css/navigation.css' %}">
   <style>
+    * {
+      box-sizing: border-box;
+    }
     body {
       font-family: "Poppins", 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
       background:
@@ -25,12 +28,13 @@
     }
     .content {
       flex: 1;
-      padding: 32px;
+      padding: 20px;
       box-sizing: border-box;
     }
     .container {
-      max-width: 1200px;
-      margin: 16px auto;
+      width: 100%;
+      max-width: none;
+      margin: 8px 0 16px;
       background: linear-gradient(180deg, #fffefc 0%, #fff9f2 100%);
       border: 1px solid #ead9c9;
       padding: 24px;
@@ -57,50 +61,56 @@
       padding-bottom: 12px;
       border-bottom: 1px solid #efdfcf;
     }
-    h1, h2 {
+    h1 {
+      margin: 0;
+      font-size: clamp(1.45rem, 2.4vw, 2rem);
       color: #3f2f26;
     }
-    h1 { margin: 0; font-size: clamp(1.45rem, 2.4vw, 2rem); }
     h2 {
-      margin-top: 18px;
+      margin-top: 26px;
       border-bottom: 1px solid #efdfcf;
       padding-bottom: 8px;
-      font-size: 1.2rem;
+      color: #3f2f26;
+      font-size: 1.15rem;
+      font-weight: 700;
     }
     .table-wrap {
       width: 100%;
       overflow-x: auto;
-      margin-top: 16px;
       border: 1px solid #e8d7c7;
       border-radius: 12px;
       background: #fff;
       position: relative;
       z-index: 1;
+      margin-top: 14px;
     }
     .mgmt-table {
       width: 100%;
-      min-width: 1220px;
+      min-width: 1560px;
       border-collapse: collapse;
       margin-top: 0;
+      position: relative;
+      z-index: 1;
+      table-layout: auto;
     }
-    .mgmt-table th, .mgmt-table td {
-      padding: 10px 10px;
+    .mgmt-table th,
+    .mgmt-table td {
+      padding: 10px;
       border: 1px solid #e8d7c7;
       text-align: left;
       vertical-align: top;
-      word-break: normal;
-      overflow-wrap: break-word;
-      font-size: 0.9rem;
       line-height: 1.35;
+      font-size: clamp(0.84rem, 0.26vw + 0.72rem, 0.94rem);
+      overflow-wrap: break-word;
     }
     .mgmt-table th {
       background-color: #efe1d4;
       color: #5d4332;
+      font-weight: 700;
+      letter-spacing: 0.01em;
       position: sticky;
       top: 0;
       z-index: 1;
-      font-weight: 700;
-      letter-spacing: 0.01em;
     }
     .mgmt-table tbody tr:nth-child(even) {
       background: #fffaf4;
@@ -108,85 +118,106 @@
     .mgmt-table tbody tr:hover {
       background: #fdf0e2;
     }
+    .mgmt-table th.action-col,
+    .mgmt-table td.action-cell {
+      position: sticky;
+      right: 0;
+      z-index: 3;
+      box-shadow: -8px 0 14px rgba(123, 86, 58, 0.12);
+    }
+    .mgmt-table th.action-col {
+      background-color: #efe1d4;
+    }
+    .mgmt-table td.action-cell {
+      background: #fffefb;
+    }
+    .mgmt-table tbody tr:nth-child(even) td.action-cell {
+      background: #fffaf4;
+    }
+    .mgmt-table tbody tr:hover td.action-cell {
+      background: #fdf0e2;
+    }
     .update-btn {
       background: linear-gradient(135deg, #875a34, #b77744);
       color: #fff;
       border: none;
-      padding: 7px 8px;
+      display: block;
+      padding: 8px 12px;
       border-radius: 10px;
       cursor: pointer;
-      width: 100%;
-      margin-top: 6px;
-      font-size: 0.85rem;
       font-weight: 600;
       transition: all 0.2s ease;
+      white-space: nowrap;
+      width: 100%;
+      margin-top: 6px;
     }
-    .update-btn:hover { transform: translateY(-1px); box-shadow: 0 8px 16px rgba(122, 79, 45, 0.22); }
+    .update-btn:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 8px 16px rgba(122, 79, 45, 0.22);
+    }
     .decline-btn {
       background: #f5d8d3;
       color: #8a2f25;
       border: 1px solid #e6b9b1;
       box-shadow: none;
     }
-    .decline-btn:hover { background: #efc7be; transform: none; }
+    .decline-btn:hover {
+      background: #efc7be;
+      transform: none;
+    }
     .reaccept-btn {
-      background: #e6f0fb;
-      color: #1a5fa8;
-      border: 1px solid #bdd7f3;
+      background: #d8e8fb;
+      color: #1f4f85;
+      border: 1px solid #b9d4f6;
       box-shadow: none;
     }
-    .reaccept-btn:hover { background: #d7e8fa; transform: none; }
-    select {
-      padding: 5px;
+    .reaccept-btn:hover {
+      background: #c8ddf8;
+      transform: none;
     }
     form {
+      display: inline-block;
+      margin: 0 4px 0 0;
+      width: 100%;
+    }
+    .action-cell form {
+      display: block;
       margin: 0;
+      white-space: normal;
     }
-    .cell-company { min-width: 170px; font-weight: 600; }
+    .action-cell form + form {
+      margin-top: 6px;
+    }
+    .action-cell input[type="text"] {
+      width: 100%;
+      display: block;
+      box-sizing: border-box;
+      border: 1px solid #d8c4b1;
+      border-radius: 9px;
+      padding: 7px 9px;
+      margin-bottom: 6px;
+      font-size: 0.8rem;
+      background: #fffdfb;
+      color: #5d4332;
+    }
+    .action-cell input[type="text"]::placeholder {
+      color: #9a7f6a;
+    }
+    .cell-company { min-width: 220px; font-weight: 600; }
     .cell-owner { min-width: 130px; }
-    .cell-email {
-      min-width: 190px;
-      font-size: 0.87rem;
-      word-break: break-all;
-    }
-    .cell-location {
-      min-width: 230px;
-      max-width: 280px;
-    }
-    .cell-type { min-width: 90px; white-space: nowrap; }
-    .cell-date {
-      min-width: 125px;
-      white-space: nowrap;
-      font-size: 0.84rem;
-      color: #6d5a4c;
-    }
-    .cell-phone {
-      min-width: 120px;
-      white-space: nowrap;
-      font-size: 0.88rem;
-    }
-    .cell-description {
-      min-width: 210px;
-      max-width: 260px;
-      color: #524238;
-    }
-    .cell-notes {
-      min-width: 140px;
-      max-width: 170px;
-      color: #6d5a4c;
-    }
-    .action-cell {
-      min-width: 152px;
-      white-space: nowrap;
-    }
-    .cell-status {
-      min-width: 108px;
-      white-space: nowrap;
-    }
+    .cell-email { min-width: 220px; word-break: break-all; }
+    .cell-location { min-width: 290px; }
+    .cell-type { min-width: 110px; white-space: nowrap; }
+    .cell-date { min-width: 165px; white-space: nowrap; color: #6f5746; }
+    .cell-phone { min-width: 150px; white-space: nowrap; }
+    .cell-description { min-width: 300px; }
+    .cell-notes { min-width: 180px; }
+    .action-cell { min-width: 220px; white-space: normal; }
+    .cell-status { min-width: 140px; white-space: nowrap; }
     .status-pill {
       display: inline-block;
-      padding: 3px 10px;
       border-radius: 999px;
+      padding: 3px 10px;
       font-size: 0.78rem;
       font-weight: 700;
       text-transform: uppercase;
@@ -197,30 +228,32 @@
       color: #236642;
     }
     .status-pill.pending {
-      background: rgba(199, 146, 26, 0.16);
-      color: #8a5b06;
+      background: rgba(182, 131, 39, 0.16);
+      color: #815c1d;
     }
     .status-pill.declined {
       background: rgba(200, 77, 58, 0.14);
       color: #8a2f25;
     }
-    .action-cell input[type="text"] {
-      width: 100%;
-      box-sizing: border-box;
-      border: 1px solid #decab7;
-      border-radius: 8px;
-      padding: 6px 7px;
-      margin-bottom: 6px;
-      font-size: 0.82rem;
-    }
     .section-block {
-      margin-top: 24px;
+      margin-top: 20px;
+      position: relative;
+      z-index: 1;
+    }
+    @media (max-width: 1366px) {
+      .content { padding: 14px; }
+      .container { padding: 16px; border-radius: 14px; }
+      .mgmt-table { min-width: 1480px; }
     }
     @media (max-width: 900px) {
       .content { padding: 14px; }
       .container { padding: 14px; border-radius: 14px; }
-      .table-wrap { overflow-x: auto; }
-      .mgmt-table { min-width: 1120px; }
+      .mgmt-table { min-width: 1280px; }
+    }
+    @media (max-width: 620px) {
+      .action-cell {
+        min-width: 210px;
+      }
     }
   </style>
 </head>
@@ -252,7 +285,7 @@
                     <th>Description</th>
                     <th>Phone Number</th>
                     <th>Approval Status</th>
-                    <th>Action</th>
+                    <th class="action-col">Action</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -305,7 +338,7 @@
                     <th>Phone Number</th>
                     <th>Approval Status</th>
                     <th>Review Notes</th>
-                    <th>Action</th>
+                    <th class="action-col">Action</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -356,7 +389,7 @@
                     <th>Phone Number</th>
                     <th>Approval Status</th>
                     <th>Review Notes</th>
-                    <th>Action</th>
+                    <th class="action-col">Action</th>
                   </tr>
                 </thead>
                 <tbody>

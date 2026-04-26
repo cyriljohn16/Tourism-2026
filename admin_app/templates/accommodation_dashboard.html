@@ -1132,7 +1132,21 @@
                     var skipped = Array.isArray(response.skipped) ? response.skipped.length : 0;
                     var details = response.message || "Check-in completed.";
                     if (skipped > 0) {
-                        details += " Some selected bookings were skipped due to status/date rules.";
+                        var reasons = (response.skipped || [])
+                            .map(function(item) { return String((item || {}).reason || '').toLowerCase(); });
+                        var pendingCount = reasons.filter(function(r) { return r === 'not_confirmed'; }).length;
+                        var windowCount = reasons.filter(function(r) { return r === 'outside_checkin_window'; }).length;
+                        if (pendingCount > 0 || windowCount > 0) {
+                            details += "\n\nSkipped summary:";
+                            if (pendingCount > 0) {
+                                details += "\n- " + pendingCount + " booking(s) pending admin confirmation";
+                            }
+                            if (windowCount > 0) {
+                                details += "\n- " + windowCount + " booking(s) outside check-in date window";
+                            }
+                        } else {
+                            details += " Some selected bookings were skipped due to status/date rules.";
+                        }
                     }
                     alert(details);
                     selectedGuests = [];
@@ -1142,7 +1156,25 @@
                 error: function(xhr, status, error) {
                     try {
                         var payload = JSON.parse(xhr.responseText || "{}");
-                        alert(payload.message || "Unable to process check-in right now.");
+                        var base = payload.message || "Unable to process check-in right now.";
+                        var skippedRows = Array.isArray(payload.skipped) ? payload.skipped : [];
+                        if (skippedRows.length > 0) {
+                            var reasons = skippedRows.map(function(item) {
+                                return String((item || {}).reason || "").toLowerCase();
+                            });
+                            var pendingCount = reasons.filter(function(r) { return r === "not_confirmed"; }).length;
+                            var windowCount = reasons.filter(function(r) { return r === "outside_checkin_window"; }).length;
+                            if (pendingCount > 0 || windowCount > 0) {
+                                base += "\n\nDetails:";
+                                if (pendingCount > 0) {
+                                    base += "\n- Pending confirmation: " + pendingCount;
+                                }
+                                if (windowCount > 0) {
+                                    base += "\n- Outside check-in window: " + windowCount;
+                                }
+                            }
+                        }
+                        alert(base);
                     } catch (e) {
                         alert("Unable to process check-in right now.");
                     }

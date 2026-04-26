@@ -16,6 +16,7 @@
       border: 1px solid #dfe6f1;
       box-shadow: 0 8px 24px rgba(14, 28, 56, 0.08);
       padding: 20px;
+      max-width: none;
     }
     .title { margin: 0 0 6px; color: #1f3554; }
     .muted { margin: 0 0 16px; color: #5d6f86; font-size: 14px; }
@@ -31,11 +32,16 @@
       text-decoration: none;
     }
     .chip.active { background: #1f6fe5; color: #fff; border-color: #1f6fe5; }
-    .table-wrap { overflow-x: auto; border: 1px solid #dde6f2; border-radius: 12px; }
-    table { width: 100%; border-collapse: collapse; }
-    th, td { padding: 10px; border-bottom: 1px solid #edf2f8; text-align: left; font-size: 14px; vertical-align: top; }
+    .table-wrap { overflow-x: auto; border: 1px solid #dde6f2; border-radius: 12px; background: #fff; }
+    table { width: 100%; min-width: 860px; border-collapse: collapse; table-layout: auto; }
+    th, td { padding: 10px; border-bottom: 1px solid #edf2f8; text-align: left; font-size: clamp(0.84rem, 0.24vw + 0.72rem, 0.93rem); vertical-align: top; overflow-wrap: break-word; }
     th { background: #f6f9ff; color: #1e3556; font-weight: 600; }
     tr:hover td { background: #fafcff; }
+    @media (max-width: 900px) {
+      .content { padding: 12px; }
+      .panel { padding: 14px; }
+      table { min-width: 780px; }
+    }
   </style>
 </head>
 <body>
