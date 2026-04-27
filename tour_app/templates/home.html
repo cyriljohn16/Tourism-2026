@@ -429,6 +429,24 @@
             border-radius: 10px;
         }
 
+        .tour-item .tour-image-placeholder {
+            width: 100%;
+            height: 200px;
+            border-radius: 10px;
+            border: 1px dashed #d7c4b2;
+            background:
+                linear-gradient(135deg, rgba(191, 130, 77, 0.12), rgba(26, 103, 210, 0.1)),
+                #f8f4ef;
+            color: #6b523f;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            font-weight: 700;
+            font-size: 0.92rem;
+            padding: 12px;
+        }
+
         .tour-item h2 {
             font-size: 1.35rem;
             margin-top: 10px;
@@ -532,6 +550,9 @@
             }
 
             .tour-item img {
+                height: 180px;
+            }
+            .tour-item .tour-image-placeholder {
                 height: 180px;
             }
         }
@@ -1111,7 +1132,9 @@
                             {% if tour.image %}
                             <img src="{{ tour.image.url }}" alt="{{ tour.tour_name }}">
                             {% else %}
-                            <img src="{% static 'images/logo.png' %}" alt="{{ tour.tour_name }}">
+                            <div class="tour-image-placeholder" role="img" aria-label="No image available for {{ tour.tour_name }}">
+                                No image available
+                            </div>
                             {% endif %}
                             <h2>{{ tour.tour_name }}</h2>
                             <p><strong>Details:</strong> {{ tour.description }}</p>

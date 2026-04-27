@@ -3,7 +3,9 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>MIES Form - Meetings, Incentives, Events and Services</title>
+    <link rel="stylesheet" href="{% static 'css/navigation.css' %}">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
         :root {
@@ -37,7 +39,7 @@
             color: var(--text-dark);
             line-height: 1.5;
         }
-        .content {
+        .mies-content {
             padding: 32px;
             box-sizing: border-box;
             width: 100%;
@@ -341,14 +343,24 @@
         }
         @media (max-width: 900px) {
             .records-table { min-width: 860px; }
+            .mies-content { padding: 14px; }
+            .container { margin: 10px auto; padding: 16px; }
+            .form-row { flex-direction: column; gap: 10px; }
+            .attendance-companies { grid-template-columns: minmax(0, 1fr); gap: 14px; }
+            .grand-total-card { width: 100%; }
+            .btn-submit, .btn-add-company { width: 100%; }
         }
     </style>
     <!-- Include jQuery -->
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
 </head>
 <body>
+    <aside class="navigation">
+        {% include "components/owner_navigation.html" %}
+    </aside>
+    <main class="content">
     {% csrf_token %}
-    <div class="content">
+    <div class="mies-content">
         <div class="container">
             <h1>MIES - Meetings, Incentives, Events and Services</h1>
             <h2>Companies and Representatives</h2>
@@ -503,7 +515,7 @@
         </div>
     </div>
     
-    <div class="content">
+    <div class="mies-content">
         <div class="container">
             <h2>All Meeting Records</h2>
             
@@ -549,6 +561,7 @@
             </div>
         </div>
     </div>
+    </main>
     
     <script>
         // CSRF setup for AJAX requests

@@ -1,8 +1,11 @@
 <!DOCTYPE html>
+{% load static %}
 <html lang="en">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Hotel Additional Information</title>
+    <link rel="stylesheet" href="{% static 'css/navigation.css' %}">
     <style>
         :root {
             --bg: #f4f7fc;
@@ -20,9 +23,10 @@
                 radial-gradient(circle at -5% 35%, rgba(111, 78, 55, 0.12), transparent 26%),
                 var(--bg);
             margin: 0;
-            padding: 20px;
+            padding: 0;
             color: var(--ink);
         }
+        .content { padding: 20px; }
         .container {
             max-width: 1200px;
             margin: 0 auto;
@@ -147,7 +151,8 @@
             color: #5d4332;
         }
         @media (max-width: 900px) {
-            body { padding: 12px; }
+            body { padding: 0; }
+            .content { padding: 12px; }
             .container { padding: 14px; border-radius: 12px; }
             .summary table, .scrollable-table table { min-width: 760px; }
             .submit-btn { width: 100%; }
@@ -155,6 +160,10 @@
     </style>
 </head>
 <body>
+    <aside class="navigation">
+        {% include "components/owner_navigation.html" %}
+    </aside>
+    <main class="content">
     <div class="container">
         <h1>Hotel Additional Information</h1>
         <form action="{% url 'accom_app:other_estab_create' %}" method="post">
@@ -328,6 +337,7 @@
             </div>
         </div>
     </div>
+    </main>
 
     <script>
         document.addEventListener('DOMContentLoaded', function() {
