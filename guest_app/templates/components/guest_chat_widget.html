@@ -130,12 +130,88 @@
     border-bottom-right-radius: 8px;
   }
 
+  .guest-chat-msg.user.image-user {
+    padding: 8px;
+    background:
+      linear-gradient(135deg, rgba(127, 84, 44, 0.98), rgba(155, 106, 58, 0.98));
+    max-width: min(260px, 82%);
+  }
+
+  .guest-chat-image-bubble {
+    display: grid;
+    gap: 6px;
+    max-width: 100%;
+  }
+
+  .guest-chat-sent-thumb {
+    width: 150px;
+    height: 108px;
+    border-radius: 11px;
+    object-fit: cover;
+    border: 1px solid rgba(255, 255, 255, 0.42);
+    box-shadow: 0 6px 14px rgba(10, 31, 58, 0.16);
+    background: rgba(255, 255, 255, 0.18);
+  }
+
+  .guest-chat-image-caption {
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    font-weight: 650;
+    line-height: 1.35;
+  }
+
+  .guest-chat-image-name {
+    font-size: 0.68rem;
+    opacity: 0.72;
+    overflow-wrap: anywhere;
+  }
+
+  .guest-chat-loading {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .guest-chat-loading-dots {
+    display: inline-flex;
+    gap: 3px;
+    align-items: center;
+  }
+
+  .guest-chat-loading-dots span {
+    width: 5px;
+    height: 5px;
+    border-radius: 999px;
+    background: #7f9abf;
+    animation: guestChatPulse 1s ease-in-out infinite;
+  }
+
+  .guest-chat-loading-dots span:nth-child(2) { animation-delay: 0.14s; }
+  .guest-chat-loading-dots span:nth-child(3) { animation-delay: 0.28s; }
+
+  @keyframes guestChatPulse {
+    0%, 80%, 100% { opacity: 0.35; transform: translateY(0); }
+    40% { opacity: 1; transform: translateY(-2px); }
+  }
+
   .guest-chat-msg.bot {
     align-self: flex-start;
     background: rgba(255, 255, 255, 0.94);
     border: 1px solid #d8e2f3;
     color: #1f2f45;
     border-bottom-left-radius: 8px;
+  }
+
+  .guest-chat-msg-heading {
+    margin: 0 0 6px;
+    color: #16335b;
+    font-size: 0.88rem;
+    font-weight: 850;
+    letter-spacing: 0.01em;
+  }
+
+  .guest-chat-msg-body {
+    white-space: pre-wrap;
   }
 
   .guest-chat-actions {
@@ -149,6 +225,14 @@
     display: grid;
     gap: 10px;
     margin-top: 6px;
+  }
+
+  .guest-chat-card-heading {
+    margin: 0;
+    color: #16335b;
+    font-size: 0.88rem;
+    font-weight: 850;
+    letter-spacing: 0.01em;
   }
 
   .guest-chat-card {
@@ -191,6 +275,23 @@
     font-size: 0.78rem;
     font-weight: 600;
     line-height: 1.3;
+  }
+
+  .guest-chat-card-badges {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin-top: 6px;
+  }
+
+  .guest-chat-card-badge {
+    border-radius: 999px;
+    background: #eef5ff;
+    border: 1px solid #d5e4f7;
+    color: #225487;
+    font-size: 0.66rem;
+    font-weight: 750;
+    padding: 3px 7px;
   }
 
   .guest-chat-card-desc {
@@ -247,6 +348,85 @@
     padding: 10px;
     display: flex;
     gap: 6px;
+    flex-wrap: wrap;
+  }
+  .guest-chat-file-meta {
+    width: 100%;
+    font-size: 0.72rem;
+    color: #35557d;
+    padding: 0 2px;
+  }
+  .guest-chat-pending-image {
+    width: 100%;
+    border: 1px solid #cfdff4;
+    border-radius: 12px;
+    background: #f5f9ff;
+    padding: 8px;
+    display: none;
+    gap: 8px;
+    align-items: flex-start;
+  }
+  .guest-chat-pending-image.open {
+    display: flex;
+  }
+  .guest-chat-pending-thumb {
+    width: 64px;
+    height: 64px;
+    border-radius: 10px;
+    border: 1px solid #d2e1f4;
+    object-fit: cover;
+    flex: 0 0 auto;
+    background: #e5eef9;
+  }
+  .guest-chat-pending-meta {
+    min-width: 0;
+    flex: 1 1 auto;
+  }
+  .guest-chat-pending-name {
+    font-size: 0.76rem;
+    font-weight: 700;
+    color: #1f3f67;
+    line-height: 1.25;
+    overflow-wrap: anywhere;
+  }
+  .guest-chat-pending-size {
+    margin-top: 2px;
+    font-size: 0.7rem;
+    color: #56759c;
+  }
+  .guest-chat-pending-actions {
+    margin-top: 6px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .guest-chat-pending-btn {
+    border: 1px solid #c8d8ef;
+    border-radius: 999px;
+    background: #fff;
+    color: #1e4c80;
+    min-height: 30px;
+    padding: 5px 10px;
+    font-size: 0.72rem;
+    font-weight: 700;
+    cursor: pointer;
+  }
+  .guest-chat-pending-btn.primary {
+    background: linear-gradient(135deg, #7f542c, #9b6a3a 52%, #1a67d2);
+    color: #fff;
+    border-color: transparent;
+  }
+  .guest-chat-attach {
+    width: 44px;
+    height: 44px;
+    border: 1px solid #cddcf0;
+    border-radius: 12px;
+    background: #f6f9ff;
+    color: #1e4c80;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
   }
 
   .guest-chat-input {
@@ -282,52 +462,129 @@
       right: 10px;
       left: 10px;
       width: auto;
-      height: min(72dvh, 620px);
-      top: auto;
-      bottom: calc(10px + env(safe-area-inset-bottom, 0px));
-      border-radius: 16px;
+      height: min(76dvh, 620px);
+      top: calc(86px + env(safe-area-inset-top, 0px));
+      bottom: auto;
+      border-radius: 18px;
+      box-shadow: 0 22px 54px rgba(7, 17, 34, 0.34);
     }
     .guest-chat-fab {
       right: 10px;
-      top: auto;
-      bottom: calc(14px + env(safe-area-inset-bottom, 0px));
-      width: 60px;
-      height: 60px;
-      border-radius: 14px;
+      top: calc(84px + env(safe-area-inset-top, 0px));
+      bottom: auto;
+      width: 50px;
+      height: 50px;
+      border-radius: 15px;
     }
+    .guest-chat-fab-icon { width: 22px; height: 22px; }
     .guest-chat-header {
-      padding: 12px 12px 16px;
+      align-items: center;
+      padding: 12px 12px 14px;
     }
     .guest-chat-header h3 {
-      font-size: 0.92rem;
+      font-size: 0.98rem;
     }
     .guest-chat-subtitle {
-      font-size: 0.62rem;
+      font-size: 0.66rem;
       line-height: 1.25;
     }
-    .guest-chat-card-image { height: 120px; }
+    .guest-chat-messages {
+      padding: 12px 10px;
+      gap: 9px;
+    }
+    .guest-chat-msg {
+      font-size: 0.84rem;
+      padding: 9px 10px;
+    }
+    .guest-chat-msg.user.image-user {
+      max-width: min(250px, 86%);
+      border-radius: 16px 16px 8px 16px;
+    }
+    .guest-chat-sent-thumb {
+      width: 132px;
+      height: 94px;
+    }
+    .guest-chat-card {
+      border-radius: 15px;
+    }
+    .guest-chat-card-image { height: 118px; }
+    .guest-chat-input-row {
+      padding: 10px;
+      gap: 7px;
+      background: rgba(255, 255, 255, 0.96);
+      border-top: 1px solid #dce6f3;
+    }
+    .guest-chat-input {
+      min-height: 42px;
+      font-size: 16px;
+      border-radius: 13px;
+    }
+    .guest-chat-send,
+    .guest-chat-attach {
+      flex: 0 0 auto;
+      width: 42px;
+      height: 42px;
+      border-radius: 13px;
+    }
+    .guest-chat-action-btn {
+      min-height: 34px;
+      border-radius: 999px;
+    }
   }
 
   @media (max-width: 480px) {
     .guest-chat-modal {
-      right: 8px;
-      left: 8px;
+      right: 7px;
+      left: 7px;
       width: auto;
-      height: min(74dvh, 560px);
-      bottom: calc(8px + env(safe-area-inset-bottom, 0px));
-      border-radius: 14px;
+      height: min(74dvh, 590px);
+      top: calc(78px + env(safe-area-inset-top, 0px));
+      bottom: auto;
+      border-radius: 16px;
     }
     .guest-chat-fab {
       right: 8px;
-      bottom: calc(10px + env(safe-area-inset-bottom, 0px));
-      width: 56px;
-      height: 56px;
+      top: calc(78px + env(safe-area-inset-top, 0px));
+      bottom: auto;
+      width: 46px;
+      height: 46px;
     }
+    .guest-chat-fab-icon { width: 20px; height: 20px; }
     .guest-chat-msg { max-width: 94%; }
+    .guest-chat-header-actions {
+      gap: 5px;
+    }
+    .guest-chat-hbtn {
+      min-height: 30px;
+      padding: 0 8px;
+      font-size: 0.7rem;
+    }
+    .guest-chat-cards {
+      gap: 8px;
+    }
+    .guest-chat-card-body {
+      padding: 10px;
+    }
     .guest-chat-card-btn,
     .guest-chat-action-btn {
       flex: 1 1 100%;
       justify-content: center;
+    }
+    .guest-chat-pending-image {
+      grid-template-columns: 54px minmax(0, 1fr);
+      padding: 8px;
+    }
+    .guest-chat-pending-thumb {
+      width: 54px;
+      height: 54px;
+    }
+    .guest-chat-pending-actions {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+    .guest-chat-pending-btn {
+      min-height: 34px;
+      width: 100%;
     }
   }
 </style>
@@ -355,6 +612,20 @@
   </div>
   <div id="guestChatMessages" class="guest-chat-messages"></div>
   <div class="guest-chat-input-row">
+    <div id="guestChatFileMeta" class="guest-chat-file-meta" aria-live="polite"></div>
+    <div id="guestChatPendingImage" class="guest-chat-pending-image" aria-live="polite">
+      <img id="guestChatPendingThumb" class="guest-chat-pending-thumb" alt="Pending image preview" />
+      <div class="guest-chat-pending-meta">
+        <div id="guestChatPendingName" class="guest-chat-pending-name"></div>
+        <div id="guestChatPendingSize" class="guest-chat-pending-size"></div>
+        <div class="guest-chat-pending-actions">
+          <button id="guestChatPendingSend" class="guest-chat-pending-btn primary" type="button">Send Image</button>
+          <button id="guestChatPendingRemove" class="guest-chat-pending-btn" type="button">Remove</button>
+        </div>
+      </div>
+    </div>
+    <input id="guestChatImageInput" type="file" accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" hidden />
+    <button id="guestChatAttach" class="guest-chat-attach" type="button" aria-label="Attach image">+</button>
     <input id="guestChatInput" class="guest-chat-input" type="text" placeholder="Type your message..." />
     <button id="guestChatSend" class="guest-chat-send" type="button" aria-label="Send message">
       <svg class="guest-chat-send-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -373,19 +644,43 @@
     const messagesEl = document.getElementById('guestChatMessages');
     const inputEl = document.getElementById('guestChatInput');
     const sendBtn = document.getElementById('guestChatSend');
-    if (!fab || !modal || !closeBtn || !clearBtn || !messagesEl || !inputEl || !sendBtn) return;
+    const attachBtn = document.getElementById('guestChatAttach');
+    const imageInputEl = document.getElementById('guestChatImageInput');
+    const fileMetaEl = document.getElementById('guestChatFileMeta');
+    const pendingWrapEl = document.getElementById('guestChatPendingImage');
+    const pendingThumbEl = document.getElementById('guestChatPendingThumb');
+    const pendingNameEl = document.getElementById('guestChatPendingName');
+    const pendingSizeEl = document.getElementById('guestChatPendingSize');
+    const pendingSendBtn = document.getElementById('guestChatPendingSend');
+    const pendingRemoveBtn = document.getElementById('guestChatPendingRemove');
+    if (!fab || !modal || !closeBtn || !clearBtn || !messagesEl || !inputEl || !sendBtn || !attachBtn || !imageInputEl || !fileMetaEl || !pendingWrapEl || !pendingThumbEl || !pendingNameEl || !pendingSizeEl || !pendingSendBtn || !pendingRemoveBtn) return;
 
     const storageKey = 'ibayaw_guest_chat_history';
     const stateKey = 'ibayaw_guest_chat_state';
     const versionKey = 'ibayaw_guest_chat_version';
-    const storageVersion = 'v3';
+    const storageVersion = 'v4';
     const maxItems = 120;
+    const imageMaxBytes = 5 * 1024 * 1024;
+    let pendingImageFile = null;
+    let pendingImageObjectUrl = '';
+    let imageSendInFlight = false;
+    let textSendInFlight = false;
     const defaultWelcomeMessage = "Hello! I\u2019m your Ibayaw Tour Assistant. I can help you explore tours, approved accommodations, directions, and trip plans.";
     const defaultStarterButtons = [
       { label: 'Find Approved Stays', value: 'show approved accommodations in bayawan' },
       { label: 'Show Tours', value: 'show available tours' },
       { label: 'Plan My Trip', value: 'plan my bayawan trip' },
       { label: 'Get Directions', value: 'how to get to bayawan' },
+      { label: 'Show Tourist Spots', value: 'what tourist spots are available in bayawan' },
+      { label: 'Dining Places', value: 'where can I eat in bayawan' },
+      { label: 'View Rooms', value: 'show available rooms' },
+      { label: 'Room Prices', value: 'tag pila ang room' },
+      { label: 'Tour Packages', value: 'naa moy tour package' },
+      { label: 'Tour Payment Info', value: 'where do I pay for the tour' },
+      { label: 'Tour Status Help', value: 'what does pending mean for tour booking' },
+      { label: 'My Tour Bookings', value: 'show my tour bookings' },
+      { label: 'Open City Map', value: 'show tourist spots on map' },
+      { label: 'Accommodation Handoff', value: 'how do I complete my accommodation booking' },
     ];
     const cardPlaceholder = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='640' height='360' viewBox='0 0 640 360'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0%25' y1='0%25' x2='100%25' y2='100%25'%3E%3Cstop offset='0%25' stop-color='%23edf2fb'/%3E%3Cstop offset='100%25' stop-color='%23dde7f7'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='640' height='360' fill='url(%23g)'/%3E%3Ccircle cx='244' cy='150' r='30' fill='%23b7c9e6'/%3E%3Cpath d='M120 262l112-92 72 62 90-80 126 110H120z' fill='%23c4d4ec'/%3E%3Ctext x='50%25' y='84%25' dominant-baseline='middle' text-anchor='middle' fill='%23527193' font-family='Arial,sans-serif' font-size='24'%3ENo image available%3C/text%3E%3C/svg%3E";
 
@@ -406,11 +701,26 @@
       }
     }
 
+    function shuffledItems(items) {
+      const copy = Array.isArray(items) ? items.slice() : [];
+      for (let i = copy.length - 1; i > 0; i -= 1) {
+        const j = Math.floor(Math.random() * (i + 1));
+        const tmp = copy[i];
+        copy[i] = copy[j];
+        copy[j] = tmp;
+      }
+      return copy;
+    }
+
+    function randomStarterButtons(limit) {
+      return shuffledItems(defaultStarterButtons).slice(0, limit || 4);
+    }
+
     function renderFreshWelcome(opts) {
       const options = opts || {};
       messagesEl.innerHTML = '';
       appendMessage(defaultWelcomeMessage, 'bot', { persist: options.persist !== false });
-      appendQuickReplies(defaultStarterButtons, { persist: options.persist !== false });
+      appendQuickReplies(randomStarterButtons(4), { persist: options.persist !== false });
       messagesEl.scrollTop = messagesEl.scrollHeight;
     }
 
@@ -477,6 +787,147 @@
       }
     }
 
+    function appendTitledBotMessage(title, text, opts) {
+      const options = opts || {};
+      const safeTitle = String(title || '').trim();
+      const safeText = String(text || '').trim();
+      if (!safeTitle) {
+        appendMessage(safeText, 'bot', options);
+        return;
+      }
+      const msg = document.createElement('div');
+      msg.className = 'guest-chat-msg bot';
+      const heading = document.createElement('div');
+      heading.className = 'guest-chat-msg-heading';
+      heading.textContent = safeTitle;
+      msg.appendChild(heading);
+      if (safeText) {
+        const body = document.createElement('div');
+        body.className = 'guest-chat-msg-body';
+        body.textContent = safeText;
+        msg.appendChild(body);
+      }
+      messagesEl.appendChild(msg);
+      messagesEl.scrollTop = messagesEl.scrollHeight;
+      if (options.persist !== false) {
+        pushHistory({ type: 'titled_message', title: safeTitle, text: safeText });
+      }
+    }
+
+    function appendAssistantLoadingMessage(text) {
+      const msg = document.createElement('div');
+      msg.className = 'guest-chat-msg bot guest-chat-loading-msg';
+      const wrap = document.createElement('div');
+      wrap.className = 'guest-chat-loading';
+      const label = document.createElement('span');
+      label.textContent = String(text || 'Thinking...').trim() || 'Thinking...';
+      const dots = document.createElement('span');
+      dots.className = 'guest-chat-loading-dots';
+      dots.setAttribute('aria-hidden', 'true');
+      dots.innerHTML = '<span></span><span></span><span></span>';
+      wrap.appendChild(label);
+      wrap.appendChild(dots);
+      msg.appendChild(wrap);
+      messagesEl.appendChild(msg);
+      messagesEl.scrollTop = messagesEl.scrollHeight;
+      return msg;
+    }
+
+    function appendImageUserMessage(file, caption) {
+      const safeName = String((file && file.name) || 'image').trim() || 'image';
+      const safeCaption = String(caption || '').trim();
+      const msg = document.createElement('div');
+      msg.className = 'guest-chat-msg user image-user';
+      const wrap = document.createElement('div');
+      wrap.className = 'guest-chat-image-bubble';
+      if (file) {
+        const img = document.createElement('img');
+        img.className = 'guest-chat-sent-thumb';
+        img.alt = safeName;
+        try {
+          const sentUrl = URL.createObjectURL(file);
+          img.src = sentUrl;
+          img.addEventListener('load', () => {
+            try { URL.revokeObjectURL(sentUrl); } catch (e) {}
+          }, { once: true });
+        } catch (e) {}
+        wrap.appendChild(img);
+      }
+      if (safeCaption) {
+        const captionEl = document.createElement('div');
+        captionEl.className = 'guest-chat-image-caption';
+        captionEl.textContent = safeCaption;
+        wrap.appendChild(captionEl);
+      } else {
+        const captionEl = document.createElement('div');
+        captionEl.className = 'guest-chat-image-caption';
+        captionEl.textContent = 'Please analyze this image for Bayawan tourism ideas.';
+        wrap.appendChild(captionEl);
+      }
+      const name = document.createElement('div');
+      name.className = 'guest-chat-image-name';
+      name.textContent = `Attached image • ${safeName}`;
+      wrap.appendChild(name);
+      msg.appendChild(wrap);
+      messagesEl.appendChild(msg);
+      messagesEl.scrollTop = messagesEl.scrollHeight;
+      pushHistory({
+        type: 'message',
+        kind: 'user',
+        text: `${safeCaption || 'Image sent for Bayawan tourism assistance.'}\nAttached image: ${safeName}`,
+      });
+    }
+
+    function clearPendingImagePreview() {
+      pendingImageFile = null;
+      if (pendingImageObjectUrl) {
+        try { URL.revokeObjectURL(pendingImageObjectUrl); } catch (e) {}
+      }
+      pendingImageObjectUrl = '';
+      pendingWrapEl.classList.remove('open');
+      pendingThumbEl.removeAttribute('src');
+      pendingNameEl.textContent = '';
+      pendingSizeEl.textContent = '';
+      fileMetaEl.textContent = '';
+      imageInputEl.value = '';
+    }
+
+    function renderPendingImagePreview(file) {
+      if (!file) return;
+      clearPendingImagePreview();
+      pendingImageFile = file;
+      pendingImageObjectUrl = URL.createObjectURL(file);
+      pendingThumbEl.src = pendingImageObjectUrl;
+      pendingNameEl.textContent = String(file.name || 'image').trim() || 'image';
+      pendingSizeEl.textContent = `${Math.max(1, Math.round((Number(file.size) || 0) / 1024))} KB`;
+      pendingWrapEl.classList.add('open');
+      fileMetaEl.textContent = `Image ready: ${pendingNameEl.textContent}`;
+    }
+
+    function queueImageFile(file) {
+      if (!file) return;
+      const name = String(file.name || '').trim();
+      const ext = name.includes('.') ? name.slice(name.lastIndexOf('.')).toLowerCase() : '';
+      const allowed = new Set(['.jpg', '.jpeg', '.png', '.webp']);
+      if (!allowed.has(ext)) {
+        appendMessage('Unsupported image type. Please upload JPG, JPEG, PNG, or WEBP.', 'bot');
+        return;
+      }
+      if ((Number(file.size) || 0) > imageMaxBytes) {
+        appendMessage('Image is too large. Please upload up to 5MB only.', 'bot');
+        return;
+      }
+      renderPendingImagePreview(file);
+    }
+
+    function normalizeActionKey(label, valueOrUrl) {
+      const normalizedLabel = String(label || '').trim().toLowerCase().replace(/\s+/g, ' ');
+      const normalizedTarget = String(valueOrUrl || '').trim().toLowerCase().replace(/\s+/g, ' ');
+      if (normalizedLabel === 'open map' || normalizedLabel === 'open city map') return 'open-city-map';
+      if (normalizedTarget === 'open map' || normalizedTarget === 'open city map' || normalizedTarget === '/guest_app/map/') return 'open-city-map';
+      return `${normalizedLabel}|${normalizedTarget}`;
+    }
+
     function appendQuickReplies(replies, opts) {
       if (!Array.isArray(replies) || !replies.length) return;
       const options = opts || {};
@@ -492,34 +943,124 @@
       ]);
       const wrap = document.createElement('div');
       wrap.className = 'guest-chat-actions';
-      replies.slice(0, 4).forEach((item) => {
+      const seen = new Set();
+      const serialized = [];
+      const itemsToRender = options.shuffle === false ? replies : shuffledItems(replies);
+      itemsToRender.forEach((item) => {
         const label = typeof item === 'object' ? String(item.label || item.value || '').trim() : String(item || '').trim();
         const value = typeof item === 'object' ? String(item.value || item.label || '').trim() : String(item || '').trim();
         if (!label || !value) return;
         const loweredLabel = label.toLowerCase();
         const loweredValue = value.toLowerCase();
         if (blockedValues.has(loweredLabel) || blockedValues.has(loweredValue)) return;
+        const actionKey = normalizeActionKey(label, value);
+        if (seen.has(actionKey)) return;
+        seen.add(actionKey);
+        if (wrap.children.length >= 4) return;
         const btn = document.createElement('button');
         btn.type = 'button';
         btn.className = 'guest-chat-action-btn';
         btn.textContent = label;
         btn.addEventListener('click', function () {
+          const normalized = value.toLowerCase();
+          if (
+            normalized === 'show my tour bookings'
+            || normalized === 'show tour bookings'
+            || normalized === 'view my tour bookings'
+            || normalized === 'open my tour bookings'
+          ) {
+            const isAuthenticated = document.body.getAttribute('data-authenticated') === 'true' || {{ user.is_authenticated|yesno:"true,false" }};
+            if (!isAuthenticated && typeof window.IbayawOpenAuthModal === 'function') {
+              window.IbayawOpenAuthModal('login');
+              return;
+            }
+            window.location.href = '/guest_app/tour-bookings/';
+            return;
+          }
           sendMessage(value, true);
         });
         wrap.appendChild(btn);
+        serialized.push({ label, value });
       });
       if (!wrap.children.length) return;
       messagesEl.appendChild(wrap);
       messagesEl.scrollTop = messagesEl.scrollHeight;
       if (options.persist !== false) {
-        pushHistory({ type: 'quick_replies', items: replies.slice(0, 4) });
+        pushHistory({ type: 'quick_replies', items: serialized });
+      }
+    }
+
+    function openChatActionUrl(rawUrl, opts) {
+      const options = opts || {};
+      const url = String(rawUrl || '').trim();
+      if (!url) return;
+      const forceNewTab = options.newTab === true;
+      const openInNewTabSafely = (targetUrl) => {
+        const newWin = window.open(targetUrl, '_blank', 'noopener,noreferrer');
+        if (newWin) {
+          newWin.opener = null;
+          return true;
+        }
+        try {
+          const anchor = document.createElement('a');
+          anchor.href = String(targetUrl || '').trim();
+          anchor.target = '_blank';
+          anchor.rel = 'noopener noreferrer';
+          anchor.style.display = 'none';
+          document.body.appendChild(anchor);
+          anchor.click();
+          anchor.remove();
+          return true;
+        } catch (e) {
+          return false;
+        }
+      };
+      if (forceNewTab) {
+        openInNewTabSafely(url);
+        return;
+      }
+      try {
+        const target = new URL(url, window.location.origin);
+        if (target.origin === window.location.origin) {
+          window.location.href = target.href;
+          return;
+        }
+      } catch (e) {
+        // Fall back to default behavior below.
+      }
+      openInNewTabSafely(url);
+    }
+
+    async function postFunnelEvent(eventKey, detail) {
+      const key = String(eventKey || '').trim();
+      if (!key) return;
+      try {
+        await fetch('/api/chat/funnel-event/', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            event_key: key,
+            detail: String(detail || '').slice(0, 160),
+          }),
+        });
+      } catch (e) {
+        // Best-effort telemetry only.
       }
     }
 
     function appendLinkActions(actions, opts) {
       const options = opts || {};
       if (!Array.isArray(actions) || !actions.length) return;
-      const filtered = actions.filter((entry) => entry && entry.url).slice(0, 3);
+      const seen = new Set();
+      const filtered = [];
+      actions.forEach((entry) => {
+        if (!entry || !entry.url) return;
+        const label = String(entry.label || 'Open Provider Page');
+        const key = normalizeActionKey(label, entry.url);
+        if (seen.has(key)) return;
+        seen.add(key);
+        if (filtered.length < 3) filtered.push(entry);
+      });
       if (!filtered.length) return;
       const wrap = document.createElement('div');
       wrap.className = 'guest-chat-actions';
@@ -527,8 +1068,14 @@
         const btn = document.createElement('button');
         btn.type = 'button';
         btn.className = 'guest-chat-action-btn';
-        btn.textContent = String(entry.label || 'Open Official Page');
-        btn.addEventListener('click', () => window.open(String(entry.url), '_blank'));
+        btn.textContent = String(entry.label || 'Open Provider Page');
+        btn.addEventListener('click', () => {
+          const label = String(entry.label || '').toLowerCase();
+          if (label.includes('official') || label.includes('facebook') || label.includes('booking')) {
+            postFunnelEvent('accommodation_external_handoff_clicked', label);
+          }
+          openChatActionUrl(String(entry.url));
+        });
         wrap.appendChild(btn);
       });
       messagesEl.appendChild(wrap);
@@ -540,11 +1087,14 @@
 
     function buildDetailUrl(item) {
       const kindRaw = String((item && (item.kind || item.item_type || '')) || '').toLowerCase();
+      const providedDetail = String((item && item.detail_url) || '').trim();
+      if (providedDetail) return providedDetail;
       if (kindRaw === 'tour' || kindRaw === 'tour_schedule') {
         const tourId = String((item && item.tour_id) || '').trim();
         if (tourId) {
           const schedId = String((item && item.sched_id) || '').trim();
-          return schedId ? `/guest_book/${tourId}/?sched_id=${schedId}` : `/guest_book/${tourId}/`;
+          const base = `/guest_app/guest_book/${tourId}/`;
+          return schedId ? `${base}?sched_id=${schedId}` : base;
         }
       }
       const accomId = Number(item && (item.accom_id || item.accommodation_id || 0)) || 0;
@@ -556,15 +1106,33 @@
       const official = String((item && (item.official_booking_url || item.official_url || '')) || '').trim();
       const contact = String((item && (item.official_contact_url || item.facebook_url || '')) || '').trim();
       const urls = { official: '', facebook: '' };
+      const isThirdPartyBookingUrl = (url) => {
+        const lowered = String(url || '').toLowerCase();
+        return ['booking.com', 'agoda.', 'traveloka.', 'expedia.', 'hotels.com', 'tripadvisor.', 'airbnb.', 'trivago.', 'kayak.']
+          .some((host) => lowered.includes(host));
+      };
       [official, contact].forEach((u) => {
         if (!u) return;
-        if (u.toLowerCase().includes('facebook.com')) {
+        if (u.toLowerCase().includes('facebook.com') || u.toLowerCase().includes('fb.com')) {
           if (!urls.facebook) urls.facebook = u;
-        } else if (!urls.official) {
+        } else if (!urls.official && !isThirdPartyBookingUrl(u)) {
           urls.official = u;
         }
       });
       return urls;
+    }
+
+    function dedupeCardActions(actions) {
+      const seen = new Set();
+      const deduped = [];
+      (Array.isArray(actions) ? actions : []).forEach((action) => {
+        if (!action) return;
+        const key = normalizeActionKey(action.label, action.url || action.value || action.action || '');
+        if (seen.has(key)) return;
+        seen.add(key);
+        deduped.push(action);
+      });
+      return deduped;
     }
 
     function buildCardActions(item, kind) {
@@ -572,19 +1140,31 @@
       if (kind === 'tour' || kind === 'tour_schedule') {
         const title = String((item && (item.title || item.tour_name || '')) || '').trim();
         const schedId = String((item && item.sched_id) || '').trim();
+        const slots = Number(item && (item.slots_available ?? item.meta?.slots_available ?? 0)) || 0;
         const detailUrl = buildDetailUrl(item);
-        if (detailUrl) actions.push({ label: 'View Details', action: 'open', url: detailUrl, primary: true });
+        if (detailUrl) actions.push({ label: 'View Details', action: 'open', url: detailUrl, primary: true, newTab: true });
         if (kind === 'tour' && title) {
           actions.push({ label: 'Show Schedules', action: 'chat', value: `show schedules for ${title}` });
           actions.push({ label: 'Book This Tour', action: 'chat', value: `book ${title}` });
         } else if (kind === 'tour_schedule') {
-          if (schedId) {
+          if (schedId && slots > 0) {
             actions.push({ label: 'Book This Schedule', action: 'chat', value: `book schedule ${schedId}` });
+          } else if (slots <= 0) {
+            actions.push({ label: 'Fully Booked', action: 'none' });
           } else if (title) {
             actions.push({ label: 'Book This Tour', action: 'chat', value: `book ${title}` });
           }
         }
-        return actions.slice(0, 4);
+        return dedupeCardActions(actions).slice(0, 4);
+      }
+      if (kind === 'tourism_place' || kind === 'dining' || kind === 'map_place') {
+        const title = String((item && (item.title || item.name || '')) || '').trim();
+        const detailUrl = String((item && item.detail_url) || '/guest_app/map/').trim();
+        const directionsUrl = String((item && (item.directions_url || item.direction_url)) || '').trim();
+        if (detailUrl) actions.push({ label: 'Open City Map', action: 'open', url: detailUrl, primary: true });
+        if (directionsUrl) actions.push({ label: `Get Directions${title ? ` to ${title}` : ''}`, action: 'open', url: directionsUrl, newTab: true });
+        if (title) actions.push({ label: 'Ask About This Place', action: 'chat', value: `tell me about ${title}` });
+        return dedupeCardActions(actions).slice(0, 4);
       }
       const title = String((item && (item.title || item.accommodation_name || '')) || '').trim();
       const accommodationName = String((item && item.accommodation_name) || '').trim()
@@ -600,17 +1180,97 @@
       })();
       const detailUrl = buildDetailUrl(item);
       const social = normalizeSocialUrls(item || {});
-      if (detailUrl) actions.push({ label: 'View Details', action: 'open', url: detailUrl, primary: true });
+      if (detailUrl) actions.push({ label: 'View Details', action: 'open', url: detailUrl, primary: true, newTab: true });
       if (kind === 'accommodation' && accommodationName) {
-        actions.push({ label: 'Show Rooms', action: 'chat', value: `show rooms for ${accommodationName}` });
-        if (social.official) actions.push({ label: 'Open Official Page', action: 'open', url: social.official });
-        if (social.facebook) actions.push({ label: 'View Facebook', action: 'open', url: social.facebook });
+        actions.push({ label: 'Preview Cost', action: 'chat', value: `show rooms for ${accommodationName}` });
+        if (social.facebook) actions.push({ label: 'Open Official Facebook Page', action: 'open', url: social.facebook });
+        if (social.official) actions.push({ label: 'Contact Accommodation Provider', action: 'open', url: social.official });
       } else if (kind === 'room') {
-        if (previewRef) actions.push({ label: 'Create Booking Preview', action: 'chat', value: `create booking preview for ${previewRef}` });
-        if (social.official) actions.push({ label: 'Open Official Page', action: 'open', url: social.official });
-        if (social.facebook) actions.push({ label: 'View Facebook', action: 'open', url: social.facebook });
+        if (previewRef) actions.push({ label: 'Preview Cost', action: 'chat', value: `create booking preview for ${previewRef}` });
+        if (social.facebook) actions.push({ label: 'Open Official Facebook Page', action: 'open', url: social.facebook });
+        if (social.official) actions.push({ label: 'Contact Accommodation Provider', action: 'open', url: social.official });
       }
-      return actions.slice(0, 5);
+      return dedupeCardActions(actions).slice(0, 5);
+    }
+
+    function buildRoomPreviewQuickReplies(items) {
+      const replies = [];
+      (Array.isArray(items) ? items : []).forEach((item) => {
+        if (!item || normalizeTraceKind(item) !== 'room') return;
+        const actions = buildCardActions(item, 'room');
+        const previewAction = actions.find((action) => String(action && action.label || '').toLowerCase() === 'preview cost');
+        if (!previewAction || !previewAction.value) return;
+        const title = String(item.title || '').trim();
+        const roomName = title.includes(' - ')
+          ? String(title.split(' - ').slice(1).join(' - ') || '').trim()
+          : String(item.room_name || item.room_type || '').trim();
+        replies.push({
+          label: roomName ? `Preview ${roomName}` : 'Preview Cost',
+          value: previewAction.value,
+        });
+      });
+      return replies.slice(0, 4);
+    }
+
+    function normalizeTraceKind(item) {
+      const raw = String((item && (item.kind || item.item_type)) || '').toLowerCase();
+      if (raw === 'tour' || raw === 'tour_schedule' || raw === 'room' || raw === 'accommodation' || raw === 'tourism_place' || raw === 'dining' || raw === 'map_place') return raw;
+      if (item && (item.tour_id || item.sched_id)) return 'tour';
+      if (item && item.room_id) return 'room';
+      return 'accommodation';
+    }
+
+    function inferResponseType(payload, items, text) {
+      const explicit = String((payload && (payload.response_type || payload.type)) || '').toLowerCase();
+      if (explicit) return explicit;
+      const traceItems = Array.isArray(items) ? items : [];
+      if (traceItems.length) {
+        const kinds = traceItems.map(normalizeTraceKind);
+        if (kinds.some((kind) => kind === 'tour' || kind === 'tour_schedule')) return 'tour_recommendations';
+        if (kinds.some((kind) => kind === 'room')) return 'room_recommendations';
+        return 'accommodation_recommendations';
+      }
+      const body = String(text || (payload && payload.fulfillmentText) || '').toLowerCase();
+      if (
+        payload && payload.accommodation_preview_completed
+        || body.includes('estimated accommodation booking preview')
+        || body.includes('estimated total')
+        && body.includes('accommodation:')
+        && body.includes('room:')
+      ) return 'accommodation_cost_preview';
+      if (
+        body.includes('tour payment')
+        || body.includes('payment is handled only after')
+      ) return 'tour_payment_information';
+      if (
+        body.includes('tour booking request')
+        || body.includes('pending means your tour booking')
+        || body.includes('check your tour booking status')
+      ) return 'tour_booking_status';
+      if (payload && (payload.billing_link || payload.map_action || payload.open_map)) return 'directions';
+      if (body.includes('direction') || body.includes('get directions') || body.includes('city map') || body.includes('current location')) return 'directions';
+      if (body.includes('dining') || body.includes('restaurant') || body.includes('food') || body.includes('eat') || body.includes('mangaon') || body.includes('kaon')) return 'dining';
+      if (body.includes('tourist spot') || body.includes('tourism place') || body.includes('landmark') || body.includes('places you can visit')) return 'tourism_places';
+      if (body.includes('bayawan tourism') || body.includes('history') || body.includes('culture') || body.includes('festival')) return 'tourism_information';
+      return '';
+    }
+
+    function resolveResponseHeading(payload, items, text) {
+      const explicitTitle = String((payload && (payload.title || payload.response_title || payload.heading)) || '').trim();
+      if (explicitTitle) return explicitTitle;
+      const responseType = inferResponseType(payload, items, text);
+      if (responseType.includes('tour_schedule')) return 'Tour Schedules';
+      if (responseType.includes('tour_payment_information')) return 'Tour Payment Information';
+      if (responseType.includes('tour_booking_status')) return 'Tour Booking Status';
+      if (responseType.includes('tour')) return 'Tour Package Recommendations';
+      if (responseType.includes('room')) return 'Available Rooms';
+      if (responseType.includes('accommodation_cost_preview') || responseType.includes('booking_preview')) return 'Accommodation Cost Preview';
+      if (responseType.includes('accommodation') || responseType.includes('hotel')) return 'Accommodation Recommendations';
+      if (responseType.includes('dining') || responseType.includes('food')) return 'Dining Places';
+      if (responseType.includes('tourist') || responseType.includes('tourism_place') || responseType.includes('landmark') || responseType.includes('map_place')) return 'Tourism Places';
+      if (responseType.includes('direction') || responseType.includes('map') || responseType.includes('current_location')) return 'Directions / Map Guidance';
+      if (responseType.includes('history') || responseType.includes('culture') || responseType.includes('tourism_information') || responseType.includes('bayawan_overview')) return 'Bayawan Tourism Information';
+      return '';
     }
 
     function appendRecommendationCards(items, opts) {
@@ -618,13 +1278,17 @@
       const options = opts || {};
       const wrap = document.createElement('div');
       wrap.className = 'guest-chat-cards';
+      const headingText = String(options.heading || '').trim();
+      if (headingText) {
+        const heading = document.createElement('div');
+        heading.className = 'guest-chat-card-heading';
+        heading.textContent = headingText;
+        wrap.appendChild(heading);
+      }
 
       items.slice(0, 5).forEach((item) => {
         if (!item || typeof item !== 'object') return;
-        const kindRaw = String(item.kind || item.item_type || '').toLowerCase();
-        const kind = (kindRaw === 'room' || kindRaw === 'tour' || kindRaw === 'tour_schedule')
-          ? kindRaw
-          : 'accommodation';
+        const kind = normalizeTraceKind(item);
         const title = String(item.title || item.accommodation_name || '').trim();
         if (!title) return;
         const subtitle = String(item.subtitle || '').trim();
@@ -661,6 +1325,24 @@
           sub.textContent = subtitle;
           body.appendChild(sub);
         }
+        const badges = Array.isArray(item.badges) ? item.badges : [];
+        const badgeTexts = badges.concat(kind === 'accommodation' ? ['Tourism Office Approved'] : []);
+        const cleanBadges = badgeTexts
+          .map((badge) => String(badge || '').trim())
+          .filter(Boolean)
+          .filter((badge, index, arr) => arr.findIndex((value) => value.toLowerCase() === badge.toLowerCase()) === index)
+          .slice(0, 3);
+        if (cleanBadges.length) {
+          const badgeWrap = document.createElement('div');
+          badgeWrap.className = 'guest-chat-card-badges';
+          cleanBadges.forEach((badgeText) => {
+            const badge = document.createElement('span');
+            badge.className = 'guest-chat-card-badge';
+            badge.textContent = badgeText;
+            badgeWrap.appendChild(badge);
+          });
+          body.appendChild(badgeWrap);
+        }
         if (description) {
           const desc = document.createElement('div');
           desc.className = 'guest-chat-card-desc';
@@ -678,10 +1360,23 @@
             btn.textContent = a.label;
             btn.addEventListener('click', function () {
               if (a.action === 'open' && a.url) {
-                window.open(String(a.url), '_blank');
+                const label = String(a.label || '').toLowerCase();
+                if (label.includes('official') || label.includes('facebook') || label.includes('booking')) {
+                  postFunnelEvent('accommodation_external_handoff_clicked', label);
+                }
+                openChatActionUrl(String(a.url), { newTab: a.newTab === true });
+                return;
+              }
+              if (a.action === 'none') {
                 return;
               }
               if (a.action === 'chat' && a.value) {
+                const valueLower = String(a.value || '').toLowerCase();
+                if (valueLower.startsWith('show rooms for ')) {
+                  postFunnelEvent('accommodation_rooms_viewed', String(a.value || ''));
+                } else if (valueLower.startsWith('create booking preview for ')) {
+                  postFunnelEvent('accommodation_preview_started', String(a.value || ''));
+                }
                 sendMessage(String(a.value), true);
               }
             });
@@ -698,7 +1393,7 @@
       messagesEl.appendChild(wrap);
       messagesEl.scrollTop = messagesEl.scrollHeight;
       if (options.persist !== false) {
-        pushHistory({ type: 'recommendation_trace', items: items.slice(0, 5) });
+        pushHistory({ type: 'recommendation_trace', items: items.slice(0, 5), heading: headingText });
       }
     }
 
@@ -713,10 +1408,15 @@
         if (!entry || typeof entry !== 'object') return;
         if (entry.type === 'message') {
           appendMessage(String(entry.text || ''), String(entry.kind || 'bot'), { persist: false });
+        } else if (entry.type === 'titled_message') {
+          appendTitledBotMessage(String(entry.title || ''), String(entry.text || ''), { persist: false });
         } else if (entry.type === 'quick_replies') {
           appendQuickReplies(Array.isArray(entry.items) ? entry.items : [], { persist: false });
         } else if (entry.type === 'recommendation_trace') {
-          appendRecommendationCards(Array.isArray(entry.items) ? entry.items : [], { persist: false });
+          appendRecommendationCards(Array.isArray(entry.items) ? entry.items : [], {
+            persist: false,
+            heading: String(entry.heading || ''),
+          });
         } else if (entry.type === 'link_actions') {
           appendLinkActions(Array.isArray(entry.items) ? entry.items : [], { persist: false });
         }
@@ -724,16 +1424,21 @@
     }
 
     async function sendMessage(message, addUserBubble) {
+      if (imageSendInFlight) return;
       const text = String(message || '').trim();
       if (!text) return;
+      if (textSendInFlight) return;
+      textSendInFlight = true;
       const lowered = text.toLowerCase();
       if (lowered.startsWith('show rooms for ')) {
         const name = text.slice('show rooms for '.length).trim();
         if (name) mergeState({ selected_accommodation_name: name });
+        postFunnelEvent('accommodation_rooms_viewed', text);
       }
       if (lowered.startsWith('create booking preview for ')) {
         const ref = text.slice('create booking preview for '.length).trim();
         if (ref) mergeState({ preview_reference: ref });
+        postFunnelEvent('accommodation_preview_started', text);
       }
       if (addUserBubble !== false) appendMessage(text, 'user');
       inputEl.value = '';
@@ -753,13 +1458,70 @@
           renderFreshWelcome({ persist: true });
           return;
         }
-        const hasCards = Array.isArray(data.recommendation_trace) && data.recommendation_trace.length > 0;
-        const fulfillmentText = String(data.fulfillmentText || 'No response available.').trim();
-        const firstTrace = hasCards ? (data.recommendation_trace[0] || {}) : {};
-        const firstKind = String(firstTrace.kind || firstTrace.item_type || '').toLowerCase();
+        let visibleTrace = Array.isArray(data.recommendation_trace) ? data.recommendation_trace : [];
+        const previewRequestRef = lowered.startsWith('create booking preview for ')
+          ? text.slice('create booking preview for '.length).trim()
+          : '';
+        const roomsRequestRef = lowered.startsWith('show rooms for ')
+          ? text.slice('show rooms for '.length).trim()
+          : '';
+        const normalizeAccommodationMatchText = (value) => String(value || '')
+          .toLowerCase()
+          .replace(/&/g, ' and ')
+          .replace(/[^a-z0-9]+/g, ' ')
+          .replace(/\bbayawan\b/g, ' ')
+          .replace(/\s+/g, ' ')
+          .trim();
+        const currentChatState = readState();
+        const focusedAccommodationRef = String(
+          data.selected_accommodation_name
+          || previewRequestRef
+          || roomsRequestRef
+          || currentChatState.selected_accommodation_name
+          || currentChatState.preview_reference
+          || ''
+        ).trim();
+        const shouldKeepAccommodationFocus = Boolean(
+          visibleTrace.length
+          && focusedAccommodationRef
+          && (
+            previewRequestRef
+            || roomsRequestRef
+            || lowered.includes('booking preview')
+            || lowered.includes('preview cost')
+          )
+        );
+        if (shouldKeepAccommodationFocus) {
+          const wantedName = normalizeAccommodationMatchText(
+            focusedAccommodationRef
+          );
+          const wantedId = Number(data.selected_accommodation_id || 0);
+          const filteredTrace = visibleTrace.filter((item) => {
+            const itemId = Number(item && item.accom_id || 0);
+            const itemName = normalizeAccommodationMatchText(
+              (item && (item.accommodation_name || item.title || item.subtitle)) || ''
+            );
+            if (wantedId > 0 && itemId === wantedId) return true;
+            return wantedName && itemName && (itemName.includes(wantedName) || wantedName.includes(itemName));
+          });
+          if (filteredTrace.length) {
+            visibleTrace = filteredTrace;
+          }
+        }
+        const hasCards = visibleTrace.length > 0;
+        let fulfillmentText = String(data.fulfillmentText || 'No response available.').trim();
+        if (shouldKeepAccommodationFocus && hasCards && visibleTrace.length < (Array.isArray(data.recommendation_trace) ? data.recommendation_trace.length : 0)) {
+          const focusedName = String(visibleTrace[0].accommodation_name || visibleTrace[0].title || previewRequestRef).trim();
+          fulfillmentText = roomsRequestRef
+            ? `I will keep this focused on ${focusedName}.`
+            : `I found ${focusedName}. I will keep this booking preview focused on that accommodation only.`;
+        }
+        const firstTrace = hasCards ? (visibleTrace[0] || {}) : {};
+        const firstKind = hasCards ? normalizeTraceKind(firstTrace) : '';
         const looksLikeNumberedList = /(^|\n)\s*1\./.test(fulfillmentText);
         const isPreviewSummary = /estimated (accommodation )?booking preview|estimated total|accommodation:\s|room:\s|stay:\s/i.test(fulfillmentText);
         const shouldUseCardOnlyIntro = hasCards && looksLikeNumberedList && !isPreviewSummary;
+        const responseHeading = resolveResponseHeading(data, hasCards ? visibleTrace : [], fulfillmentText);
         if (shouldUseCardOnlyIntro) {
           const intro = firstKind === 'room'
             ? 'Here are the available rooms.'
@@ -770,10 +1532,27 @@
                 : 'I found approved accommodations that match your request.'))
           appendMessage(intro, 'bot');
         } else {
-          appendMessage(fulfillmentText || 'No response available.', 'bot');
+          const shouldUseTitledMessage = responseHeading
+            && !hasCards
+            && !/^no response available\.$/i.test(fulfillmentText || '');
+          if (shouldUseTitledMessage) {
+            appendTitledBotMessage(responseHeading, fulfillmentText || 'No response available.');
+          } else {
+            appendMessage(fulfillmentText || 'No response available.', 'bot');
+          }
         }
         if (hasCards) {
-          appendRecommendationCards(data.recommendation_trace);
+          appendRecommendationCards(visibleTrace, { heading: responseHeading });
+          if (firstKind === 'room') {
+            appendMessage(
+              'Next step: choose a room and tap Preview Cost, or use one of the buttons below. This creates a cost preview only; final accommodation booking is completed through the provider.',
+              'bot'
+            );
+            const roomPreviewReplies = buildRoomPreviewQuickReplies(visibleTrace);
+            if (roomPreviewReplies.length) {
+              appendQuickReplies(roomPreviewReplies, { shuffle: false });
+            }
+          }
           const first = firstTrace || {};
           const selectedAccommodationName = String(first.accommodation_name || '').trim() || String((first.title || '').split(' - ')[0] || '').trim();
           const selectedRoomName = String((first.title || '').includes(' - ') ? (String(first.title || '').split(' - ').slice(1).join(' - ').trim()) : '').trim();
@@ -807,8 +1586,8 @@
             ? data.quick_replies.filter((item) => {
                 const label = typeof item === 'object' ? String(item.label || item.value || '').trim().toLowerCase() : String(item || '').trim().toLowerCase();
                 const value = typeof item === 'object' ? String(item.value || item.label || '').trim().toLowerCase() : String(item || '').trim().toLowerCase();
-                return !['open official page', 'view facebook', 'open facebook page'].includes(label)
-                  && !['open official page', 'view facebook', 'open facebook page'].includes(value);
+                return !['open provider page', 'contact accommodation provider', 'open official facebook page', 'open facebook page'].includes(label)
+                  && !['open provider page', 'contact accommodation provider', 'open official facebook page', 'open facebook page'].includes(value);
               })
             : data.quick_replies;
           appendQuickReplies(filteredReplies);
@@ -821,9 +1600,94 @@
         if (typing && typing.textContent === 'Thinking...') typing.remove();
         appendMessage('I could not connect right now. Please try again.', 'bot');
       } finally {
+        textSendInFlight = false;
         sendBtn.disabled = false;
         inputEl.focus();
       }
+    }
+
+    async function sendImageMessage(file, caption) {
+      if (!file || imageSendInFlight) return;
+      imageSendInFlight = true;
+      const safeCaption = String(caption || '').trim();
+      appendImageUserMessage(file, safeCaption);
+      inputEl.value = '';
+      sendBtn.disabled = true;
+      pendingSendBtn.disabled = true;
+      pendingRemoveBtn.disabled = true;
+      appendAssistantLoadingMessage(safeCaption ? 'Analyzing your image and request...' : 'Analyzing your image...');
+      try {
+        const formData = new FormData();
+        formData.append('image', file);
+        if (safeCaption) {
+          formData.append('message', safeCaption);
+          formData.append('query', safeCaption);
+        }
+        const response = await fetch('/api/chat/image/', {
+          method: 'POST',
+          body: formData,
+        });
+        const data = await response.json();
+        const typing = messagesEl.querySelector('.guest-chat-loading-msg:last-child');
+        if (typing) typing.remove();
+        const imageHasCards = Array.isArray(data.recommendation_trace) && data.recommendation_trace.length > 0;
+        const imageText = String(data.fulfillmentText || 'No response available.').trim();
+        const imageHeading = resolveResponseHeading(data, imageHasCards ? data.recommendation_trace : [], imageText)
+          || String(data.heading || 'Image-Assisted Tourism Recommendations').trim();
+        if (imageHasCards) {
+          appendTitledBotMessage('Image-Assisted Tourism Recommendations', imageText);
+          appendRecommendationCards(data.recommendation_trace, { heading: imageHeading });
+        } else if (imageHeading) {
+          appendTitledBotMessage(imageHeading, imageText);
+        } else {
+          appendMessage(imageText, 'bot');
+        }
+        if (Array.isArray(data.quick_replies) && data.quick_replies.length) {
+          appendQuickReplies(data.quick_replies);
+        }
+        const links = Array.isArray(data.link_actions) ? data.link_actions.filter((entry) => entry && entry.url) : [];
+        if (links.length) appendLinkActions(links);
+      } catch (error) {
+        const typing = messagesEl.querySelector('.guest-chat-loading-msg:last-child');
+        if (typing) typing.remove();
+        appendMessage('I could not process that image right now. Please try again.', 'bot');
+      } finally {
+        imageSendInFlight = false;
+        sendBtn.disabled = false;
+        pendingSendBtn.disabled = false;
+        pendingRemoveBtn.disabled = false;
+        imageInputEl.value = '';
+        fileMetaEl.textContent = '';
+        inputEl.value = '';
+        inputEl.focus();
+      }
+    }
+
+    function extractPastedImageFile(event) {
+      const clipboard = event && event.clipboardData;
+      if (!clipboard || !clipboard.items || !clipboard.items.length) return null;
+      for (const item of clipboard.items) {
+        if (!item || item.kind !== 'file') continue;
+        const mime = String(item.type || '').toLowerCase();
+        if (!mime.startsWith('image/')) continue;
+        const file = item.getAsFile ? item.getAsFile() : null;
+        if (!file) continue;
+        const ext = (() => {
+          const name = String(file.name || '').trim();
+          if (name.includes('.')) return name.slice(name.lastIndexOf('.')).toLowerCase();
+          if (mime === 'image/jpeg') return '.jpg';
+          if (mime === 'image/png') return '.png';
+          if (mime === 'image/webp') return '.webp';
+          return '';
+        })();
+        if (!['.jpg', '.jpeg', '.png', '.webp'].includes(ext)) {
+          return { invalidType: true, file };
+        }
+        const normalizedName = String(file.name || '').trim() || `pasted-image${ext}`;
+        const pastedFile = new File([file], normalizedName, { type: file.type || mime || 'image/png' });
+        return { file: pastedFile };
+      }
+      return null;
     }
 
     fab.addEventListener('click', function () {
@@ -846,14 +1710,65 @@
       messagesEl.dataset.hydrated = '1';
     });
 
-    sendBtn.addEventListener('click', function () {
+    function submitGuestChatInput() {
+      if (imageSendInFlight || textSendInFlight) return;
+      if (pendingImageFile) {
+        const fileToSend = pendingImageFile;
+        const caption = inputEl.value;
+        clearPendingImagePreview();
+        sendImageMessage(fileToSend, caption);
+        return;
+      }
       sendMessage(inputEl.value, true);
+    }
+
+    sendBtn.addEventListener('click', submitGuestChatInput);
+    attachBtn.addEventListener('click', function () {
+      imageInputEl.click();
+    });
+    imageInputEl.addEventListener('change', function () {
+      const file = imageInputEl.files && imageInputEl.files[0] ? imageInputEl.files[0] : null;
+      if (!file) {
+        fileMetaEl.textContent = '';
+        return;
+      }
+      queueImageFile(file);
     });
 
-    inputEl.addEventListener('keypress', function (event) {
+    function handleImagePaste(event) {
+      if (event.defaultPrevented) return;
+      const pasted = extractPastedImageFile(event);
+      if (!pasted) return;
+      event.preventDefault();
+      event.stopPropagation();
+      if (pasted.invalidType) {
+        appendMessage('Unsupported image type. Please upload JPG, JPEG, PNG, or WEBP.', 'bot');
+        return;
+      }
+      const file = pasted.file;
+      if (!file) return;
+      queueImageFile(file);
+    }
+
+    inputEl.addEventListener('paste', handleImagePaste);
+    modal.addEventListener('paste', handleImagePaste);
+    pendingSendBtn.addEventListener('click', function () {
+      if (!pendingImageFile || imageSendInFlight || textSendInFlight) return;
+      const fileToSend = pendingImageFile;
+      const caption = inputEl.value;
+      clearPendingImagePreview();
+      sendImageMessage(fileToSend, caption);
+    });
+    pendingRemoveBtn.addEventListener('click', function () {
+      clearPendingImagePreview();
+    });
+
+    inputEl.addEventListener('keydown', function (event) {
       if (event.key === 'Enter') {
         event.preventDefault();
-        sendMessage(inputEl.value, true);
+        event.stopPropagation();
+        if (event.isComposing || event.repeat) return;
+        submitGuestChatInput();
       }
     });
 

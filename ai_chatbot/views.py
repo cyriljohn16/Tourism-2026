@@ -8,6 +8,7 @@ import re
 import time
 import uuid
 import calendar
+import unicodedata
 from collections import Counter
 from datetime import datetime, timedelta
 from decimal import Decimal
@@ -24,6 +25,7 @@ from django.http import JsonResponse
 from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
+from PIL import Image
 
 try:
     from openai import OpenAI
@@ -57,7 +59,7 @@ from admin_app.notification_service import (
     create_notification,
     notify_assigned_employees_for_schedule,
 )
-from guest_app.models import AccommodationBooking, Billing, Guest, TourBooking, Pending
+from guest_app.models import AccommodationBooking, Billing, Guest, TourBooking, Pending, MapBookmark
 from .recommenders import (
     apply_approved_accommodation_scope,
     recommend_tours,
@@ -96,8 +98,15 @@ _TEXT_CNN_MODEL_PATH_CACHE = None
 _TEXT_CNN_RUNTIME_IMPORT_ATTEMPTED = False
 _TEXT_CNN_RUNTIME_IMPORT_ERROR = ""
 _TEXT_CNN_DISABLED_LOGGED = False
+_ACCOM_TEXT_CNN_AVAILABILITY_CACHE = None
+_ACCOM_TEXT_CNN_MISSING_LOGGED = False
 _ACCOM_LOCATION_CACHE = None
 _MAP_REFERENCE_PLACE_CACHE = None
+_IMAGE_CNN_MODEL_CACHE = None
+_IMAGE_CNN_LABEL_MAP_CACHE = None
+_IMAGE_CNN_CONFIG_CACHE = None
+_IMAGE_CNN_RUNTIME_IMPORT_ATTEMPTED = False
+_IMAGE_CNN_RUNTIME_IMPORT_ERROR = ""
 _CHAT_STATE_SESSION_KEY = "ai_chatbot_state"
 _CHAT_PREFERENCE_SESSION_KEY = "ai_chatbot_saved_preferences"
 _CHAT_SOCIAL_SESSION_KEY = "ai_chatbot_social_profile"
@@ -172,6 +181,75 @@ def _env_flag(name, default=False):
     return raw in {"1", "true", "yes", "on"}
 
 
+def _is_accommodation_facebook_url(url):
+    text = str(url or "").strip().lower()
+    return "facebook.com" in text or "fb.com" in text
+
+
+def _is_third_party_accommodation_booking_url(url):
+    text = str(url or "").strip().lower()
+    if not text:
+        return False
+    third_party_hosts = (
+        "booking.com",
+        "agoda.",
+        "traveloka.",
+        "expedia.",
+        "hotels.com",
+        "tripadvisor.",
+        "airbnb.",
+        "trivago.",
+        "kayak.",
+    )
+    return any(host in text for host in third_party_hosts)
+
+
+def _is_verified_accommodation_provider_url(url):
+    text = str(url or "").strip()
+    if not text:
+        return False
+    if _is_third_party_accommodation_booking_url(text):
+        return False
+    return text.lower().startswith(("http://", "https://"))
+
+
+def _sanitize_accommodation_handoff_urls(*, booking_url="", contact_url=""):
+    booking = str(booking_url or "").strip()
+    contact = str(contact_url or "").strip()
+    facebook_url = ""
+    provider_url = ""
+    for candidate in (booking, contact):
+        if candidate and _is_accommodation_facebook_url(candidate):
+            facebook_url = candidate
+            break
+    for candidate in (contact, booking):
+        if candidate and not _is_accommodation_facebook_url(candidate) and _is_verified_accommodation_provider_url(candidate):
+            provider_url = candidate
+            break
+    return {
+        "facebook_url": facebook_url,
+        "provider_url": provider_url,
+        "suppressed_third_party_booking_url": (
+            _is_third_party_accommodation_booking_url(booking)
+            or _is_third_party_accommodation_booking_url(contact)
+        ),
+    }
+
+
+def _public_accommodation_handoff_fields(*, booking_url="", contact_url=""):
+    handoff = _sanitize_accommodation_handoff_urls(
+        booking_url=booking_url,
+        contact_url=contact_url,
+    )
+    return {
+        "official_booking_url": "",
+        "official_contact_url": handoff.get("facebook_url") or handoff.get("provider_url") or "",
+        "facebook_url": handoff.get("facebook_url") or "",
+        "official_url": handoff.get("provider_url") or "",
+        "suppressed_third_party_booking_url": bool(handoff.get("suppressed_third_party_booking_url")),
+    }
+
+
 def _is_text_cnn_intent_disabled():
     return _env_flag("DISABLE_TEXT_CNN_INTENT", False)
 
@@ -205,6 +283,437 @@ def _ensure_text_cnn_runtime_stack():
     tf = _tf
     _TEXT_CNN_RUNTIME_IMPORT_ERROR = ""
     return True, ""
+
+
+def _ensure_image_cnn_runtime_stack():
+    global np, tf, _IMAGE_CNN_RUNTIME_IMPORT_ATTEMPTED, _IMAGE_CNN_RUNTIME_IMPORT_ERROR
+
+    if np is not None and tf is not None:
+        return True, ""
+    if _IMAGE_CNN_RUNTIME_IMPORT_ATTEMPTED:
+        return False, _IMAGE_CNN_RUNTIME_IMPORT_ERROR or "tensorflow_not_installed"
+
+    _IMAGE_CNN_RUNTIME_IMPORT_ATTEMPTED = True
+    try:
+        import numpy as _np
+        import tensorflow as _tf
+    except ModuleNotFoundError as exc:
+        _IMAGE_CNN_RUNTIME_IMPORT_ERROR = f"module_not_found:{exc}"
+        return False, "tensorflow_not_installed"
+    except Exception as exc:
+        _IMAGE_CNN_RUNTIME_IMPORT_ERROR = f"runtime_import_error:{exc}"
+        return False, "tensorflow_not_installed"
+    np = _np
+    tf = _tf
+    _IMAGE_CNN_RUNTIME_IMPORT_ERROR = ""
+    return True, ""
+
+
+def _image_cnn_artifact_dir():
+    root = Path(getattr(settings, "BASE_DIR", Path.cwd()))
+    return root / "artifacts" / "image_cnn_tourism"
+
+
+def _load_image_cnn_label_map():
+    global _IMAGE_CNN_LABEL_MAP_CACHE
+    if isinstance(_IMAGE_CNN_LABEL_MAP_CACHE, dict) and _IMAGE_CNN_LABEL_MAP_CACHE:
+        return _IMAGE_CNN_LABEL_MAP_CACHE
+    label_map_path = _image_cnn_artifact_dir() / "label_map.json"
+    if not label_map_path.exists():
+        return {}
+    try:
+        payload = json.loads(label_map_path.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+    labels = {}
+    if isinstance(payload, dict):
+        for key, value in payload.items():
+            labels[str(key)] = str(value)
+    _IMAGE_CNN_LABEL_MAP_CACHE = labels
+    return labels
+
+
+def _load_image_cnn_config():
+    global _IMAGE_CNN_CONFIG_CACHE
+    if isinstance(_IMAGE_CNN_CONFIG_CACHE, dict) and _IMAGE_CNN_CONFIG_CACHE:
+        return _IMAGE_CNN_CONFIG_CACHE
+    config_path = _image_cnn_artifact_dir() / "image_model_config.json"
+    if not config_path.exists():
+        return {}
+    try:
+        payload = json.loads(config_path.read_text(encoding="utf-8"))
+        _IMAGE_CNN_CONFIG_CACHE = payload if isinstance(payload, dict) else {}
+    except Exception:
+        _IMAGE_CNN_CONFIG_CACHE = {}
+    return _IMAGE_CNN_CONFIG_CACHE
+
+
+def _load_image_cnn_model():
+    global _IMAGE_CNN_MODEL_CACHE
+    if _IMAGE_CNN_MODEL_CACHE is not None:
+        return _IMAGE_CNN_MODEL_CACHE
+    runtime_ready, runtime_err = _ensure_image_cnn_runtime_stack()
+    if not runtime_ready:
+        return None
+    artifact_dir = _image_cnn_artifact_dir()
+    candidates = [artifact_dir / "image_cnn_tourism.keras", artifact_dir / "image_cnn_tourism.h5"]
+    for path in candidates:
+        if path.exists():
+            try:
+                _IMAGE_CNN_MODEL_CACHE = tf.keras.models.load_model(path)
+                return _IMAGE_CNN_MODEL_CACHE
+            except Exception:
+                return None
+    return None
+
+
+def _image_label_display(label):
+    return str(label or "").replace("_", " ").strip() or "unknown"
+
+
+def _external_directions_url(*, lat, lng):
+    return f"https://www.google.com/maps/dir/?api=1&destination={lat},{lng}"
+
+
+def _build_image_category_response(label, confidence, request=None):
+    norm = str(label or "unknown").strip().lower()
+    if norm not in _IMAGE_TOURISM_LABELS:
+        norm = "unknown"
+    confidence_value = max(0.0, min(float(confidence or 0.0), 1.0))
+    confidence_pct = int(round(confidence_value * 100))
+    tone = "uncertain" if confidence_value < 0.50 else ("tentative" if confidence_value < 0.80 else "confident")
+    if tone == "confident":
+        text = f"This image appears to be { _image_label_display(norm) } ({confidence_pct}% confidence)."
+    elif tone == "tentative":
+        text = f"This image may be related to { _image_label_display(norm) } ({confidence_pct}% confidence)."
+    else:
+        text = "I'm not sure which tourism category this image belongs to yet."
+
+    payload = {
+        "fulfillmentText": text,
+        "predicted_label": norm,
+        "confidence": round(confidence_value, 4),
+        "quick_replies": ["Approved accommodations", "Tourist spots", "Ask by place name"],
+        "link_actions": [{"label": "Open City Map", "url": "/guest_app/map/"}],
+    }
+
+    qs = _visible_mapbookmark_queryset_for_request(request) if request is not None else MapBookmark.objects.filter(user__isnull=True)
+    category_map = {
+        "accommodation": "hotel",
+        "dining": "restaurant",
+        "landmark_or_tourist_spot": "landmark",
+        "falls_or_nature": "landmark",
+        "coastal_or_boulevard": "landmark",
+    }
+    mapped_cat = category_map.get(norm, "")
+    suggestions = []
+    if mapped_cat:
+        try:
+            suggestions = list(qs.filter(category=mapped_cat).values("name", "category", "details", "latitude", "longitude")[:3])
+        except Exception:
+            suggestions = []
+    if suggestions:
+        lines = [payload["fulfillmentText"], "", "Related mapped places:"]
+        for row in suggestions:
+            lines.append(f"- {str(row.get('name') or '').strip()}")
+        payload["fulfillmentText"] = "\n".join(lines).strip()
+        first = suggestions[0]
+        try:
+            lat = float(first.get("latitude"))
+            lng = float(first.get("longitude"))
+            payload["link_actions"].append(
+                {"label": f"Get Directions to {str(first.get('name') or 'place').strip()}", "url": _external_directions_url(lat=lat, lng=lng)}
+            )
+        except Exception:
+            pass
+    elif norm == "unknown" or tone == "uncertain":
+        payload["fulfillmentText"] = (
+            "I’m not sure which tourism place this image shows. "
+            "Please upload a clearer tourism-related image or ask by place name."
+        )
+    return payload
+
+
+def _image_label_recommendation_group(label):
+    norm = str(label or "unknown").strip().lower()
+    if norm in {"accommodation", "homestay_or_inn"}:
+        return "accommodations"
+    if norm == "dining":
+        return "dining"
+    if norm in {
+        "falls_or_nature",
+        "spring_resort",
+        "landmark_or_tourist_spot",
+        "coastal_or_boulevard",
+        "farm_or_hacienda",
+        "cultural_or_heritage_site",
+    }:
+        return "tourism_places"
+    if norm == "public_facility":
+        return "public_facilities"
+    return "unknown"
+
+
+def _image_text_recommendation_intent(text):
+    normalized = _normalize_chat_text(text)
+    if not normalized:
+        return "unclear"
+    if _contains_any_phrase(
+        normalized,
+        (
+            "eat",
+            "food",
+            "dining",
+            "restaurant",
+            "cafe",
+            "kaon",
+            "mangaon",
+            "pagkaon",
+            "lami",
+            "saan makakain",
+            "masarap kainin",
+        ),
+    ):
+        return "dining"
+    if _contains_any_phrase(
+        normalized,
+        (
+            "hotel",
+            "accommodation",
+            "stay",
+            "stays",
+            "inn",
+            "room",
+            "matulog",
+            "kapuy an",
+            "tuluyan",
+            "matutuluyan",
+        ),
+    ):
+        return "accommodations"
+    if _contains_any_phrase(
+        normalized,
+        (
+            "tour package",
+            "tour packages",
+            "show tours",
+            "available tours",
+            "book a tour",
+            "tour schedules",
+        ),
+    ):
+        return "tours"
+    if _contains_any_phrase(
+        normalized,
+        (
+            "tourist spot",
+            "tourist spots",
+            "place",
+            "places",
+            "visit",
+            "landmark",
+            "nature",
+            "falls",
+            "laag",
+            "laagan",
+            "adtoan",
+            "pasyalan",
+            "pumunta",
+        ),
+    ):
+        return "tourism_places"
+    return "unclear"
+
+
+def _image_recommendation_cards_for_group(request, group, *, client_location=None, limit=5):
+    group = str(group or "").strip().lower()
+    cards = []
+    if group == "accommodations":
+        rows = list(_approved_accommodation_queryset().order_by("company_name")[:limit])
+        for idx, accom in enumerate(rows, 1):
+            card = _accommodation_card_trace_from_model(accom, idx)
+            if card:
+                cards.append(card)
+        return cards
+    if group == "dining":
+        rows = list(MapBookmark.objects.filter(user__isnull=True, category="restaurant").order_by("name")[:limit])
+        for idx, marker in enumerate(rows, 1):
+            card = _mapbookmark_card_trace(request, marker, idx, client_location=client_location)
+            if card:
+                cards.append(card)
+        return cards
+    if group == "public_facilities":
+        rows = list(MapBookmark.objects.filter(user__isnull=True, category="public").order_by("name")[:limit])
+        for idx, marker in enumerate(rows, 1):
+            card = _mapbookmark_card_trace(request, marker, idx, client_location=client_location)
+            if card:
+                cards.append(card)
+        return cards
+    if group == "tours":
+        try:
+            payload = _build_tour_schedule_listing_payload(request, "show tour packages", {})
+            items = payload.get("items") if isinstance(payload, dict) else []
+            return [item for item in items[:limit] if isinstance(item, dict)]
+        except Exception:
+            return []
+
+    tourism_rows = list(
+        TourismInformation.objects.published()
+        .exclude(spot_name__isnull=True)
+        .exclude(spot_name__exact="")
+        .order_by("spot_name")[:3]
+    )
+    for row in tourism_rows:
+        if len(cards) >= limit:
+            break
+        card = _tourism_information_card_trace(request, row, len(cards) + 1)
+        if card:
+            cards.append(card)
+    marker_qs = MapBookmark.objects.filter(user__isnull=True).exclude(category__in=["restaurant", "hotel"]).order_by("category", "name")
+    for marker in marker_qs[: limit + 4]:
+        if len(cards) >= limit:
+            break
+        marker_name = str(getattr(marker, "name", "") or "").strip()
+        if marker_name and marker_name.lower() in {str(card.get("title") or "").lower() for card in cards}:
+            continue
+        card = _mapbookmark_card_trace(request, marker, len(cards) + 1, client_location=client_location)
+        if card:
+            cards.append(card)
+    return cards
+
+
+def _resolve_image_assisted_group(text_intent, image_group):
+    text_intent = str(text_intent or "unclear").strip().lower()
+    image_group = str(image_group or "unknown").strip().lower()
+    if text_intent in {"dining", "accommodations", "tours", "tourism_places"}:
+        return text_intent
+    if image_group in {"dining", "accommodations", "tourism_places", "public_facilities"}:
+        return image_group
+    return "unclear"
+
+
+def _build_image_assisted_recommendation_payload(
+    request,
+    *,
+    query_text="",
+    predicted_label="unknown",
+    confidence=0.0,
+    model_ready=False,
+    client_location=None,
+):
+    query_text = str(query_text or "").strip()
+    confidence_value = max(0.0, min(float(confidence or 0.0), 1.0))
+    image_group = _image_label_recommendation_group(predicted_label)
+    text_intent = _image_text_recommendation_intent(query_text)
+    group = _resolve_image_assisted_group(text_intent, image_group)
+
+    if model_ready and confidence_value < 0.50:
+        intro = (
+            "The image is unclear, so I will not assume what it shows. "
+            "Please choose a Bayawan tourism category or describe what you want to find."
+        )
+        return {
+            "fulfillmentText": intro,
+            "response_type": "image_assisted",
+            "heading": "Image-Assisted Tourism Recommendations",
+            "prediction_status": "low_confidence",
+            "predicted_label": str(predicted_label or "unknown"),
+            "confidence": round(confidence_value, 4),
+            "quick_replies": ["Tourist Spots", "Dining Places", "Approved Stays"],
+            "link_actions": [{"label": "Open City Map", "url": "/guest_app/map/"}],
+        }
+
+    if group == "unclear":
+        if model_ready:
+            intro = (
+                f"Your image appears related to {_image_label_display(predicted_label)}, but I need a little more direction. "
+                "Would you like tourist spots, dining places, approved stays, or map directions?"
+            )
+        else:
+            intro = (
+                "Image-based recognition is prepared, but the image model is not yet trained or configured. "
+                "I can still help using your text request and available Bayawan tourism records."
+            )
+        return {
+            "fulfillmentText": intro,
+            "response_type": "image_assisted",
+            "heading": "Image-Assisted Tourism Recommendations",
+            "prediction_status": "ok" if model_ready else "model_not_ready",
+            "quick_replies": ["Tourist Spots", "Dining Places", "Approved Stays"],
+            "link_actions": [{"label": "Open City Map", "url": "/guest_app/map/"}],
+        }
+
+    cards = _image_recommendation_cards_for_group(request, group, client_location=client_location)
+    group_labels = {
+        "accommodations": "approved Bayawan stays",
+        "dining": "Bayawan dining places",
+        "tourism_places": "Bayawan tourism places",
+        "public_facilities": "public tourism facilities",
+        "tours": "tour packages",
+    }
+    if model_ready:
+        confidence_text = (
+            "appears related to"
+            if confidence_value >= 0.80
+            else "may be related to"
+        )
+        intro = (
+            f"Your uploaded image {confidence_text} {_image_label_display(predicted_label)}. "
+            f"Based on your request, here are {group_labels.get(group, 'Bayawan tourism options')} you can explore."
+        )
+    else:
+        intro = (
+            "Image-based recognition is prepared, but the image model is not yet trained or configured. "
+            f"Using your text request, here are {group_labels.get(group, 'Bayawan tourism options')} from available public records."
+        )
+    if not cards:
+        intro += " I do not have enough verified records for that category yet, but you can open the City Map or choose another category."
+
+    heading = {
+        "accommodations": "Accommodation Recommendations",
+        "dining": "Dining Places",
+        "tourism_places": "Tourism Places",
+        "public_facilities": "Public Tourism Facilities",
+        "tours": "Tour Package Recommendations",
+    }.get(group, "Image-Assisted Tourism Recommendations")
+    quick_replies = ["Tourist Spots", "Dining Places", "Approved Stays"]
+    link_actions = [{"label": "Open City Map", "url": "/guest_app/map/"}]
+    first_card_with_directions = next(
+        (
+            card
+            for card in cards
+            if str((card or {}).get("directions_url") or (card or {}).get("direction_url") or "").strip()
+        ),
+        None,
+    )
+    if first_card_with_directions:
+        place_name = str(first_card_with_directions.get("title") or "place").strip() or "place"
+        directions_url = str(
+            first_card_with_directions.get("directions_url")
+            or first_card_with_directions.get("direction_url")
+            or ""
+        ).strip()
+        if directions_url:
+            link_actions.append({"label": f"Get Directions to {place_name}", "url": directions_url})
+    if group == "dining":
+        quick_replies = ["Show Dining Places", "Tourist Spots", "Approved Stays"]
+    elif group in {"tourism_places", "public_facilities"}:
+        quick_replies = ["Show Tourist Spots", "Dining Places", "Approved Stays"]
+    elif group == "accommodations":
+        quick_replies = ["Find Approved Stays", "Dining Places", "Tourist Spots"]
+    if group == "tours":
+        quick_replies = ["Show Tour Packages", "Approved Stays", "Help"]
+    return {
+        "fulfillmentText": intro,
+        "response_type": "image_assisted" if group not in {"dining", "accommodations", "tourism_places"} else group,
+        "heading": heading,
+        "prediction_status": "ok" if model_ready else "model_not_ready",
+        "predicted_label": str(predicted_label or "unknown"),
+        "confidence": round(confidence_value, 4) if model_ready else None,
+        "recommendation_trace": cards,
+        "quick_replies": quick_replies,
+        "link_actions": link_actions,
+    }
 _MAP_ANCHOR_ALIASES = {
     "Bayawan City Public Terminal": (
         "terminal",
@@ -340,6 +849,170 @@ def _normalize_chat_text(value):
         return ""
     text = re.sub(r"[^a-z0-9\s]", " ", text)
     return " ".join(text.split())
+
+
+_PREVIEW_ROOM_GENERIC_TOKENS = {
+    "room",
+    "rooms",
+    "accommodation",
+    "accommodations",
+    "hotel",
+    "inn",
+    "suite",
+    "suites",
+    "stay",
+}
+_IMAGE_CHAT_ALLOWED_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp"}
+_IMAGE_CHAT_MAX_SIZE_BYTES = 5 * 1024 * 1024
+_IMAGE_TOURISM_LABELS = (
+    "falls_or_nature",
+    "accommodation",
+    "dining",
+    "landmark_or_tourist_spot",
+    "coastal_or_boulevard",
+    "unknown",
+)
+
+
+def _normalize_preview_match_text(value, *, drop_generic=False):
+    raw = str(value or "").strip().lower()
+    if not raw:
+        return ""
+    folded = (
+        unicodedata.normalize("NFKD", raw)
+        .encode("ascii", "ignore")
+        .decode("ascii")
+    )
+    folded = re.sub(r"[^a-z0-9\s]", " ", folded)
+    tokens = [token for token in folded.split() if token]
+    if drop_generic:
+        tokens = [token for token in tokens if token not in _PREVIEW_ROOM_GENERIC_TOKENS]
+    return " ".join(tokens)
+
+
+def _strip_accommodation_from_preview_hint(hint, accommodation_name):
+    normalized_hint = _normalize_preview_match_text(hint, drop_generic=False)
+    if not normalized_hint:
+        return ""
+    normalized_accom = _normalize_preview_match_text(accommodation_name, drop_generic=False)
+    if normalized_accom and normalized_hint.startswith(f"{normalized_accom} "):
+        return normalized_hint[len(normalized_accom):].strip()
+    return normalized_hint
+
+
+def _resolve_room_hint_for_accommodation(accommodation, room_hint, *, room_qs=None):
+    if accommodation is None:
+        return {"matched_room": None, "ambiguous_choices": [], "room_choices": []}
+    base_qs = room_qs if room_qs is not None else _approved_room_queryset().filter(
+        accommodation=accommodation,
+        status="AVAILABLE",
+    )
+    room_rows = list(base_qs.select_related("accommodation").order_by("price_per_night", "room_name", "room_id"))
+    if not room_rows:
+        return {"matched_room": None, "ambiguous_choices": [], "room_choices": []}
+
+    room_choices = [str(getattr(row, "room_name", "") or "").strip() for row in room_rows if str(getattr(row, "room_name", "") or "").strip()][:5]
+    hint_raw = str(room_hint or "").strip()
+    if not hint_raw:
+        return {"matched_room": None, "ambiguous_choices": [], "room_choices": room_choices}
+
+    stripped_hint = _strip_accommodation_from_preview_hint(hint_raw, getattr(accommodation, "company_name", ""))
+    norm_hint = _normalize_preview_match_text(stripped_hint, drop_generic=False)
+    norm_hint_slim = _normalize_preview_match_text(stripped_hint, drop_generic=True)
+    if not norm_hint and not norm_hint_slim:
+        return {"matched_room": None, "ambiguous_choices": [], "room_choices": room_choices}
+
+    entries = []
+    for row in room_rows:
+        room_name = str(getattr(row, "room_name", "") or "").strip()
+        if not room_name:
+            continue
+        entries.append(
+            {
+                "room": row,
+                "name": room_name,
+                "norm": _normalize_preview_match_text(room_name, drop_generic=False),
+                "norm_slim": _normalize_preview_match_text(room_name, drop_generic=True),
+            }
+        )
+    if not entries:
+        return {"matched_room": None, "ambiguous_choices": [], "room_choices": room_choices}
+
+    def _unique(entries_list):
+        seen_ids = set()
+        unique = []
+        for item in entries_list:
+            room_id = _to_int(getattr(item["room"], "room_id", 0), default=0)
+            if room_id > 0 and room_id in seen_ids:
+                continue
+            if room_id > 0:
+                seen_ids.add(room_id)
+            unique.append(item)
+        return unique
+
+    exact_matches = _unique(
+        [
+            item
+            for item in entries
+            if (norm_hint and item["norm"] == norm_hint)
+            or (norm_hint_slim and item["norm_slim"] == norm_hint_slim)
+        ]
+    )
+    if len(exact_matches) == 1:
+        return {"matched_room": exact_matches[0]["room"], "ambiguous_choices": [], "room_choices": room_choices}
+    if len(exact_matches) > 1:
+        return {
+            "matched_room": None,
+            "ambiguous_choices": [item["name"] for item in exact_matches[:5]],
+            "room_choices": room_choices,
+        }
+
+    contains_matches = _unique(
+        [
+            item
+            for item in entries
+            if (norm_hint and (item["norm"] in norm_hint or norm_hint in item["norm"]))
+            or (norm_hint_slim and (item["norm_slim"] in norm_hint_slim or norm_hint_slim in item["norm_slim"]))
+        ]
+    )
+    if len(contains_matches) == 1:
+        return {"matched_room": contains_matches[0]["room"], "ambiguous_choices": [], "room_choices": room_choices}
+    if len(contains_matches) > 1:
+        return {
+            "matched_room": None,
+            "ambiguous_choices": [item["name"] for item in contains_matches[:5]],
+            "room_choices": room_choices,
+        }
+
+    candidate_pool = [item["norm_slim"] or item["norm"] for item in entries if item["norm_slim"] or item["norm"]]
+    query_value = norm_hint_slim or norm_hint
+    close = get_close_matches(query_value, candidate_pool, n=3, cutoff=0.78)
+    if len(close) == 1:
+        matched = next(
+            (
+                item
+                for item in entries
+                if (item["norm_slim"] or item["norm"]) == close[0]
+            ),
+            None,
+        )
+        if matched is not None:
+            return {"matched_room": matched["room"], "ambiguous_choices": [], "room_choices": room_choices}
+    if len(close) > 1:
+        ambiguous = []
+        for item in entries:
+            key = item["norm_slim"] or item["norm"]
+            if key in close:
+                ambiguous.append(item["name"])
+            if len(ambiguous) >= 5:
+                break
+        return {
+            "matched_room": None,
+            "ambiguous_choices": ambiguous,
+            "room_choices": room_choices,
+        }
+
+    return {"matched_room": None, "ambiguous_choices": [], "room_choices": room_choices}
 
 
 def _load_map_reference_place_entries(force_reload=False):
@@ -552,6 +1225,236 @@ def _approved_room_queryset():
     return apply_approved_accommodation_scope(room_qs, accommodation_path="accommodation")
 
 
+def _visible_mapbookmark_queryset_for_request(request):
+    try:
+        user = getattr(request, "user", None)
+        if user is not None and getattr(user, "is_authenticated", False):
+            return MapBookmark.objects.filter(Q(user__isnull=True) | Q(user=user))
+    except Exception:
+        pass
+    return MapBookmark.objects.filter(user__isnull=True)
+
+
+def _normalize_map_place_query(text):
+    cleaned = _normalize_chat_text(text)
+    if not cleaned:
+        return ""
+    cleaned = re.sub(
+        r"\b(where is|location of|show|on the map|in the map|map|directions to|how do i get to|navigate to|take me to|how far is|from me|asa dapit|asa ni|direksyon|unsaon pag adto|paano pumunta|saan ito|saan ang|nasaan ang|asa|dapit|sa|ang)\b",
+        " ",
+        cleaned,
+    )
+    cleaned = re.sub(r"\s+", " ", cleaned).strip(" ?.,")
+    return cleaned
+
+
+def _map_category_from_text(text):
+    normalized = _normalize_chat_text(text)
+    if not normalized:
+        return ""
+    if any(k in normalized for k in ("accommodation", "hotel", "inn", "stay", "rooms", "approved stays", "matulog", "kapuy an", "tuluyan", "matutuluyan")):
+        return "hotel"
+    if any(k in normalized for k in ("restaurant", "dining", "food", "eat", "cafe", "kaon", "mangaon", "pagkaon", "kain", "makakain", "comer", "manger")):
+        return "restaurant"
+    if any(k in normalized for k in ("tourist", "spot", "landmark", "attraction", "destination", "nature", "falls", "spring", "hacienda", "farm", "heritage", "culture", "laagan", "laag", "adtoan", "pasyalan", "pumunta", "visitar", "行け", "방문", "哪里玩")):
+        return "landmark"
+    if any(k in normalized for k in ("public", "service", "facility", "facilities", "terminal", "government")):
+        return "public"
+    if any(k in normalized for k in ("shopping", "market", "mall", "local products", "souvenir")):
+        return "shopping"
+    return ""
+
+
+def _is_map_contents_query(text):
+    normalized = _normalize_chat_text(text)
+    if not normalized:
+        return False
+    return (
+        "on the map" in normalized
+        or "in the map" in normalized
+        or "places are on the map" in normalized
+        or "what are in the map" in normalized
+        or "show places in the city map" in normalized
+        or "show tourism places" in normalized
+        or "tourism places" in normalized
+        or "show nature attractions" in normalized
+        or "show dining places" in normalized
+        or "where can i eat" in normalized
+        or "show landmarks" in normalized
+        or "show public tourism facilities" in normalized
+        or "tourist spots can i visit" in normalized
+        or "what tourist spots" in normalized
+    )
+
+
+def _lookup_mapbookmark_place(request, raw_message):
+    base_qs = _visible_mapbookmark_queryset_for_request(request)
+    candidate = _normalize_map_place_query(raw_message)
+    if not candidate:
+        return None
+    rows = list(base_qs[:200])
+    if not rows:
+        return None
+    exact = []
+    partial = []
+    for row in rows:
+        name_norm = _normalize_chat_text(getattr(row, "name", ""))
+        if not name_norm:
+            continue
+        if candidate == name_norm:
+            exact.append(row)
+        elif candidate in name_norm or name_norm in candidate:
+            partial.append(row)
+    if exact:
+        return exact[0]
+    if partial:
+        return partial[0]
+    return None
+
+
+def _list_mapbookmarks_for_query(request, raw_message, limit=6):
+    qs = _visible_mapbookmark_queryset_for_request(request)
+    category = _map_category_from_text(raw_message)
+    if category:
+        qs = qs.filter(category=category)
+    rows = list(qs.order_by("name")[: max(1, int(limit or 6))])
+    return rows, category
+
+
+def _map_category_display_label(category):
+    return {
+        "hotel": "approved stays",
+        "restaurant": "dining places",
+        "landmark": "tourist spots and landmarks",
+        "public": "public tourism facilities",
+        "shopping": "shopping and local product places",
+        "custom": "other tourism places",
+    }.get(str(category or "").strip().lower(), "mapped tourism places")
+
+
+def _map_card_kind(category):
+    category = str(category or "").strip().lower()
+    if category == "restaurant":
+        return "dining"
+    if category == "hotel":
+        return "map_place"
+    if category in {"landmark", "public", "shopping", "custom"}:
+        return "tourism_place"
+    return "map_place"
+
+
+def _safe_absolute_url(request, url):
+    url = str(url or "").strip()
+    if not url:
+        return ""
+    if url.startswith(("http://", "https://")):
+        return url
+    if request is not None and hasattr(request, "build_absolute_uri"):
+        try:
+            return request.build_absolute_uri(url)
+        except Exception:
+            return url
+    return url
+
+
+def _mapbookmark_card_trace(request, marker, rank=1, *, client_location=None):
+    if marker is None:
+        return {}
+    name = str(getattr(marker, "name", "") or "").strip()
+    if not name:
+        return {}
+    category = str(getattr(marker, "category", "") or "").strip().lower()
+    details = str(getattr(marker, "details", "") or "").strip()
+    image_url = _safe_file_url(getattr(marker, "primary_image", None))
+    direction_url = _build_map_direction_link(
+        dest_lat=getattr(marker, "latitude", None),
+        dest_lng=getattr(marker, "longitude", None),
+        client_location=client_location or {},
+    )
+    map_url = reverse("map")
+    return {
+        "rank": rank,
+        "kind": _map_card_kind(category),
+        "item_type": _map_card_kind(category),
+        "title": name,
+        "subtitle": _map_category_display_label(category).title(),
+        "description": details[:220],
+        "category": category,
+        "location": "Bayawan City",
+        "image_url": image_url,
+        "detail_url": _safe_absolute_url(request, map_url),
+        "directions_url": direction_url,
+        "latitude": getattr(marker, "latitude", None),
+        "longitude": getattr(marker, "longitude", None),
+    }
+
+
+def _tourism_information_card_trace(request, row, rank=1):
+    if row is None:
+        return {}
+    title = str(getattr(row, "spot_name", "") or "").strip()
+    if not title:
+        return {}
+    location = str(getattr(row, "location", "") or "").strip()
+    description = str(getattr(row, "description", "") or "").strip()
+    image_url = _safe_file_url(getattr(row, "image", None))
+    return {
+        "rank": rank,
+        "kind": "tourism_place",
+        "item_type": "tourism_place",
+        "title": title,
+        "subtitle": location or "Published Tourism Information",
+        "description": description[:220],
+        "category": "tourism_information",
+        "location": location,
+        "image_url": image_url,
+        "detail_url": _safe_absolute_url(request, reverse("map")),
+    }
+
+
+def _accommodation_card_trace_from_model(accom, rank=1):
+    if accom is None:
+        return {}
+    accom_id = _to_int(getattr(accom, "accom_id", 0), default=0)
+    title = str(getattr(accom, "company_name", "") or "").strip()
+    if not title:
+        return {}
+    return {
+        "rank": rank,
+        "item_type": "accommodation",
+        "kind": "accommodation",
+        "title": title,
+        "accommodation_name": title,
+        "subtitle": str(getattr(accom, "location", "") or "").strip(),
+        "accom_id": accom_id,
+        "location": str(getattr(accom, "location", "") or "").strip(),
+        "description": str(getattr(accom, "description", "") or "").strip()[:220],
+        "profile_image_url": _safe_file_url(getattr(accom, "profile_picture", None)),
+        "badges": ["Tourism Office Approved"],
+        **_public_accommodation_handoff_fields(
+            booking_url=str(getattr(accom, "official_booking_url", "") or "").strip(),
+            contact_url=str(getattr(accom, "official_contact_url", "") or "").strip(),
+        ),
+    }
+
+
+def _build_map_direction_link(*, dest_lat, dest_lng, client_location):
+    dlat = _safe_float(dest_lat)
+    dlng = _safe_float(dest_lng)
+    if dlat is None or dlng is None:
+        return ""
+    olat = _safe_float(client_location.get("latitude")) if isinstance(client_location, dict) else None
+    olng = _safe_float(client_location.get("longitude")) if isinstance(client_location, dict) else None
+    if olat is not None and olng is not None:
+        return (
+            "https://www.google.com/maps/dir/?api=1"
+            f"&origin={olat},{olng}"
+            f"&destination={dlat},{dlng}"
+            "&travelmode=driving"
+        )
+    return f"https://www.google.com/maps/search/?api=1&query={dlat},{dlng}"
+
+
 def _safe_float(value, default=None):
     try:
         if value in (None, ""):
@@ -649,6 +1552,9 @@ def _is_travel_guidance_request(message):
         "from another country",
         "international",
         "where is",
+        "use my location",
+        "choose destination",
+        "get directions",
     )
     return any(marker in text for marker in markers)
 
@@ -712,6 +1618,19 @@ def _is_guest_vague_query(message):
         "where do i go",
     )
     if any(phrase in text for phrase in vague_phrases):
+        return True
+    if text in {
+        "hotel",
+        "accommodation",
+        "rooms",
+        "tours",
+        "book",
+        "schedule",
+        "map",
+        "directions",
+        "reports",
+        "help",
+    }:
         return True
     if text in {"what can i do", "recommend me something", "recommend something"}:
         return True
@@ -955,7 +1874,7 @@ def _resolve_reporting_accommodation_name(message, params, available_names):
     return close[0] if close else ""
 
 
-def _build_reporting_summary_payload(message, params):
+def _build_reporting_summary_payload(message, params, *, actor_role=""):
     lower_message = _normalize_chat_text(message)
     requested_latest = _contains_any_phrase(lower_message, ("latest monthly report", "latest report"))
     requested_this_month = _contains_any_phrase(lower_message, ("this month", "monthly summary this month"))
@@ -1014,7 +1933,7 @@ def _build_reporting_summary_payload(message, params):
 
     room_usage_rows = (
         MonthlyReportRoomUsage.objects.filter(monthly_report__in=qs)
-        .values("room_name_snapshot")
+        .values("room_name_snapshot", "selected_room_identifier", "room_identifiers_snapshot", "total_rooms_snapshot")
         .annotate(total_check_ins=Sum("check_ins"), total_check_outs=Sum("check_outs"))
         .order_by("-total_check_ins", "room_name_snapshot")
     )
@@ -1026,37 +1945,83 @@ def _build_reporting_summary_payload(message, params):
 
     sample = qs.order_by("-reporting_period", "accommodation__company_name").first()
     period_text = report_period.strftime("%B %Y") if report_period is not None else sample.reporting_period.strftime("%B %Y")
-    accommodation_text = ""
-    if accommodation_name and sample is not None:
-        accommodation_text = f" for {sample.accommodation.company_name}"
 
-    has_finalized = qs.filter(status="reviewed").exists()
-    if has_finalized:
-        lines = [f"Here's the tourism report summary for {period_text}{accommodation_text}:"]
-    else:
-        lines = [
-            f"No finalized monthly summary document is available yet, but submitted owner reports show for {period_text}{accommodation_text}:"
-        ]
+    lines = [f"Tourism Report Summary — {period_text}", ""]
+    lines.append("Summary")
+    lines.append(f"Check-ins: {total_in}")
+    lines.append(f"Check-outs: {total_out}")
+    lines.append(f"Rooms used: {total_rooms}")
+    lines.append("")
 
-    lines.append(f"- Check-ins: {total_in}")
-    lines.append(f"- Check-outs: {total_out}")
+    lines.append("Room Usage")
     if has_room_level:
-        lines.append("- Room usage (by room type):")
-        for row in list(room_usage_rows)[:8]:
+        for row in list(room_usage_rows)[:5]:
             room_name = str(row.get("room_name_snapshot") or "Unnamed Room").strip()
+            room_id_label = str(row.get("selected_room_identifier") or "").strip() or "Not specified"
+            room_ids = str(row.get("room_identifiers_snapshot") or "").strip() or "Not specified"
+            total_rooms = max(1, _to_int(row.get("total_rooms_snapshot"), default=1))
             check_ins = _to_int(row.get("total_check_ins"), default=0)
             check_outs = _to_int(row.get("total_check_outs"), default=0)
-            lines.append(f"  - {room_name}: {check_ins} check-ins, {check_outs} check-outs")
+            lines.append(
+                f"{room_name} | Room ID: {room_id_label} | IDs: {room_ids} | Total rooms: {total_rooms} | "
+                f"{check_ins} check-ins, {check_outs} check-outs"
+            )
     else:
-        lines.append(f"- Room usage (total only): {total_rooms} room(s) used")
-        lines.append("Older reports only contain total room usage. New reports provide room-level details.")
+        lines.append("Room-level usage is not available for this period.")
+    lines.append("")
 
+    lines.append("Visitor Nationalities")
     if nationality_counts:
-        labels = [f"{label} ({count})" for label, count in nationality_counts.most_common(6)]
-        lines.append(f"- Visitor nationalities: {', '.join(labels)}")
+        for label, count in nationality_counts.most_common(6):
+            lines.append(f"{label}: {count}")
     else:
-        lines.append("- Visitor nationalities: not reported yet")
-    lines.append("This is based on submitted owner reports.")
+        lines.append("No nationality breakdown submitted yet.")
+    lines.append("")
+
+    by_accommodation = (
+        qs.values("accommodation__company_name")
+        .annotate(
+            check_ins=Sum("guests_checked_in"),
+            check_outs=Sum("guests_checked_out"),
+            rooms_used=Sum("rooms_used"),
+            submitted_count=Count("report_id"),
+            reviewed_count=Count("report_id", filter=Q(status="reviewed")),
+            returned_count=Count("report_id", filter=Q(status="returned")),
+        )
+        .order_by("-check_ins", "accommodation__company_name")
+    )
+    lines.append("By Accommodation")
+    max_accom_rows = 3 if str(actor_role or "").strip().lower() == "admin" else 5
+    if by_accommodation:
+        for row in list(by_accommodation)[:max_accom_rows]:
+            lines.append(
+                f"{row.get('accommodation__company_name')} — "
+                f"{_to_int(row.get('check_ins'), default=0)} in / {_to_int(row.get('check_outs'), default=0)} out, "
+                f"{_to_int(row.get('rooms_used'), default=0)} rooms used, "
+                f"reports: {_to_int(row.get('submitted_count'), default=0)}, "
+                f"reviewed: {_to_int(row.get('reviewed_count'), default=0)}, "
+                f"returned: {_to_int(row.get('returned_count'), default=0)}"
+            )
+    else:
+        lines.append("No accommodation-level rows available.")
+
+    if str(actor_role or "").strip().lower() == "admin":
+        recent_rows = list(qs.select_related("reviewed_by", "owner", "accommodation").order_by("-updated_at")[:3])
+        if recent_rows:
+            lines.append("")
+            lines.append("Recent Reviews")
+            for row in recent_rows:
+                reviewer = "-"
+                if row.reviewed_by is not None:
+                    reviewer = f"{row.reviewed_by.first_name} {row.reviewed_by.last_name}".strip() or str(row.reviewed_by.emp_id)
+                notes = str(row.review_notes or "").strip() or "-"
+                lines.append(
+                    f"{row.accommodation.company_name} ({row.reporting_period.strftime('%b %Y')}): "
+                    f"{row.get_status_display()} | notes: {notes} | reviewer: {reviewer}"
+                )
+
+    lines.append("")
+    lines.append("Source: submitted owner reports.")
 
     return {
         "reply": "\n".join(lines),
@@ -1064,6 +2029,8 @@ def _build_reporting_summary_payload(message, params):
             "Show tourist influx this month",
             "Show monthly report for April 2026",
             "Show accommodation reports",
+            "Show reports by accommodation",
+            "Open reports page",
         ],
     }
 
@@ -1416,8 +2383,23 @@ def _predict_text_cnn_labels(*, text, model_path, label_map_path):
 def _predict_accommodation_class_from_text(text):
     if _is_text_cnn_intent_disabled():
         return None, "disabled_by_environment"
+    global _ACCOM_TEXT_CNN_AVAILABILITY_CACHE, _ACCOM_TEXT_CNN_MISSING_LOGGED
     model_path, artifact_source = _resolve_accommodation_text_cnn_model_path()
+    model_path_obj = Path(model_path)
     label_map_path = _default_label_map_path_for_model(model_path)
+    if _ACCOM_TEXT_CNN_AVAILABILITY_CACHE is None:
+        _ACCOM_TEXT_CNN_AVAILABILITY_CACHE = bool(
+            model_path_obj.exists() and Path(label_map_path).exists()
+        )
+        if not _ACCOM_TEXT_CNN_AVAILABILITY_CACHE and not _ACCOM_TEXT_CNN_MISSING_LOGGED:
+            logger.info(
+                "Accommodation Text-CNN artifact is unavailable; continuing with deterministic/recommender routing. path=%s source=%s",
+                str(model_path_obj),
+                artifact_source,
+            )
+            _ACCOM_TEXT_CNN_MISSING_LOGGED = True
+    if not _ACCOM_TEXT_CNN_AVAILABILITY_CACHE:
+        return None, "accommodation_text_cnn_unavailable"
     payload, err = _predict_text_cnn_labels(
         text=text,
         model_path=model_path,
@@ -1700,19 +2682,32 @@ def _safe_log_step_events_from_response(request, *, intent, response_payload):
             event_type="save",
             item_ref="chat:accommodation_booking_draft_or_pending",
         )
-    if is_guest and response_payload.get("room_id") and intent in (
+    accommodation_preview_intents = (
         "book_accommodation",
         "bookhotel",
         "book_hotel",
         "reserve_accommodation",
+        "calculate_accommodation_billing",
+    )
+    has_preview_missing_slot = str(response_payload.get("missing_slot") or "").strip().lower() in {
+        "room_reference",
+        "check_in",
+        "check_out",
+        "nights",
+        "guests",
+        "accommodation_details",
+    }
+    if is_guest and intent in accommodation_preview_intents and (
+        response_payload.get("room_id") or has_preview_missing_slot
     ):
         click_ev = _GUEST_FUNNEL_EVENT_MAP.get("book_button_clicked") or {}
         flow_ev = _GUEST_FUNNEL_EVENT_MAP.get("booking_flow_started") or {}
-        _safe_log_chat_step_event(
-            request,
-            event_type=str(click_ev.get("event_type") or "click"),
-            item_ref=str(click_ev.get("item_ref") or "chat:funnel_book_button_clicked"),
-        )
+        if response_payload.get("room_id"):
+            _safe_log_chat_step_event(
+                request,
+                event_type=str(click_ev.get("event_type") or "click"),
+                item_ref=str(click_ev.get("item_ref") or "chat:funnel_book_button_clicked"),
+            )
         _safe_log_chat_step_event(
             request,
             event_type=str(flow_ev.get("event_type") or "save"),
@@ -1724,13 +2719,23 @@ def _safe_log_step_events_from_response(request, *, intent, response_payload):
             item_ref="accommodation_preview_started",
         )
 
+    preview_text = str(response_payload.get("fulfillmentText") or "").strip().lower()
+    has_preview_summary_text = "here is your estimated accommodation booking preview" in preview_text
+    has_preview_completion_payload = bool(response_payload.get("accommodation_preview_completed"))
+    is_missing_slot_prompt = bool(str(response_payload.get("missing_slot") or "").strip())
+    is_accommodation_preview_completed_response = bool(
+        is_guest
+        and not is_missing_slot_prompt
+        and (has_preview_summary_text or has_preview_completion_payload)
+    )
+
     if response_payload.get("billing_link"):
         _safe_log_chat_step_event(
             request,
             event_type="view",
             item_ref="chat:lgu_payment_handoff_ready",
         )
-        if is_guest:
+        if is_guest and is_accommodation_preview_completed_response:
             billing_ev = _GUEST_FUNNEL_EVENT_MAP.get("billing_link_shown") or {}
             _safe_log_chat_step_event(
                 request,
@@ -1925,10 +2930,26 @@ def _safe_log_chatbot_interaction(
         pass
 
 
+def _ensure_accommodation_preview_heading(payload):
+    if not isinstance(payload, dict):
+        return payload
+    text = str(payload.get("fulfillmentText") or "").strip().lower()
+    is_preview = bool(
+        payload.get("accommodation_preview_completed")
+        or "here is your estimated accommodation booking preview" in text
+        or "estimated accommodation booking preview" in text
+    )
+    if is_preview:
+        payload["response_type"] = "accommodation_cost_preview"
+        payload["heading"] = "Accommodation Cost Preview"
+    return payload
+
+
 def _chat_json_response(request, start_time, payload, status=200, error_message=""):
     response_payload = payload if isinstance(payload, dict) else payload
     try:
         if isinstance(response_payload, dict):
+            response_payload = _ensure_accommodation_preview_heading(response_payload)
             if isinstance(response_payload.get("recommendation_trace"), list):
                 response_payload["recommendation_trace"] = _normalize_chat_recommendation_trace(
                     response_payload.get("recommendation_trace")
@@ -2083,6 +3104,10 @@ def _chat_json_response(request, start_time, payload, status=200, error_message=
     except Exception:
         # Translation/normalization should not block response delivery.
         response_payload = payload
+
+    if isinstance(response_payload, dict):
+        response_payload = _ensure_accommodation_preview_heading(response_payload)
+        response_payload = _contextualize_quick_replies_for_payload(response_payload)
 
     response = JsonResponse(response_payload, status=status)
     elapsed_ms = int((time.perf_counter() - start_time) * 1000)
@@ -2478,6 +3503,8 @@ def _is_stay_planning_request(message):
     if not text:
         return False
     planning_markers = (
+        "plan my bayawan trip",
+        "plan my bayawan stay",
         "plan my stay",
         "plan a stay",
         "plan my trip",
@@ -3446,6 +4473,33 @@ def _get_accommodation_recommendations(params):
     requested_room_type = str(params.get("room_type") or "").strip().lower()
     requested_location = str(params.get("location") or "").strip()
 
+    def _matches_requested_location(raw_location, requested):
+        left = _normalize_chat_text(raw_location)
+        right = _normalize_chat_text(requested)
+        if not right:
+            return True
+        alias_map = {
+            "villarreal": "villareal",
+            "barangay suba": "suba",
+            "barangay poblacion": "poblacion",
+            "barangay tinago": "tinago",
+            "barangay villareal": "villareal",
+            "brgy suba": "suba",
+            "brgy poblacion": "poblacion",
+            "brgy tinago": "tinago",
+            "brgy villareal": "villareal",
+        }
+        target = alias_map.get(right, right)
+        return bool(target and target in left)
+
+    if requested_location:
+        strict_results = []
+        for item in results:
+            meta = item.meta if isinstance(item.meta, dict) else {}
+            if _matches_requested_location(meta.get("location", ""), requested_location):
+                strict_results.append(item)
+        results = strict_results
+
     def _item_price(candidate):
         meta = candidate.meta if isinstance(candidate.meta, dict) else {}
         return _to_decimal(meta.get("price_per_night"), default=Decimal("0"))
@@ -3507,6 +4561,8 @@ def _get_accommodation_recommendations(params):
                 getattr(accom, "description", ""),
             ):
                 continue
+            if requested_location and not _matches_requested_location(getattr(accom, "location", ""), requested_location):
+                continue
             accom_type = str(getattr(accom, "company_type", "") or "").strip().lower()
             reason_label = "Closest available option"
             if company_type == "hotel" and "inn" in accom_type:
@@ -3533,8 +4589,10 @@ def _get_accommodation_recommendations(params):
                         "description": str(getattr(accom, "description", "") or "").strip(),
                         "phone_number": str(getattr(accom, "phone_number", "") or "").strip(),
                         "email_address": str(getattr(accom, "email_address", "") or "").strip(),
-                        "official_booking_url": str(getattr(accom, "official_booking_url", "") or "").strip(),
-                        "official_contact_url": str(getattr(accom, "official_contact_url", "") or "").strip(),
+                        **_public_accommodation_handoff_fields(
+                            booking_url=str(getattr(accom, "official_booking_url", "") or "").strip(),
+                            contact_url=str(getattr(accom, "official_contact_url", "") or "").strip(),
+                        ),
                         "profile_image_url": _safe_file_url(getattr(accom, "profile_picture", None)),
                         "supplemental_visibility": True,
                         "supplemental_reason": reason_label,
@@ -3727,8 +4785,10 @@ def _get_accommodation_recommendations(params):
                 "description": str(item_meta.get("description") or ""),
                 "phone_number": str(item_meta.get("phone_number") or ""),
                 "email_address": str(item_meta.get("email_address") or ""),
-                "official_booking_url": str(item_meta.get("official_booking_url") or ""),
-                "official_contact_url": str(item_meta.get("official_contact_url") or ""),
+                **_public_accommodation_handoff_fields(
+                    booking_url=str(item_meta.get("official_booking_url") or ""),
+                    contact_url=str(item_meta.get("official_contact_url") or ""),
+                ),
                 "profile_image_url": str(item_meta.get("profile_image_url") or ""),
                 "why_fits": concise_reasons,
                 "above_budget": bool(is_above_budget),
@@ -3749,9 +4809,9 @@ def _get_accommodation_recommendations(params):
     lines.append(
         _pick_response_variant(
             [
-                "Want me to refine these options or open official pages?",
+                "Want me to refine these options or open verified provider pages?",
                 "I can narrow these further if you want.",
-                "Need help comparing these or opening official links?",
+                "Need help comparing these or opening verified contact links?",
             ],
             seed_text=f"{params}|accom-next-v3",
         )
@@ -3820,8 +4880,10 @@ def _build_accommodation_first_payload(results, params, *, limit=3):
                 "location": location,
                 "description": str(item_meta.get("description") or "").strip(),
                 "profile_image_url": str(item_meta.get("profile_image_url") or "").strip(),
-                "official_booking_url": str(item_meta.get("official_booking_url") or "").strip(),
-                "official_contact_url": str(item_meta.get("official_contact_url") or "").strip(),
+                **_public_accommodation_handoff_fields(
+                    booking_url=str(item_meta.get("official_booking_url") or "").strip(),
+                    contact_url=str(item_meta.get("official_contact_url") or "").strip(),
+                ),
                 "min_price": price if price > 0 else Decimal("0"),
                 "max_capacity": capacity,
             },
@@ -3924,6 +4986,32 @@ def _resolve_accommodation_by_name(accommodation_name):
     if len(contains_rows) > 1:
         names = [str(getattr(row, "company_name", "") or "").strip() for row in contains_rows if row is not None]
         return None, [name for name in names if name]
+
+    normalized_raw = _normalize_preview_match_text(raw_name, drop_generic=False)
+    if normalized_raw:
+        normalized_matches = []
+        for row in qs.order_by("company_name")[:300]:
+            candidate_name = str(getattr(row, "company_name", "") or "").strip()
+            normalized_candidate = _normalize_preview_match_text(candidate_name, drop_generic=False)
+            if not normalized_candidate:
+                continue
+            if (
+                normalized_candidate == normalized_raw
+                or normalized_candidate.startswith(f"{normalized_raw} ")
+                or normalized_raw.startswith(f"{normalized_candidate} ")
+                or f" {normalized_raw} " in f" {normalized_candidate} "
+                or f" {normalized_candidate} " in f" {normalized_raw} "
+            ):
+                normalized_matches.append(row)
+        if len(normalized_matches) == 1:
+            return normalized_matches[0], [str(getattr(normalized_matches[0], "company_name", "") or "").strip()]
+        if len(normalized_matches) > 1:
+            names = [
+                str(getattr(row, "company_name", "") or "").strip()
+                for row in normalized_matches
+                if row is not None
+            ]
+            return None, [name for name in names if name][:6]
 
     all_names = [
         str(value or "").strip()
@@ -4036,8 +5124,12 @@ def _build_room_listing_response_for_accommodation(accommodation_name, *, limit=
 
     lines = [f"Here are available rooms for {selected_accommodation.company_name}:"]
     trace = []
+    room_quick_replies = []
     for index, room in enumerate(rooms, 1):
         accom = room.accommodation
+        room_name = str(getattr(room, "room_name", "") or "").strip()
+        if room_name:
+            room_quick_replies.append(room_name)
         lines.append(
             f"{index}. {accom.company_name} - {room.room_name}\n"
             f"   - PHP {room.price_per_night}/night | up to {room.person_limit} guests"
@@ -4057,18 +5149,23 @@ def _build_room_listing_response_for_accommodation(accommodation_name, *, limit=
                 "person_limit": _to_int(room.person_limit, default=0),
                 "description": str(accom.description or "").strip(),
                 "profile_image_url": _resolve_room_image_url_for_chat(room),
-                "official_booking_url": str(getattr(accom, "official_booking_url", "") or "").strip(),
-                "official_contact_url": str(getattr(accom, "official_contact_url", "") or "").strip(),
+                **_public_accommodation_handoff_fields(
+                    booking_url=str(getattr(accom, "official_booking_url", "") or "").strip(),
+                    contact_url=str(getattr(accom, "official_contact_url", "") or "").strip(),
+                ),
                 "why_fits": ["Matches your selected accommodation"],
             }
         )
-    lines.append("Choose a room or ask me to create a booking preview.")
+    lines.append(
+        "To continue the cost preview, choose a room and provide your check-in date, "
+        "check-out date, and number of guests. This is preview-only; final booking is completed through the provider."
+    )
     return {
         "fulfillmentText": "\n".join(lines),
         "recommendation_trace": trace,
         "selected_accommodation_id": _to_int(getattr(selected_accommodation, "accom_id", 0), default=0),
         "selected_accommodation_name": str(getattr(selected_accommodation, "company_name", "") or "").strip(),
-        "quick_replies": ["create booking preview"],
+        "quick_replies": room_quick_replies[:4] or ["Preview Cost"],
     }
 
 
@@ -4106,11 +5203,41 @@ def _build_broad_accommodation_discovery_response(params=None, *, limit=5):
     if location:
         qs = qs.filter(location__icontains=location)
 
-    accommodations = list(qs[: max(3, min(int(limit), 8))])
+    def _location_phrase_matches(row_location, expected_location):
+        hay = _normalize_chat_text(row_location)
+        needle = _normalize_chat_text(expected_location)
+        if not hay or not needle:
+            return True
+        alias_map = {
+            "barangay suba": "suba",
+            "brgy suba": "suba",
+            "barangay poblacion": "poblacion",
+            "brgy poblacion": "poblacion",
+            "barangay tinago": "tinago",
+            "brgy tinago": "tinago",
+            "barangay villareal": "villareal",
+            "brgy villareal": "villareal",
+            "villarreal": "villareal",
+        }
+        resolved = alias_map.get(needle, needle)
+        tokens = [resolved]
+        if resolved.startswith("barangay "):
+            tokens.append(resolved.split(" ", 1)[1])
+        return any(token and token in hay for token in tokens)
+
+    raw_accommodations = list(qs[: max(8, min(int(limit) * 4, 24))])
+    if location:
+        exact_matches = [
+            accom for accom in raw_accommodations
+            if _location_phrase_matches(getattr(accom, "location", ""), location)
+        ]
+        accommodations = exact_matches[: max(3, min(int(limit), 8))]
+    else:
+        accommodations = raw_accommodations[: max(3, min(int(limit), 8))]
     if not accommodations:
         location_part = f" in {location}" if location else ""
         return {
-            "fulfillmentText": f"I couldn't find approved accommodations{location_part} right now.",
+            "fulfillmentText": f"I couldn't find verified approved accommodations{location_part} right now.",
             "quick_replies": ["show approved accommodations in bayawan"],
             "needs_clarification": True,
         }
@@ -4154,8 +5281,10 @@ def _build_broad_accommodation_discovery_response(params=None, *, limit=5):
                 "person_limit": max_capacity,
                 "description": str(getattr(accom, "description", "") or "").strip(),
                 "profile_image_url": _safe_file_url(getattr(accom, "profile_picture", None)),
-                "official_booking_url": str(getattr(accom, "official_booking_url", "") or "").strip(),
-                "official_contact_url": str(getattr(accom, "official_contact_url", "") or "").strip(),
+                **_public_accommodation_handoff_fields(
+                    booking_url=str(getattr(accom, "official_booking_url", "") or "").strip(),
+                    contact_url=str(getattr(accom, "official_contact_url", "") or "").strip(),
+                ),
                 "why_fits": why[:2],
             }
         )
@@ -4248,8 +5377,10 @@ def _get_default_accommodation_suggestions(limit=3):
                 "subtitle": f"{accom.location} | {price_text}",
                 "room_id": None,
                 "accom_id": accom.accom_id,
-                "official_booking_url": str(getattr(accom, "official_booking_url", "") or "").strip(),
-                "official_contact_url": str(getattr(accom, "official_contact_url", "") or "").strip(),
+                **_public_accommodation_handoff_fields(
+                    booking_url=str(getattr(accom, "official_booking_url", "") or "").strip(),
+                    contact_url=str(getattr(accom, "official_contact_url", "") or "").strip(),
+                ),
                 "profile_image_url": _safe_file_url(getattr(accom, "profile_picture", None)),
                 "description": str(getattr(accom, "description", "") or "").strip(),
                 "match_strength": "Suggested",
@@ -4373,6 +5504,83 @@ def _sanitize_quick_replies(items, *, limit=4):
     return normalized[:limit]
 
 
+def _quick_reply_text_for_filter(item):
+    if isinstance(item, dict):
+        return " ".join(
+            str(item.get(key) or "").strip().lower()
+            for key in ("label", "value")
+            if str(item.get(key) or "").strip()
+        )
+    return str(item or "").strip().lower()
+
+
+def _payload_context_key_for_quick_replies(payload):
+    if not isinstance(payload, dict):
+        return ""
+    response_type = str(payload.get("response_type") or payload.get("type") or "").strip().lower()
+    heading = str(payload.get("heading") or payload.get("title") or payload.get("response_title") or "").strip().lower()
+    text = str(payload.get("fulfillmentText") or "").strip().lower()
+    combined = f"{response_type} {heading} {text}"
+    if "dining" in combined or "food" in combined or "restaurant" in combined:
+        return "dining"
+    if "accommodation" in combined or "approved stay" in combined or "hotel" in combined:
+        return "accommodation"
+    if "tour package" in combined or response_type in {"tour_recommendations", "tours"}:
+        return "tour"
+    if "tourism place" in combined or "tourist spot" in combined or "landmark" in combined:
+        return "tourism_places"
+    if response_type in {"directions", "current_location"} or "directions / map guidance" in heading or "map guidance" in heading:
+        return "directions"
+    return ""
+
+
+def _is_broad_tourism_payload(payload):
+    if not isinstance(payload, dict):
+        return False
+    response_type = str(payload.get("response_type") or payload.get("type") or "").strip().lower()
+    heading = str(payload.get("heading") or payload.get("title") or "").strip().lower()
+    text = str(payload.get("fulfillmentText") or "").strip().lower()
+    if response_type in {"tourism_information", "bayawan_overview", "trip_planning", "image_assisted"}:
+        return True
+    if payload.get("needs_clarification"):
+        return True
+    return (
+        "bayawan tourism information" in heading
+        or "plan your" in text
+        or "trip planning" in text
+        or "choose a bayawan tourism category" in text
+    )
+
+
+def _quick_reply_allowed_for_context(item, context_key):
+    text = _quick_reply_text_for_filter(item)
+    if not text:
+        return False
+    category_tokens = {
+        "dining": ("tourist spot", "tourist spots", "approved stay", "approved stays", "approved accommodation", "approved accommodations", "find approved", "plan my trip"),
+        "tourism_places": ("dining place", "dining places", "where can i eat", "approved stay", "approved stays", "approved accommodation", "approved accommodations", "find approved", "plan my"),
+        "accommodation": ("dining place", "dining places", "tourist spot", "tourist spots", "show tourist", "show dining", "tour package", "show tour", "plan my", "help"),
+        "directions": ("dining place", "dining places", "tourist spot", "tourist spots", "approved stay", "approved stays", "approved accommodation", "approved accommodations", "show tour"),
+        "tour": ("approved stay", "approved stays", "approved accommodation", "approved accommodations", "dining place", "dining places", "tourist spot", "tourist spots", "plan my stay", "plan my trip"),
+    }
+    return not any(token in text for token in category_tokens.get(context_key, ()))
+
+
+def _contextualize_quick_replies_for_payload(payload):
+    if not isinstance(payload, dict) or _is_broad_tourism_payload(payload):
+        return payload
+    replies = payload.get("quick_replies")
+    if not isinstance(replies, list) or not replies:
+        return payload
+    context_key = _payload_context_key_for_quick_replies(payload)
+    if not context_key:
+        return payload
+    payload["quick_replies"] = [
+        item for item in replies if _quick_reply_allowed_for_context(item, context_key)
+    ]
+    return payload
+
+
 def _normalize_chat_recommendation_trace(items):
     if not isinstance(items, list):
         return []
@@ -4388,7 +5596,7 @@ def _normalize_chat_recommendation_trace(items):
             accom_name = str(title.split(" - ")[0] or "").strip()
         if not accom_name and title:
             accom_name = title
-        if kind not in {"accommodation", "room", "tour", "tour_schedule"}:
+        if kind not in {"accommodation", "room", "tour", "tour_schedule", "tourism_place", "dining", "map_place"}:
             kind = "room" if _to_int(item.get("room_id"), default=0) > 0 else "accommodation"
 
         accom_id = _to_int(item.get("accom_id") or item.get("accommodation_id"), default=0)
@@ -4405,22 +5613,18 @@ def _normalize_chat_recommendation_trace(items):
                 try:
                     detail_url = reverse("guest_book", kwargs={"tour_id": tour_id})
                 except Exception:
-                    detail_url = f"/guest_book/{tour_id}/"
+                    detail_url = f"/guest_app/guest_book/{tour_id}/"
                 if sched_id:
                     detail_url = f"{detail_url}?sched_id={sched_id}"
 
         official_booking = str(item.get("official_booking_url") or item.get("official_url") or "").strip()
         official_contact = str(item.get("official_contact_url") or item.get("facebook_url") or "").strip()
-        official_url = ""
-        facebook_url = ""
-        for candidate in (official_booking, official_contact):
-            if not candidate:
-                continue
-            if "facebook.com" in candidate.lower():
-                if not facebook_url:
-                    facebook_url = candidate
-            elif not official_url:
-                official_url = candidate
+        handoff_urls = _sanitize_accommodation_handoff_urls(
+            booking_url=official_booking,
+            contact_url=official_contact,
+        )
+        official_url = handoff_urls.get("provider_url", "")
+        facebook_url = handoff_urls.get("facebook_url", "")
 
         item["kind"] = kind
         if kind in {"accommodation", "room"}:
@@ -4429,8 +5633,15 @@ def _normalize_chat_recommendation_trace(items):
             item["detail_url"] = detail_url
         if official_url and kind in {"accommodation", "room"}:
             item["official_url"] = official_url
+            item["official_booking_url"] = ""
+        elif kind in {"accommodation", "room"}:
+            item["official_url"] = ""
+            item["official_booking_url"] = ""
         if facebook_url and kind in {"accommodation", "room"}:
             item["facebook_url"] = facebook_url
+            item["official_contact_url"] = facebook_url
+        elif kind in {"accommodation", "room"} and not official_url:
+            item["official_contact_url"] = ""
         description = str(item.get("description") or "").strip()
         if description:
             item["description"] = description[:160]
@@ -4506,6 +5717,7 @@ def _resolve_preview_room_selection(*, params=None, message="", cached_rows=None
     selected_accommodation_name_hint = str(params.get("selected_accommodation_name") or "").strip()
     guests = _resolve_guests(params)
     budget = _to_decimal(params.get("budget"), default=Decimal("0"))
+    parsed_room_hint_from_message = ""
 
     explicit_name = str(
         params.get("accom_name")
@@ -4516,11 +5728,23 @@ def _resolve_preview_room_selection(*, params=None, message="", cached_rows=None
         explicit_name = ""
     if not explicit_name:
         explicit_name = _extract_preview_accommodation_name(message)
+    if not explicit_name:
+        raw_message = str(message or "").strip()
+        room_at_match = re.search(
+            r"\b(?:preview|estimate(?:\s+my\s+stay)?|create(?:\s+a)?\s+booking\s+preview(?:\s+for)?)\s+(.+?)\s+(?:at|in)\s+(.+)$",
+            raw_message,
+            flags=re.IGNORECASE,
+        )
+        if room_at_match:
+            parsed_room_hint_from_message = str(room_at_match.group(1) or "").strip(" .,!?:;")
+            explicit_name = str(room_at_match.group(2) or "").strip(" .,!?:;")
     if not explicit_name and selected_accommodation_name_hint:
         explicit_name = selected_accommodation_name_hint
 
     if explicit_name:
         explicit_room_hint = str(params.get("room_name") or params.get("room_reference") or "").strip()
+        if not explicit_room_hint and parsed_room_hint_from_message:
+            explicit_room_hint = parsed_room_hint_from_message
         chosen_accommodation, candidate_names = _resolve_accommodation_by_name(explicit_name)
         if chosen_accommodation is None:
             def _norm_for_match(value):
@@ -4554,6 +5778,13 @@ def _resolve_preview_room_selection(*, params=None, message="", cached_rows=None
                             if trailing and trailing.lower() not in {"room", "hotel", "inn", "accommodation"}:
                                 explicit_room_hint = trailing
                     break
+        if chosen_accommodation is None and selected_accommodation_name_hint:
+            fallback_accommodation, _ = _resolve_accommodation_by_name(selected_accommodation_name_hint)
+            if fallback_accommodation is not None:
+                chosen_accommodation = fallback_accommodation
+                candidate_names = [str(getattr(fallback_accommodation, "company_name", "") or "").strip()]
+                if not explicit_room_hint:
+                    explicit_room_hint = explicit_name
         if chosen_accommodation is None:
             if len(candidate_names) > 1:
                 return {
@@ -4571,6 +5802,7 @@ def _resolve_preview_room_selection(*, params=None, message="", cached_rows=None
         chosen_name = str(getattr(chosen_accommodation, "company_name", "") or "").strip()
         if not explicit_room_hint and chosen_name:
             normalized_full = _normalize_chat_text(explicit_name)
+            normalized_message_full = _normalize_chat_text(message)
             room_name_candidates = [
                 str(v or "").strip()
                 for v in (
@@ -4581,7 +5813,10 @@ def _resolve_preview_room_selection(*, params=None, message="", cached_rows=None
                 if str(v or "").strip()
             ]
             for room_name_candidate in sorted(room_name_candidates, key=len, reverse=True):
-                if _normalize_chat_text(room_name_candidate) and _normalize_chat_text(room_name_candidate) in normalized_full:
+                normalized_candidate = _normalize_chat_text(room_name_candidate)
+                if not normalized_candidate:
+                    continue
+                if normalized_candidate in normalized_full or normalized_candidate in normalized_message_full:
                     explicit_room_hint = room_name_candidate
                     break
         # Handle phrases like "create booking preview for Hotel Maefinn Standard Room".
@@ -4652,27 +5887,26 @@ def _resolve_preview_room_selection(*, params=None, message="", cached_rows=None
                     "selected_accommodation_name": chosen_name,
                 }
         if explicit_room_hint:
-            refined_qs = room_qs.filter(room_name__icontains=explicit_room_hint)
-            if not refined_qs.exists():
-                hint_tokens = [
-                    token for token in re.split(r"[\s,\-_/]+", explicit_room_hint)
-                    if len(token) >= 3 and token.lower() not in {"room", "hotel", "inn", "accommodation"}
-                ]
-                for token in hint_tokens:
-                    refined_qs = refined_qs.filter(room_name__icontains=token) if refined_qs.exists() else room_qs.filter(room_name__icontains=token)
-            if refined_qs.exists():
-                room_qs = refined_qs
+            resolved = _resolve_room_hint_for_accommodation(
+                chosen_accommodation,
+                explicit_room_hint,
+                room_qs=room_qs,
+            )
+            matched_room = resolved.get("matched_room")
+            ambiguous_choices = [str(v).strip() for v in (resolved.get("ambiguous_choices") or []) if str(v).strip()][:5]
+            room_choices = [str(v).strip() for v in (resolved.get("room_choices") or []) if str(v).strip()][:5]
+            if matched_room is not None:
+                room_qs = room_qs.filter(room_id=_to_int(getattr(matched_room, "room_id", 0), default=0))
+            elif ambiguous_choices:
+                return {
+                    "room": None,
+                    "source": "explicit_name",
+                    "needs_room_selection": True,
+                    "selected_accommodation_id": _to_int(getattr(chosen_accommodation, "accom_id", 0), default=0),
+                    "selected_accommodation_name": chosen_name,
+                    "room_choices": ambiguous_choices,
+                }
             else:
-                room_choices = [
-                    str(v or "").strip()
-                    for v in (
-                        _approved_room_queryset()
-                        .filter(accommodation=chosen_accommodation, status="AVAILABLE")
-                        .order_by("price_per_night", "room_name")
-                        .values_list("room_name", flat=True)[:5]
-                    )
-                    if str(v or "").strip()
-                ]
                 return {
                     "room": None,
                     "source": "explicit_name",
@@ -4758,30 +5992,30 @@ def _resolve_preview_room_selection(*, params=None, message="", cached_rows=None
                     explicit_room_hint = cleaned
 
         if explicit_room_hint:
-            refined_qs = room_qs.filter(room_name__icontains=explicit_room_hint)
-            if not refined_qs.exists():
-                hint_tokens = [
-                    token for token in re.split(r"[\s,\-_/]+", explicit_room_hint)
-                    if len(token) >= 3 and token.lower() not in {"room", "hotel", "inn", "accommodation"}
-                ]
-                token_qs = room_qs
-                for token in hint_tokens:
-                    token_qs = token_qs.filter(room_name__icontains=token)
-                if token_qs.exists():
-                    refined_qs = token_qs
-            if refined_qs.exists():
-                chosen_room = refined_qs.order_by("price_per_night", "room_name", "room_id").first()
+            resolved = _resolve_room_hint_for_accommodation(
+                selected_accommodation,
+                explicit_room_hint,
+                room_qs=room_qs,
+            )
+            matched_room = resolved.get("matched_room")
+            ambiguous_choices = [str(v).strip() for v in (resolved.get("ambiguous_choices") or []) if str(v).strip()][:5]
+            room_choices = [str(v).strip() for v in (resolved.get("room_choices") or []) if str(v).strip()][:5]
+            if matched_room is not None:
                 return {
-                    "room": chosen_room,
+                    "room": matched_room,
                     "source": "selected_accommodation",
                     "selected_accommodation_id": _to_int(getattr(selected_accommodation, "accom_id", 0), default=0),
                     "selected_accommodation_name": str(getattr(selected_accommodation, "company_name", "") or "").strip(),
                 }
-            room_choices = [
-                str(v or "").strip()
-                for v in room_qs.order_by("price_per_night", "room_name").values_list("room_name", flat=True)[:5]
-                if str(v or "").strip()
-            ]
+            if ambiguous_choices:
+                return {
+                    "room": None,
+                    "source": "selected_accommodation",
+                    "needs_room_selection": True,
+                    "selected_accommodation_id": _to_int(getattr(selected_accommodation, "accom_id", 0), default=0),
+                    "selected_accommodation_name": str(getattr(selected_accommodation, "company_name", "") or "").strip(),
+                    "room_choices": ambiguous_choices,
+                }
             return {
                 "room": None,
                 "source": "selected_accommodation",
@@ -4910,18 +6144,16 @@ def _build_accommodation_link_actions(room=None, row_meta=None, max_actions=3):
         if dedupe_key in seen_urls:
             return
         seen_urls.add(dedupe_key)
-        actions.append({"url": cleaned, "label": str(label or "Visit Official Page").strip()})
+        actions.append({"url": cleaned, "label": str(label or "Open Provider Page").strip()})
 
-    if booking_url:
-        if "facebook.com" in booking_url.lower():
-            _push(booking_url, "View Facebook")
-        else:
-            _push(booking_url, "Open Official Page")
-    if contact_url:
-        if "facebook.com" in contact_url.lower():
-            _push(contact_url, "View Facebook")
-        else:
-            _push(contact_url, "Open Official Page")
+    handoff_urls = _sanitize_accommodation_handoff_urls(
+        booking_url=booking_url,
+        contact_url=contact_url,
+    )
+    if handoff_urls.get("facebook_url"):
+        _push(handoff_urls.get("facebook_url"), "Open Official Facebook Page")
+    if handoff_urls.get("provider_url"):
+        _push(handoff_urls.get("provider_url"), "Contact Accommodation Provider")
 
     return actions[:max_actions]
 
@@ -4930,7 +6162,7 @@ def _build_accommodation_official_link(room=None, row_meta=None):
     actions = _build_accommodation_link_actions(room=room, row_meta=row_meta, max_actions=1)
     if actions:
         first = actions[0] if isinstance(actions[0], dict) else {}
-        return str(first.get("url") or ""), str(first.get("label") or "Visit Official Page")
+        return str(first.get("url") or ""), str(first.get("label") or "Contact Accommodation Provider")
     return "", ""
 
 
@@ -4977,7 +6209,7 @@ def _is_open_official_page_request(message):
             "official page",
             "open booking page",
             "continue to official",
-            "continue to official booking page",
+            "contact accommodation provider",
             "continue booking outside",
             "book directly with hotel",
             "open facebook page",
@@ -5001,6 +6233,25 @@ def _is_accommodation_how_to_book_request(message):
     text = _normalize_chat_text(message)
     if not text:
         return False
+    if _contains_any_phrase(
+        text,
+        (
+            "where do i finalize the hotel booking",
+            "where do i finalize my hotel booking",
+            "where do i finalize the accommodation booking",
+            "where do i finalize my accommodation booking",
+            "how do i complete my accommodation booking",
+            "how do i complete the accommodation booking",
+            "how do i complete my hotel booking",
+            "how do i complete the hotel booking",
+            "complete accommodation booking",
+            "finalize accommodation booking",
+            "finalize hotel booking",
+            "book my hotel directly",
+            "book hotel directly",
+        ),
+    ):
+        return True
     return bool(
         re.search(
             r"\bhow\s+to\s+book\b.*\b(hotel|inn|accommodation|room)\b",
@@ -5147,19 +6398,26 @@ def _build_accommodation_preview_response(*, room=None, params=None):
         f"Estimated Total: PHP {int(estimated_total):,}" if estimated_total > 0 else "Estimated Total: To be confirmed",
         "",
         (
-            "This is only a booking preview. Your accommodation is not reserved yet. "
-            "To complete the actual booking, continue through the accommodation's official page or contact channels."
+            "This is a cost preview only. Your accommodation is not reserved yet. "
+            "Final accommodation arrangements are completed through the accommodation's official Facebook page "
+            "or verified contact channel. The system does not process accommodation bookings or payments."
         ),
     ]
 
     link_actions = _build_accommodation_link_actions(room=room, max_actions=4)
+    if not link_actions:
+        summary_lines.append(
+            "I do not have a verified provider link for this accommodation yet. "
+            "Please contact the Tourism Office or the accommodation directly for updated details."
+        )
     return {
         "ready": True,
         "text": "\n".join(summary_lines),
         "quick_replies": [],
         "link_actions": link_actions,
         "billing_link": str(link_actions[0].get("url") or "") if link_actions else "",
-        "billing_link_label": str(link_actions[0].get("label") or "Continue to Official Booking Page") if link_actions else "",
+        "billing_link_label": str(link_actions[0].get("label") or "Contact Accommodation Provider") if link_actions else "",
+        "accommodation_preview_completed": True,
     }
 
 
@@ -5559,7 +6817,7 @@ def _extract_params_with_confidence(message):
     # Extract location from phrases like "in bayawan", "near terminal", "around poblacion".
     # Stop before common trailing constraint phrases so we don't swallow guests/budget text.
     loc_match = re.search(
-        r"\b(in|near|around|sa|at)\s+([a-z\s]+?)(?=\s+(?:for|under|below|budget|with|from)\b|$)",
+        r"\b(in|near|around|sa|at|dapit\s+sa)\s+([a-z\s]+?)(?=\s+(?:for|under|below|budget|with|from)\b|[?.!,;:]|$)",
         text,
     )
     if loc_match:
@@ -5618,6 +6876,21 @@ def _extract_params_with_confidence(message):
                     )
             else:
                 params["location"] = raw_location
+
+    # Cebuano/Tagalog compact location cues used in accommodation queries,
+    # e.g. "naa moy hotel sa suba?" / "inn dapit sa barangay suba".
+    if "location" not in params:
+        ceb_loc = re.search(
+            r"\b(?:sa|dapit\s+sa)\s+(?:barangay|brgy)\s+([a-z][a-z\s\-]{1,40})\b|\b(?:sa|dapit\s+sa)\s+(suba|poblacion|villareal|villarreal|tinago|ubos|bayawan)\b",
+            text,
+            flags=re.IGNORECASE,
+        )
+        if ceb_loc:
+            raw_loc = str(ceb_loc.group(1) or ceb_loc.group(2) or "").strip()
+            normalized_location = _resolve_location_value(raw_loc)
+            if normalized_location:
+                params["location"] = normalized_location
+                params["clear_location_anchor"] = True
             if params.get("location") and not params.get("location_scope_note"):
                 params["location_scope_note"] = (
                     f"Here are accommodations in/near {params.get('location')} based on available records."
@@ -6172,6 +7445,524 @@ def _is_dining_query(message):
     return any(marker in text for marker in markers)
 
 
+_MULTILINGUAL_ALLOWED_INTENTS = {
+    "bayawan_overview",
+    "history",
+    "food_dining",
+    "culture_festival",
+    "tourist_spots",
+    "accommodations",
+    "accommodation_recommendation",
+    "accommodation_preview",
+    "tour_packages",
+    "tour_schedule",
+    "trip_planning",
+    "map_places",
+    "directions",
+    "current_location",
+    "private_booking",
+    "ratings_reviews",
+    "image_help",
+    "out_of_scope",
+    "unclear",
+}
+
+
+def _detect_simple_user_language(raw_text):
+    text = str(raw_text or "").strip()
+    lowered = text.lower()
+    if re.search(r"[\u3040-\u30ff]", text):
+        return "ja"
+    if re.search(r"[\uac00-\ud7af]", text):
+        return "ko"
+    if re.search(r"[\u4e00-\u9fff]", text):
+        return "zh"
+    if any(word in lowered for word in ("qué", "que puedo", "puedo comer", "dónde", "donde", "comer en")):
+        return "es"
+    if any(word in lowered for word in ("où", "puis-je", "manger", "visiter")):
+        return "fr"
+    if re.search(r"\b(unsay|unsa|asa|kaon|mangaon|laagan|laag|kapuy|adto)\b", lowered):
+        return "ceb"
+    if re.search(r"\b(saan|paano|pagkain|masarap|kainin|pumunta|matulog|kasaysayan)\b", lowered):
+        return "fil"
+    return "en"
+
+
+def _same_language_hint(language_code, intent):
+    code = str(language_code or "en").lower()
+    if code == "ceb":
+        return {
+            "food_dining": "Nakasabot ko nga nangutana ka bahin sa pagkaon o kan-anan sa Bayawan.",
+            "tourist_spots": "Nakasabot ko nga nangita ka og nindot laagan sa Bayawan.",
+            "accommodations": "Nakasabot ko nga nangita ka og kapuy-an o accommodation sa Bayawan.",
+            "directions": "Nakasabot ko nga nangayo ka og direksyon sa Bayawan.",
+            "history": "Nakasabot ko nga nangutana ka bahin sa kasaysayan sa Bayawan.",
+            "culture_festival": "Nakasabot ko nga nangutana ka bahin sa kultura o pista sa Bayawan.",
+        }.get(intent, "")
+    if code == "fil":
+        return {
+            "food_dining": "Naiintindihan ko na nagtatanong ka tungkol sa pagkain o kainan sa Bayawan.",
+            "tourist_spots": "Naiintindihan ko na naghahanap ka ng magandang puntahan sa Bayawan.",
+            "accommodations": "Naiintindihan ko na naghahanap ka ng matutuluyan sa Bayawan.",
+            "directions": "Naiintindihan ko na humihingi ka ng direksyon sa Bayawan.",
+            "history": "Naiintindihan ko na nagtatanong ka tungkol sa kasaysayan ng Bayawan.",
+            "culture_festival": "Naiintindihan ko na nagtatanong ka tungkol sa kultura o pista ng Bayawan.",
+        }.get(intent, "")
+    if code == "es":
+        return "Entiendo que preguntas sobre turismo en Bayawan."
+    if code == "fr":
+        return "Je comprends que vous posez une question touristique sur Bayawan."
+    if code == "ja":
+        return "Bayawanの観光についての質問として理解しました。"
+    if code == "ko":
+        return "Bayawan 관광에 대한 질문으로 이해했습니다."
+    if code == "zh":
+        return "我理解你在询问Bayawan旅游相关信息。"
+    return ""
+
+
+def _multilingual_keyword_intent(raw_message):
+    text = _normalize_chat_text(raw_message)
+    raw = str(raw_message or "").strip()
+    raw_lower = raw.lower()
+    if not text and not raw:
+        return {}
+
+    def hit(*phrases):
+        return any(phrase in text for phrase in phrases)
+
+    language = _detect_simple_user_language(raw)
+    bayawan_related = "bayawan" in text or bool(re.search(r"bayawan", raw, flags=re.IGNORECASE))
+
+    food_markers = (
+        "unsay lami",
+        "lami nga kaonon",
+        "kaonon",
+        "pagkaon",
+        "kaon",
+        "mangaon",
+        "asa mangaon",
+        "delicacies",
+        "food to eat",
+        "what to eat",
+        "restaurants",
+        "restaurant",
+        "dining",
+        "saan makakain",
+        "ano masarap kainin",
+        "pagkain",
+        "que puedo comer",
+        "qué puedo comer",
+        "ou puis je manger",
+        "où puis-je manger",
+    )
+    spot_markers = (
+        "asa laagan",
+        "asa nindot laag",
+        "laagan",
+        "laag",
+        "adtoan",
+        "tourist spots",
+        "places to visit",
+        "where to go",
+        "saan pupunta",
+        "pasyalan",
+        "saan magandang pumunta",
+        "visitar",
+        "visiter",
+    )
+    accommodation_markers = (
+        "asa matulog",
+        "asa kapuy an",
+        "asa kapuy-an",
+        "kapuy an",
+        "kapuy-an",
+        "hotel",
+        "inn",
+        "stay",
+        "accommodation",
+        "matutuluyan",
+        "tuluyan",
+        "matulog",
+    )
+    direction_markers = (
+        "asa ni",
+        "asa dapit",
+        "direksyon",
+        "directions",
+        "how to get",
+        "uns aon pag adto",
+        "unsaon pag adto",
+        "paano pumunta",
+        "saan ito",
+        "where is",
+        "location of",
+        "how far",
+    )
+    history_markers = (
+        "kasaysayan",
+        "history",
+        "istorya sa bayawan",
+        "unsay history",
+        "ano ang kasaysayan",
+    )
+    culture_markers = (
+        "kultura",
+        "culture",
+        "festival",
+        "fiesta",
+        "tradisyon",
+        "pista",
+    )
+
+    if hit(*spot_markers) or ("どこ" in raw and ("行" in raw or "訪" in raw)) or ("어디" in raw and ("방문" in raw or "가" in raw)) or (("哪里" in raw or "哪裡" in raw) and ("去" in raw or "玩" in raw)):
+        return {"intent": "tourist_spots", "language": language, "confidence": 0.88, "translated_query_en": "places to visit in Bayawan", "entities": {"category": "landmark"}}
+    if language in {"ja", "ko", "zh"} and bayawan_related:
+        return {"intent": "tourist_spots", "language": language, "confidence": 0.72, "translated_query_en": "places to visit in Bayawan", "entities": {"category": "landmark"}}
+    if hit(*direction_markers):
+        return {"intent": "directions", "language": language, "confidence": 0.9, "translated_query_en": "directions or location in Bayawan", "entities": {}}
+    if hit(*food_markers) or any(phrase in raw_lower for phrase in ("qué puedo comer", "que puedo comer", "qu puedo comer", "puedo comer", "où puis-je manger", "ou puis-je manger", "puis-je manger")):
+        return {"intent": "food_dining", "language": language, "confidence": 0.9, "translated_query_en": "food or dining in Bayawan", "entities": {"category": "restaurant"}}
+    if hit(*accommodation_markers):
+        return {"intent": "accommodations", "language": language, "confidence": 0.88, "translated_query_en": "places to stay in Bayawan", "entities": {"category": "hotel"}}
+    if hit(*history_markers):
+        return {"intent": "history", "language": language, "confidence": 0.9, "translated_query_en": "history of Bayawan", "entities": {}}
+    if hit(*culture_markers):
+        return {"intent": "culture_festival", "language": language, "confidence": 0.88, "translated_query_en": "culture or festivals of Bayawan", "entities": {}}
+    if bayawan_related and re.search(r"\bnice|known|about|overview\b", text):
+        return {"intent": "bayawan_overview", "language": language, "confidence": 0.72, "translated_query_en": "Bayawan overview", "entities": {}}
+    if bayawan_related and len(text.split()) <= 3:
+        return {"intent": "bayawan_overview", "language": language, "confidence": 0.62, "translated_query_en": "Bayawan overview or clarification", "entities": {}}
+    return {}
+
+
+def _gemini_multilingual_intent_enabled():
+    return str(os.getenv("CHATBOT_GEMINI_MULTILINGUAL_INTENT_ENABLED", "1") or "").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _classify_multilingual_tourism_intent(raw_message):
+    raw = str(raw_message or "").strip()
+    if not raw:
+        return {}
+    local = _multilingual_keyword_intent(raw)
+    if local:
+        return local
+    if not _gemini_multilingual_intent_enabled() or genai is None:
+        return {}
+    api_key = str(os.getenv("GEMINI_API_KEY", "") or "").strip()
+    if not api_key:
+        return {}
+    model = str(os.getenv("GEMINI_MODEL", "gemini-2.5-flash-lite") or "").strip() or "gemini-2.5-flash-lite"
+    prompt = (
+        "Classify a user's tourism-chat intent for the Bayawan City tourism system.\n"
+        "Return JSON only. Do not answer the user.\n"
+        "Allowed intents: bayawan_overview, history, food_dining, culture_festival, tourist_spots, accommodations, "
+        "accommodation_recommendation, accommodation_preview, tour_packages, tour_schedule, trip_planning, map_places, "
+        "directions, current_location, private_booking, ratings_reviews, image_help, out_of_scope, unclear.\n"
+        "Use Bayawan tourism context only. If tourism-related but vague, use unclear.\n"
+        "JSON schema: {\"language\":\"detected language/code\",\"translated_query_en\":\"meaning in English\","
+        "\"intent\":\"one allowed intent\",\"confidence\":0.0,\"entities\":{\"place\":\"\",\"origin\":\"\","
+        "\"destination\":\"\",\"budget\":\"\",\"guests\":\"\",\"date\":\"\",\"category\":\"\"},"
+        "\"should_answer_in_user_language\":true}.\n"
+        f"User text: {raw[:600]}"
+    )
+    try:
+        client = genai.Client(api_key=api_key)
+        response = client.models.generate_content(model=model, contents=prompt)
+        payload = _extract_json_payload(getattr(response, "text", ""))
+        if not isinstance(payload, dict):
+            return {}
+        intent = str(payload.get("intent") or "").strip().lower()
+        if intent not in _MULTILINGUAL_ALLOWED_INTENTS:
+            return {}
+        confidence = _safe_float(payload.get("confidence"), default=0.0) or 0.0
+        entities = payload.get("entities") if isinstance(payload.get("entities"), dict) else {}
+        return {
+            "intent": intent,
+            "language": str(payload.get("language") or _detect_simple_user_language(raw)).strip() or "en",
+            "translated_query_en": str(payload.get("translated_query_en") or "").strip(),
+            "confidence": max(0.0, min(float(confidence), 1.0)),
+            "entities": {
+                "place": str(entities.get("place") or "").strip(),
+                "origin": str(entities.get("origin") or "").strip(),
+                "destination": str(entities.get("destination") or "").strip(),
+                "budget": str(entities.get("budget") or "").strip(),
+                "guests": str(entities.get("guests") or "").strip(),
+                "date": str(entities.get("date") or "").strip(),
+                "category": str(entities.get("category") or "").strip(),
+            },
+            "should_answer_in_user_language": bool(payload.get("should_answer_in_user_language", True)),
+        }
+    except Exception:
+        return {}
+
+
+def _prepend_language_hint(text, language_code, intent):
+    hint = _same_language_hint(language_code, intent)
+    if not hint:
+        return text
+    return f"{hint}\n{text}"
+
+
+def _build_multilingual_food_payload(request, language_code):
+    rows, _category = _list_mapbookmarks_for_query(request, "what restaurants are on the map", limit=6)
+    cards = [
+        _mapbookmark_card_trace(request, row, idx)
+        for idx, row in enumerate(rows[:5], 1)
+    ]
+    cards = [card for card in cards if card]
+    lines = [
+        "I understand you're asking about food or places to eat in Bayawan.",
+        "I do not have a fully verified delicacy list yet, so official food highlights should still be verified with the Tourism Office.",
+    ]
+    if rows:
+        lines.append("Here are mapped dining places you can explore:")
+        for idx, row in enumerate(rows, 1):
+            lines.append(f"{idx}. {str(getattr(row, 'name', '') or '').strip()}")
+    else:
+        lines.append("I don't see mapped dining records yet, but you can open the City Map or ask for approved accommodations and nearby places.")
+    return {
+        "fulfillmentText": _prepend_language_hint("\n".join(lines), language_code, "food_dining"),
+        "quick_replies": ["Open City Map", "Dining places", "Tourist spots", "Plan my trip"],
+        "response_type": "dining",
+        "heading": "Dining Places",
+        **({"recommendation_trace": cards} if cards else {}),
+    }
+
+
+def _build_multilingual_tourist_spots_payload(request, language_code):
+    tourism_objects = list(
+        TourismInformation.objects.published()
+        .exclude(spot_name__isnull=True)
+        .exclude(spot_name__exact="")
+        .order_by("spot_name")[:5]
+    )
+    marker_rows, _category = _list_mapbookmarks_for_query(request, "what tourist spots are on the map", limit=6)
+    names = []
+    for value in [str(getattr(v, "spot_name", "") or "").strip() for v in tourism_objects] + [str(getattr(row, "name", "") or "").strip() for row in marker_rows]:
+        if value and value.lower() not in {item.lower() for item in names}:
+            names.append(value)
+    cards = []
+    for idx, row in enumerate(tourism_objects[:3], 1):
+        card = _tourism_information_card_trace(request, row, idx)
+        if card:
+            cards.append(card)
+    for row in marker_rows:
+        if len(cards) >= 5:
+            break
+        marker_name = str(getattr(row, "name", "") or "").strip()
+        if marker_name and marker_name.lower() in {str(card.get("title") or "").lower() for card in cards}:
+            continue
+        card = _mapbookmark_card_trace(request, row, len(cards) + 1)
+        if card:
+            cards.append(card)
+    if names:
+        lines = ["Here are Bayawan tourism places you can explore:"]
+        for idx, name in enumerate(names[:6], 1):
+            lines.append(f"{idx}. {name}")
+        lines.append("You can open the City Map for directions and nearby tourism locations.")
+    else:
+        lines = [
+            "I have limited verified tourist spot records right now.",
+            "You can open the City Map to browse mapped places and directions.",
+        ]
+    return {
+        "fulfillmentText": _prepend_language_hint("\n".join(lines), language_code, "tourist_spots"),
+        "quick_replies": ["Open City Map", "Get directions", "Dining places", "Approved accommodations"],
+        "response_type": "tourism_places",
+        "heading": "Tourism Places",
+        **({"recommendation_trace": cards} if cards else {}),
+    }
+
+
+def _build_multilingual_accommodations_payload(language_code):
+    rows = list(_approved_accommodation_queryset().order_by("company_name")[:6])
+    cards = [
+        _accommodation_card_trace_from_model(accom, idx)
+        for idx, accom in enumerate(rows[:5], 1)
+    ]
+    cards = [card for card in cards if card]
+    if rows:
+        lines = [
+            "Here are Tourism Office-approved stays you can explore. Accommodation remains preview-only in this system.",
+        ]
+        for idx, accom in enumerate(rows, 1):
+            location = str(getattr(accom, "location", "") or "").strip()
+            label = str(getattr(accom, "company_name", "") or "").strip()
+            lines.append(f"{idx}. {label}" + (f" - {location}" if location else ""))
+        lines.append("Final accommodation arrangements continue through verified Facebook/provider contact channels.")
+    else:
+        lines = ["I don't see approved accommodation listings available right now."]
+    return {
+        "fulfillmentText": _prepend_language_hint("\n".join(lines), language_code, "accommodations"),
+        "quick_replies": ["Find Approved Stays", "Open City Map", "Plan my trip", "Help"],
+        "response_type": "accommodation_recommendations",
+        "heading": "Accommodation Recommendations",
+        **({"recommendation_trace": cards} if cards else {}),
+    }
+
+
+def _build_multilingual_directions_payload(request, message, classification, client_location):
+    marker = _lookup_mapbookmark_place(request, message)
+    language_code = str((classification or {}).get("language") or _detect_simple_user_language(message)).lower()
+    if marker is not None:
+        marker_name = str(getattr(marker, "name", "") or "").strip()
+        marker_category = str(getattr(marker, "category", "") or "").strip()
+        marker_details = str(getattr(marker, "details", "") or "").strip()
+        dir_link = _build_map_direction_link(
+            dest_lat=getattr(marker, "latitude", None),
+            dest_lng=getattr(marker, "longitude", None),
+            client_location=client_location,
+        )
+        lines = [f"{marker_name} ({marker_category})"]
+        if marker_details:
+            lines.append(marker_details)
+        if not dir_link:
+            lines.append("Open the City Map to view this place and get directions.")
+        payload = {
+            "fulfillmentText": _prepend_language_hint("\n".join(lines), language_code, "directions"),
+            "quick_replies": ["Open City Map", "Use My Location", "Choose Destination"],
+            "response_type": "directions",
+            "heading": "Directions / Map Guidance",
+            "recommendation_trace": [_mapbookmark_card_trace(request, marker, 1, client_location=client_location)],
+        }
+        if dir_link:
+            payload["billing_link"] = dir_link
+            payload["billing_link_label"] = f"Get Directions to {marker_name}"
+        return payload
+    text = str((classification or {}).get("translated_query_en") or message or "").strip()
+    guidance = _build_travel_guidance_payload(text, {}, client_location, request=request)
+    reply = str(guidance.get("reply") or "").strip() or "Which Bayawan place would you like directions to?"
+    return {
+        "fulfillmentText": _prepend_language_hint(reply, language_code, "directions"),
+        "quick_replies": _sanitize_quick_replies(guidance.get("quick_replies") if isinstance(guidance.get("quick_replies"), list) else ["Open City Map", "Choose Destination"], limit=4),
+        **({"billing_link": str(guidance.get("link")), "billing_link_label": str(guidance.get("link_label") or "Open Map")} if guidance.get("link") else {}),
+    }
+
+
+def _build_multilingual_tourism_intent_payload(request, message, classification, client_location):
+    if not isinstance(classification, dict) or not classification:
+        return None
+    intent = str(classification.get("intent") or "").strip().lower()
+    confidence = _safe_float(classification.get("confidence"), default=0.0) or 0.0
+    language_code = str(classification.get("language") or _detect_simple_user_language(message)).strip().lower()
+    if intent not in _MULTILINGUAL_ALLOWED_INTENTS or confidence < 0.55:
+        return None
+    if intent == "food_dining":
+        return _build_multilingual_food_payload(request, language_code)
+    if intent == "tourist_spots":
+        return _build_multilingual_tourist_spots_payload(request, language_code)
+    if intent in {"accommodations", "accommodation_recommendation"}:
+        return _build_multilingual_accommodations_payload(language_code)
+    if intent == "directions":
+        return _build_multilingual_directions_payload(request, message, classification, client_location)
+    if intent == "current_location":
+        return {
+            "fulfillmentText": _prepend_language_hint(
+                "Please use the location button on the City Map so I can help estimate directions from your current position.",
+                language_code,
+                "directions",
+            ),
+            "quick_replies": ["Open City Map", "Choose Destination", "Show Tourist Spots"],
+            "billing_link": reverse("map"),
+            "billing_link_label": "Open City Map",
+        }
+    if intent in {"history", "culture_festival", "bayawan_overview"}:
+        lookup_text = {
+            "history": "what is the history of Bayawan",
+            "culture_festival": "what culture or festivals are in Bayawan",
+            "bayawan_overview": "tell me about Bayawan",
+        }.get(intent, "tell me about Bayawan")
+        payload = _build_bayawan_encyclopedia_payload(lookup_text)
+        payload["fulfillmentText"] = _prepend_language_hint(
+            str(payload.get("fulfillmentText") or ""),
+            language_code,
+            intent,
+        )
+        return payload
+    if intent == "map_places":
+        rows, category = _list_mapbookmarks_for_query(request, str(classification.get("translated_query_en") or message), limit=6)
+        if not rows:
+            return {
+                "fulfillmentText": "I don't see mapped records for that category yet.",
+                "quick_replies": ["Open City Map", "Tourist spots", "Dining places", "Approved accommodations"],
+            }
+        lines = ["Here are places currently shown on the City Map:"]
+        for idx, row in enumerate(rows, 1):
+            lines.append(f"{idx}. {str(getattr(row, 'name', '') or '').strip()}")
+        cards = [
+            _mapbookmark_card_trace(request, row, idx)
+            for idx, row in enumerate(rows[:5], 1)
+        ]
+        cards = [card for card in cards if card]
+        return {
+            "fulfillmentText": _prepend_language_hint("\n".join(lines), language_code, "tourist_spots"),
+            "quick_replies": ["Open City Map", "Get directions", "Use My Location"],
+            "response_type": "tourism_places",
+            "heading": "Tourism Places",
+            **({"recommendation_trace": cards} if cards else {}),
+        }
+    if intent == "private_booking":
+        return {
+            "fulfillmentText": "Please log in or create an account to continue with booking.",
+            "billing_link": reverse("login"),
+            "billing_link_label": "Log In to Continue",
+            "quick_replies": ["Show Tour Packages", "Open City Map", "Help"],
+        }
+    if intent == "out_of_scope":
+        return {
+            "fulfillmentText": "I can help with Bayawan tourism, accommodations, tours, maps, directions, food places, and trip planning.",
+            "quick_replies": ["Tourist spots", "Dining places", "Approved accommodations", "Open City Map"],
+        }
+    if intent == "unclear":
+        return {
+            "fulfillmentText": "Are you asking about food, tourist spots, accommodations, directions, tour packages, or Bayawan history/culture?",
+            "quick_replies": ["Dining places", "Tourist spots", "Approved accommodations", "Open City Map"],
+            "needs_clarification": True,
+            "missing_slot": "tourism_topic",
+        }
+    return None
+
+
+def _is_unrelated_guest_prompt(message):
+    text = _normalize_chat_text(message)
+    if not text:
+        return False
+    tourism_markers = (
+        "bayawan",
+        "tour",
+        "hotel",
+        "inn",
+        "accommodation",
+        "stay",
+        "room",
+        "map",
+        "direction",
+        "directions",
+        "restaurant",
+        "dining",
+        "food",
+        "eat",
+        "history",
+        "culture",
+        "festival",
+        "booking",
+        "schedule",
+        "kaon",
+        "mangaon",
+        "laag",
+        "kapuy",
+        "pumunta",
+        "makakain",
+        "matulog",
+    )
+    if any(marker in text for marker in tourism_markers):
+        return False
+    if text in {"help", "hello", "hi", "hey"}:
+        return False
+    return len(text.split()) >= 2
+
+
 def _extract_tourism_search_tokens(message):
     raw = str(message or "").strip().lower()
     if not raw:
@@ -6274,10 +8065,15 @@ def _extract_origin_hint(message):
         return {"type": "unknown", "value": ""}
     if any(token in text for token in ("from another country", "international", "from abroad", "outside the philippines")):
         return {"type": "international", "value": "outside the Philippines"}
+    explicit_origins = ("manila", "cebu", "dumaguete", "bacolod", "davao", "iloilo", "cagayan de oro")
+    for city in explicit_origins:
+        if re.search(rf"\bfrom\s+{re.escape(city)}\b", text):
+            return {"type": "domestic_far", "value": city.title()}
     from_match = re.search(r"\bfrom\s+([a-z][a-z\s]{2,50})", text)
     if from_match:
         origin_value = " ".join(str(from_match.group(1) or "").split()).strip()
         if origin_value:
+            origin_value = re.split(r"\bhow\b", origin_value, maxsplit=1)[0].strip() or origin_value
             if (
                 "bayawan" in origin_value
                 or "city center" in origin_value
@@ -6328,8 +8124,10 @@ def _resolve_destination_for_travel(message, params):
         if accom is not None:
             coord = _coords_from_map_match(str(getattr(accom, "company_name", "") or "") or str(getattr(accom, "location", "") or ""))
             link, label = _build_accommodation_official_link(row_meta={
-                "official_booking_url": str(getattr(accom, "official_booking_url", "") or "").strip(),
-                "official_contact_url": str(getattr(accom, "official_contact_url", "") or "").strip(),
+                **_public_accommodation_handoff_fields(
+                    booking_url=str(getattr(accom, "official_booking_url", "") or "").strip(),
+                    contact_url=str(getattr(accom, "official_contact_url", "") or "").strip(),
+                ),
             })
             return {
                 "kind": "accommodation",
@@ -6339,7 +8137,7 @@ def _resolve_destination_for_travel(message, params):
                 "lng": coord.get("lng"),
                 "anchor": coord.get("anchor"),
                 "link": link,
-                "link_label": label or "Visit Official Page",
+                "link_label": label or "Open Provider Page",
             }
 
     for accom in _approved_accommodation_queryset().order_by("company_name")[:40]:
@@ -6347,8 +8145,10 @@ def _resolve_destination_for_travel(message, params):
         if accom_name_norm and (accom_name_norm in normalized_message or normalized_message in accom_name_norm):
             coord = _coords_from_map_match(str(accom.company_name or "") or str(accom.location or ""))
             link, label = _build_accommodation_official_link(row_meta={
-                "official_booking_url": str(getattr(accom, "official_booking_url", "") or "").strip(),
-                "official_contact_url": str(getattr(accom, "official_contact_url", "") or "").strip(),
+                **_public_accommodation_handoff_fields(
+                    booking_url=str(getattr(accom, "official_booking_url", "") or "").strip(),
+                    contact_url=str(getattr(accom, "official_contact_url", "") or "").strip(),
+                ),
             })
             return {
                 "kind": "accommodation",
@@ -6358,7 +8158,7 @@ def _resolve_destination_for_travel(message, params):
                 "lng": coord.get("lng"),
                 "anchor": coord.get("anchor"),
                 "link": link,
-                "link_label": label or "Visit Official Page",
+                "link_label": label or "Open Provider Page",
             }
 
     if tourism_query:
@@ -6398,20 +8198,117 @@ def _resolve_destination_for_travel(message, params):
     return {"kind": "", "name": "", "location": location, "lat": None, "lng": None, "anchor": "", "link": "", "link_label": ""}
 
 
-def _build_travel_guidance_payload(message, params, client_location):
+def _is_generic_bayawan_direction_request(message):
+    text = _normalize_chat_text(message)
+    if not text:
+        return False
+    generic_markers = (
+        "help me with directions in bayawan",
+        "directions in bayawan",
+        "how to go around bayawan",
+        "get directions",
+        "directions",
+    )
+    if text in generic_markers:
+        return True
+    if "directions" in text and "bayawan" in text and " to " not in text and "where is " not in text:
+        return True
+    return False
+
+
+def _travel_request_needs_destination(message, destination):
+    text = _normalize_chat_text(message)
+    if not text:
+        return True
+    if _is_generic_bayawan_direction_request(text):
+        return True
+    if ("how do i get there" in text or "how to get there" in text or "get there" in text) and (
+        "directions to" not in text and "how to get to" not in text and "where is " not in text and " to " not in text
+    ):
+        return True
+    destination = destination if isinstance(destination, dict) else {}
+    dest_name = str(destination.get("name") or "").strip()
+    dest_kind = str(destination.get("kind") or "").strip().lower()
+    has_specific_destination = bool(dest_name and dest_kind in {"accommodation", "tourist_spot", "place", "map_place"})
+    if has_specific_destination:
+        return False
+    if not dest_name:
+        return True
+    if "how far is this from me" in text or "distance from me" in text:
+        return True
+    if "how to get there" in text or "directions there" in text:
+        return True
+    return False
+
+
+def _build_travel_guidance_payload(message, params, client_location, request=None):
     destination = _resolve_destination_for_travel(message, params)
+    if (not str(destination.get("name") or "").strip()) and request is not None:
+        marker = _lookup_mapbookmark_place(request, message)
+        if marker is not None:
+            destination = {
+                "kind": "map_place",
+                "name": str(getattr(marker, "name", "") or "").strip(),
+                "location": str(getattr(marker, "details", "") or "Bayawan City").strip() or "Bayawan City",
+                "lat": _safe_float(getattr(marker, "latitude", None)),
+                "lng": _safe_float(getattr(marker, "longitude", None)),
+                "anchor": str(getattr(marker, "name", "") or "").strip(),
+                "link": "",
+                "link_label": "",
+            }
     origin_hint = _extract_origin_hint(message)
     lines = []
     quick_replies = [
-        "How far is this from me?",
-        "I'm from Manila, how do I get there?",
-        "Open map",
+        "Open City Map",
+        "Use My Location",
+        "Choose Destination",
+        "Show Tourist Spots",
     ]
     action_link = ""
     action_label = ""
 
-    destination_name = str(destination.get("name") or "that destination").strip() or "that destination"
+    destination_name = str(destination.get("name") or "").strip()
     destination_location = str(destination.get("location") or "Bayawan").strip() or "Bayawan"
+    if _travel_request_needs_destination(message, destination):
+        normalized_message = _normalize_chat_text(message)
+        if "how far is this from me" in normalized_message or "distance from me" in normalized_message:
+            return {
+                "reply": "Please choose or type a destination first so I can estimate the distance from your location.",
+                "quick_replies": quick_replies,
+                "link": "",
+                "link_label": "",
+            }
+        if origin_hint.get("type") == "domestic_far" and "manila" in str(origin_hint.get("value") or "").lower():
+            return {
+                "reply": (
+                    "From Manila to Bayawan City, a practical route is Manila -> Dumaguete by flight, then Dumaguete -> Bayawan by bus or van.\n"
+                    "If you want directions to a specific place in Bayawan, please tell me the place name."
+                ),
+                "quick_replies": quick_replies,
+                "link": "",
+                "link_label": "",
+            }
+        if origin_hint.get("type") == "domestic_far" and "bayawan" in normalized_message:
+            origin_name = str(origin_hint.get("value") or "your location").strip() or "your location"
+            return {
+                "reply": (
+                    f"From {origin_name}, a practical route is to travel to Dumaguete (or nearby Negros Oriental hub), then continue by bus or van to Bayawan City.\n"
+                    "For local directions inside Bayawan, share the exact place name.\n"
+                    "Approximate travel time may vary depending on transfers and traffic."
+                ),
+                "quick_replies": quick_replies,
+                "link": "",
+                "link_label": "",
+            }
+        return {
+            "reply": (
+                "Sure. Which place in Bayawan would you like directions to?\n"
+                "You can ask for an accommodation, tourist spot, dining place, tour area, or landmark."
+            ),
+            "quick_replies": quick_replies,
+            "link": "",
+            "link_label": "",
+        }
     lines.append(
         _pick_response_variant(
             [
@@ -6441,6 +8338,8 @@ def _build_travel_guidance_payload(message, params, client_location):
                 f"From {origin_name}, a typical route is to travel to Negros Oriental (often via Dumaguete or nearby hubs), then continue by land to Bayawan."
             )
         lines.append("Once you're in Bayawan, local transport can take you to the exact destination.")
+    elif not origin_hint.get("type"):
+        lines.append("You can share your starting point or use current location for more specific guidance.")
 
     origin_lat = _safe_float(client_location.get("latitude")) if isinstance(client_location, dict) else None
     origin_lng = _safe_float(client_location.get("longitude")) if isinstance(client_location, dict) else None
@@ -6473,19 +8372,14 @@ def _build_travel_guidance_payload(message, params, client_location):
             lines.append(
                 "Location access looks disabled on your side, so I can't compute exact distance from your device yet."
             )
-        if destination_name:
-            lines.append(
-                f"{destination_name} is in/near {destination_location}. I can give a better distance/time estimate if you allow current-location access or share your starting point."
-            )
-        else:
-            lines.append(
-                "I can guide you better if you tell me your destination (hotel, tourist spot, or tour meeting point) and your origin."
-            )
+        lines.append(
+            f"{destination_name} is in/near {destination_location}. I can give a better distance/time estimate if you allow current-location access or share your starting point."
+        )
 
     if destination.get("kind") == "accommodation" and destination.get("link"):
-        lines.append("For accommodation booking or inquiry, please use the property's official page/contact link.")
+        lines.append("For accommodation booking or inquiry, please use the property's provider page/contact link.")
         action_link = action_link or str(destination.get("link"))
-        action_label = action_label or str(destination.get("link_label") or "Visit Official Page")
+        action_label = action_label or str(destination.get("link_label") or "Open Provider Page")
 
         lines.append("Travel times are approximate guides and can vary with traffic, weather, and transport availability.")
 
@@ -6634,7 +8528,7 @@ def _deterministic_intent_route(*, actor=None, message=""):
             and not _looks_like_tour_request(text)
         ):
             return "get_accommodation_recommendation"
-        if re.search(r"\b(hotel|inn|accommodation|stay|place to stay)\b", text):
+        if re.search(r"\b(hotel|inn|accommodation|stay|place to stay|kapuy-an|kapuyan|matuluyan)\b", text):
             return "get_accommodation_recommendation"
         if _is_stay_planning_request(text):
             return "plan_bayawan_stay"
@@ -6711,7 +8605,7 @@ def _classify_intent_and_extract_params(message, actor=None):
             fast_params["company_type"] = "hotel"
         elif re.search(r"\binn\b", text):
             fast_params["company_type"] = "inn"
-        elif re.search(r"\b(?:accommodation|stay|place to stay)\b", text):
+        elif re.search(r"\b(?:accommodation|stay|place to stay|kapuy-an|kapuyan|matuluyan)\b", text):
             fast_params["company_type"] = "either"
 
         guests_match = re.search(r"\b(\d+)\s*(?:people|person|guest|guests|pax|adult|adults)\b", text)
@@ -6742,12 +8636,15 @@ def _classify_intent_and_extract_params(message, actor=None):
             fast_params["prefer_low_price"] = True
 
         location_match = re.search(
-            r"\b(suba|poblacion|bayawan|villareal|tinago|ubos)\b",
+            r"\b(?:sa|dapit\s+sa)\s+(?:barangay|brgy)\s+([a-z][a-z\s\-]{1,40})\b|\b(suba|poblacion|bayawan|villareal|villarreal|tinago|ubos)\b",
             text,
             flags=re.IGNORECASE,
         )
         if location_match:
-            fast_params["location"] = str(location_match.group(1)).strip().lower()
+            raw_loc = str(location_match.group(1) or location_match.group(2) or "").strip().lower()
+            if raw_loc == "villarreal":
+                raw_loc = "villareal"
+            fast_params["location"] = raw_loc
         return fast_params
 
     if (
@@ -6759,7 +8656,7 @@ def _classify_intent_and_extract_params(message, actor=None):
             or re.search(r"\b(?:cheap|affordable)\b", normalized_text)
         )
         has_accom_or_loc = bool(
-            re.search(r"\b(hotel|inn|accommodation|stay|place to stay)\b", normalized_text)
+            re.search(r"\b(hotel|inn|accommodation|stay|place to stay|kapuy-an|kapuyan|matuluyan)\b", normalized_text)
             or re.search(r"\b(suba|poblacion|bayawan|villareal|tinago|ubos)\b", normalized_text)
         )
         has_guests = bool(re.search(r"\b\d+\s*(?:people|person|guest|guests|pax|adult|adults)\b", normalized_text))
@@ -7064,6 +8961,8 @@ def _is_guest_room_availability_command(message):
 
 
 def _is_accommodation_room_listing_command(message):
+    if _is_accommodation_preview_command(message):
+        return False
     text = str(message or "").strip().lower()
     if not text:
         return False
@@ -7323,11 +9222,11 @@ def _resolve_chat_actor(request):
             }
 
     return {
-        "is_allowed": False,
-        "role": "anonymous",
+        "is_allowed": True,
+        "role": "guest",
         "user": None,
         "employee": None,
-        "display_name": "User",
+        "display_name": "Guest",
     }
 
 
@@ -7350,6 +9249,7 @@ def _is_help_or_greeting_command(message):
         phrase in text
         for phrase in (
             "what can you do",
+            "who are you",
             "how can you help",
             "assist me",
             "show commands",
@@ -7449,6 +9349,17 @@ def _normalize_common_chat_typos(message):
         r"\brecomend\b": "recommend",
         r"\baccomodation\b": "accommodation",
         r"\baccomodations\b": "accommodations",
+        r"\bhotle\b": "hotel",
+        r"\bhotles\b": "hotels",
+        r"\binnn\b": "inn",
+        r"\bbok\b": "book",
+        r"\bbuk\b": "book",
+        r"\breserv\b": "reserve",
+        r"\bspoot\b": "spot",
+        r"\bspoots\b": "spots",
+        r"\bbaywan\b": "bayawan",
+        r"\bwer\b": "where",
+        r"\bpls\b": "please",
         r"\bbookigns\b": "bookings",
         r"\bwher\b": "where",
         r"\brestauarant\b": "restaurant",
@@ -7465,6 +9376,9 @@ def _normalize_common_chat_typos(message):
 def _normalize_button_parity_message(message):
     text = str(message or "").strip()
     if not text:
+        return text
+    # Keep explicit schedule/date queries intact so tour-name/date filters remain precise.
+    if _is_tour_schedule_request(text):
         return text
     # Keep explicit room-listing queries intact so they do not get remapped
     # into broad accommodation discovery commands.
@@ -7485,6 +9399,10 @@ def _normalize_button_parity_message(message):
 
     # Keep button-click and typed-input behavior aligned for common guest phrases.
     parity_rules = (
+        (
+            r"\bwhere is (the )?(hotel|inn|accommodation)\b|\bwhere are (the )?(hotels|inns|accommodations)\b",
+            "show accommodation recommendations",
+        ),
         (
             r"\b(show|view|check|list)\b.*\b(my\s+)?(tour\s+)?book(?:ing|ings|igns)\b"
             r"|\bmy tour bookings\b|\bshow my tour bookigns\b",
@@ -7511,7 +9429,7 @@ def _normalize_button_parity_message(message):
             "make it family-friendly",
         ),
         (
-            r"\bhow far\b.*\bfrom me\b|\bdistance from me\b|\bnear me\b",
+            r"\bhow far\s+is\s+(this|that)\b.*\bfrom me\b|\bdistance from me\b|\bnear me\b",
             "how far is this from me?",
         ),
         (
@@ -7913,9 +9831,9 @@ def _assistant_next_step_prompt(*, intent, params, memory):
     if normalized_intent in ("get_accommodation_recommendation", "gethotelrecommendation"):
         return _pick_response_variant(
             [
-                "Want me to open the official link for one of these?",
+                "Want me to open the verified contact link for one of these?",
                 "I can refine these options if you want.",
-                "Need official booking or contact links for these?",
+                "Need Facebook or provider contact links for these?",
             ],
             seed_text=f"{params}|next-accom",
         )
@@ -8201,6 +10119,7 @@ def _build_small_talk_payload(*, request, actor, message):
     says_thanks = bool(re.search(r"\b(thanks|thank you|salamat)\b", lowered))
     asks_how_are_you = bool(re.search(r"\b(how are you|kumusta)\b", lowered))
     says_sorry = bool(re.search(r"\b(sorry|apologies|pasensya)\b", lowered))
+    asks_identity = bool(re.search(r"\b(who are you|what are you)\b", lowered))
 
     # Do not swallow actionable tourism queries as small-talk.
     # Example: "can you help me plan my stay in bayawan?"
@@ -8216,7 +10135,7 @@ def _build_small_talk_payload(*, request, actor, message):
     if actionable_query:
         return None
 
-    if not (has_greeting or asks_help or says_thanks or asks_how_are_you or says_sorry or introduced_name):
+    if not (has_greeting or asks_help or says_thanks or asks_how_are_you or says_sorry or asks_identity or introduced_name):
         return None
 
     role = str(actor.get("role") or "").strip().lower()
@@ -8264,6 +10183,15 @@ def _build_small_talk_payload(*, request, actor, message):
             "fulfillmentText": (
                 "I can help you find approved accommodations, show rooms, create accommodation cost previews, "
                 "explore tour packages, submit tour booking requests, check directions, and plan your Bayawan trip."
+            ),
+            "quick_replies": guest_quick_replies,
+        }
+
+    if asks_identity and role == "guest":
+        return {
+            "fulfillmentText": (
+                "I'm the Ibayaw Tour chatbot for Bayawan tourism. I can help with tourist spots, approved stays, room viewing, "
+                "accommodation cost previews, official accommodation handoff links, tour booking guidance, maps, directions, and trip planning."
             ),
             "quick_replies": guest_quick_replies,
         }
@@ -8508,9 +10436,9 @@ def _build_role_help_payload(actor):
         "quick_replies": [
             "Recommend a hotel in Bayawan for 2 guests under 2000",
             "How far is Bayawan City Plaza from me?",
-            "I'm from Manila, how do I get to Bayawan?",
+            "Choose Destination",
             "How to search hotels and inns?",
-            "Open map",
+            "Open City Map",
             "Show tourism information in Bayawan",
             "Show my tour bookings",
             "Remember my preferences",
@@ -8558,6 +10486,22 @@ def _build_out_of_scope_payload(actor, message=""):
             ),
             "quick_replies": ["Help", "Open assigned tours", "Open tour calendar", "Open dashboard"],
         }
+    guest_text = _normalize_chat_text(message)
+    if any(marker in guest_text for marker in ("weather", "forecast", "today s news", "todays news", "president", "who is the president")):
+        return {
+            "fulfillmentText": (
+                "I don't have a verified real-time data source for weather, news, or current political information in this chatbot. "
+                "I can still help with Bayawan tourism, approved stays, tours, maps, directions, and trip planning."
+            ),
+            "quick_replies": ["Plan my Bayawan trip", "Show available tours", "Find approved stays", "Get directions"],
+        }
+    if any(marker in guest_text for marker in ("medical", "legal", "financial advice")):
+        return {
+            "fulfillmentText": (
+                "I can't provide professional medical, legal, or financial advice. For Bayawan tourism, I can help with tours, approved accommodations, maps, directions, and booking previews."
+            ),
+            "quick_replies": ["Plan my Bayawan trip", "Show available tours", "Find approved stays", "Get directions"],
+        }
     return {
         "fulfillmentText": _pick_response_variant(
             [
@@ -8574,6 +10518,316 @@ def _build_out_of_scope_payload(actor, message=""):
             "Get directions",
         ],
     }
+
+
+def _is_accommodation_scope_safety_request(message):
+    text = _normalize_chat_text(message)
+    if not text:
+        return False
+    has_accommodation = bool(
+        re.search(r"\b(hotel|inn|accommodation|room|stay)\b", text)
+    )
+    if not has_accommodation:
+        return False
+    unsafe_markers = (
+        "pay for my hotel here",
+        "pay for hotel here",
+        "hotel payment link",
+        "accommodation payment link",
+        "send me a hotel payment link",
+        "send payment link",
+        "confirm my hotel booking",
+        "confirm hotel booking",
+        "confirm my accommodation booking",
+        "approve my accommodation booking",
+        "approve hotel booking",
+        "guarantee room availability",
+        "guarantee availability",
+        "book my hotel directly",
+        "book hotel directly",
+        "reserve room directly",
+        "complete payment here",
+        "pay here",
+    )
+    return _contains_any_phrase(text, unsafe_markers)
+
+
+def _build_accommodation_scope_safety_payload():
+    return {
+        "fulfillmentText": (
+            "Accommodation booking stays preview-only in this system. I can help you search approved stays, view rooms, "
+            "estimate a cost preview, and open the accommodation's official Facebook page or verified contact channel. "
+            "I cannot create an internal accommodation booking, confirm room availability, or provide hotel payment links."
+        ),
+        "quick_replies": [
+            "Show approved accommodations",
+            "Show rooms",
+            "Create booking preview",
+            "Contact accommodation provider",
+        ],
+    }
+
+
+def _is_guest_system_usage_query(message):
+    text = _normalize_chat_text(message)
+    if not text:
+        return False
+    phrases = (
+        "how do i use this system",
+        "how to use this system",
+        "how do i book a tour",
+        "how to book a tour",
+        "how do i create a preview",
+        "how to create a preview",
+        "how do i view rooms",
+        "how to view rooms",
+        "how do i contact the tourism office",
+        "contact the tourism office",
+        "where can i see my booking",
+        "where can i see my tour booking",
+        "where can i see approved accommodations",
+        "how do i search for hotels",
+        "how do i search hotels",
+        "how do i search for inns",
+        "how do i search inns",
+        "how do i log in",
+        "do i need an account",
+        "can tourists use the chatbot",
+        "what can guests do",
+        "can tourists book tours",
+    )
+    return _contains_any_phrase(text, phrases)
+
+
+def _build_guest_system_usage_payload(message):
+    text = _normalize_chat_text(message)
+    if "book a tour" in text or "book tours" in text or "tourists book tours" in text:
+        body = (
+            "Guests can submit tour booking requests inside the system. Choose a tour schedule, provide date/guest details, "
+            "confirm the request, then wait for staff review. Approved or declined updates are shown in your tour bookings and may be sent by email."
+        )
+        quick = ["Show available tours", "Show my tour bookings", "Open City Map", "Help"]
+    elif "preview" in text or "view rooms" in text:
+        body = (
+            "For accommodations, search approved stays first, view available rooms, then ask me to create a booking preview. "
+            "The preview estimates cost only; final hotel/inn booking is completed through the property's official contact channel."
+        )
+        quick = ["Show approved accommodations", "Show rooms", "Create booking preview", "Contact accommodation provider"]
+    elif "search" in text and ("hotel" in text or "inn" in text or "accommodation" in text):
+        body = (
+            "To search hotels or inns, type your preferred area, guest count, and budget. "
+            "Example: hotel in Suba for 2 guests under 2000. I will show approved stays and room options when available."
+        )
+        quick = ["Show approved accommodations", "Hotel in Suba for 2 guests under 2000", "Show rooms", "Create booking preview"]
+    elif "account" in text or "log in" in text:
+        body = (
+            "You can browse general tourism information as a guest. An account is needed for private actions like submitting tour booking requests "
+            "or checking your own tour booking records."
+        )
+        quick = ["Log in", "Show available tours", "Open City Map", "Help"]
+    elif "tourism office" in text:
+        body = (
+            "For official Tourism Office concerns, use the contact details shown in the system pages or ask staff/admin through the configured office channels. "
+            "I can still guide you to tours, maps, approved stays, and trip planning."
+        )
+        quick = ["Open City Map", "Show available tours", "Find approved stays", "Help"]
+    else:
+        body = (
+            "Guests can use the chatbot to explore Bayawan tourist spots, dining places, maps/directions, approved accommodations, room previews, "
+            "accommodation contact handoffs, tour packages, and tour booking guidance."
+        )
+        quick = ["Show available tours", "Find approved stays", "Open City Map", "Plan my Bayawan trip"]
+    return {"fulfillmentText": body, "quick_replies": quick}
+
+
+def _is_guest_tour_faq_query(message):
+    text = _normalize_chat_text(message)
+    if not text:
+        return False
+    phrases = (
+        "what does pending mean",
+        "what does pending status mean",
+        "what does pending mean in tour booking",
+        "pending tour booking",
+        "will i receive an email",
+        "will i get an email",
+        "do i receive an email",
+        "email for tour booking",
+        "where do i pay for the tour",
+        "where do i pay tour",
+        "how do i pay for the tour",
+        "tour payment",
+        "pay for tour",
+        "check my tour booking",
+        "check my tour bookings",
+        "show my tour booking",
+        "show my tour bookings",
+        "view my tour booking",
+        "view my tour bookings",
+        "is my tour booking approved",
+        "tour booking approved",
+    )
+    return _contains_any_phrase(text, phrases)
+
+
+def _build_guest_tour_faq_payload(request, user, message):
+    text = _normalize_chat_text(message)
+    is_authenticated = bool(user and getattr(user, "is_authenticated", False))
+
+    def _guest_has_approved_tour_context():
+        if not is_authenticated:
+            return False
+        try:
+            return Pending.objects.filter(guest_id=user, status__iexact="accepted").exists()
+        except Exception:
+            return False
+
+    if (
+        "check my tour booking" in text
+        or "check my tour bookings" in text
+        or "show my tour booking" in text
+        or "show my tour bookings" in text
+        or "view my tour booking" in text
+        or "view my tour bookings" in text
+        or "tour booking approved" in text
+        or "is my tour booking approved" in text
+    ):
+        if not is_authenticated:
+            return {
+                "fulfillmentText": (
+                    "Please log in or create an account to check your tour booking status. "
+                    "Tour booking records are private to your guest account."
+                ),
+                "billing_link": reverse("login"),
+                "billing_link_label": "Log In to Continue",
+                "quick_replies": ["Show available tours", "Open City Map", "Help"],
+                "response_type": "tour_booking_status",
+                "heading": "Tour Booking Status",
+            }
+        payload = _build_guest_tour_bookings_payload(request, user)
+        payload["response_type"] = "tour_booking_status"
+        payload["heading"] = "Tour Booking Status"
+        return payload
+    if "pending" in text:
+        return {
+            "fulfillmentText": (
+                "Pending means your tour booking request was submitted inside the system and is waiting for Tourism Office staff review. "
+                "Please wait for an approved or declined update before proceeding with payment."
+            ),
+            "quick_replies": ["Show my tour bookings", "Show available tours", "Where do I pay for the tour?"],
+            "response_type": "tour_booking_status",
+            "heading": "Tour Booking Status",
+        }
+    if "email" in text:
+        return {
+            "fulfillmentText": (
+                "For tour bookings, the system may send an email to your registered email address after submission and status updates. "
+                "You can also check your latest status from My Tour Bookings after logging in."
+            ),
+            "quick_replies": ["Show my tour bookings", "Show available tours", "Help"],
+            "response_type": "tour_booking_status",
+            "heading": "Tour Booking Status",
+        }
+    if "pay" in text or "payment" in text:
+        payment_url = str(
+            getattr(settings, "TOURISM_TREASURER_BILLING_URL", "")
+            or getattr(settings, "TOURISM_OFFICE_BILLING_URL", "")
+            or os.getenv("TOURISM_TREASURER_BILLING_URL", "")
+            or os.getenv("TOURISM_OFFICE_BILLING_URL", "")
+            or ""
+        ).strip()
+        payload = {
+            "fulfillmentText": (
+                "Tour payment is handled only after the tour booking request is reviewed. "
+                "Please check My Tour Bookings for your status and follow the official payment handoff if it is configured for an approved booking."
+            ),
+            "quick_replies": ["Show my tour bookings", "Show available tours", "What does pending mean?"],
+            "response_type": "tour_payment_information",
+            "heading": "Tour Payment Information",
+        }
+        if not is_authenticated:
+            payload["fulfillmentText"] = (
+                "Tour payment is only handled after your booking is approved. "
+                "Please log in to check your status first, then follow the official payment handoff when available."
+            )
+            payload["billing_link"] = reverse("login")
+            payload["billing_link_label"] = "Log In to Continue"
+        elif payment_url and _guest_has_approved_tour_context():
+            payload["billing_link"] = payment_url
+            payload["billing_link_label"] = "Open Official Tour Payment Page"
+        return payload
+    return {
+        "fulfillmentText": (
+            "Tour booking requests are submitted inside the system, reviewed by staff, and updated as pending, approved, or declined. "
+            "Please log in to check your own booking status."
+        ),
+        "quick_replies": ["Show my tour bookings", "Show available tours", "Help"],
+        "response_type": "tour_booking_status",
+        "heading": "Tour Booking Status",
+    }
+
+
+def _cebuano_basic_tourism_intent(message):
+    text = _normalize_chat_text(message)
+    if not text:
+        return ""
+    if _contains_any_phrase(text, ("naa moy hotel", "naa mo hotel", "naa bay hotel", "naa moy accommodation", "naa mo accommodation")):
+        return "accommodation_list"
+    if _contains_any_phrase(text, ("tag pila ang room", "pila ang room", "pila ang kwarto", "tagpila ang room", "tag pila ang kwarto")):
+        return "room_price"
+    if _contains_any_phrase(text, ("asa dapit ang hotel", "asa ang hotel", "asa dapit hotel", "asa ang accommodation")):
+        return "accommodation_location"
+    if _contains_any_phrase(text, ("naa moy tour package", "naa mo tour package", "naa moy tour packages", "naa bay tour package", "naa moy tour")):
+        return "tour_list"
+    if _contains_any_phrase(text, ("pila ang tour", "tag pila ang tour", "tagpila ang tour", "pila ang tour package")):
+        return "tour_price"
+    return ""
+
+
+def _build_cebuano_basic_tourism_payload(request, intent):
+    intent = str(intent or "").strip().lower()
+    if intent in {"accommodation_list", "accommodation_location"}:
+        payload = _build_broad_accommodation_discovery_response(params={"company_type": "either"}, limit=5)
+        if intent == "accommodation_location":
+            payload["fulfillmentText"] = (
+                "Here are approved accommodations you can check. Open the City Map for exact locations and directions.\n\n"
+                + str(payload.get("fulfillmentText") or "").strip()
+            ).strip()
+            payload["quick_replies"] = _merge_quick_replies(
+                payload.get("quick_replies") if isinstance(payload.get("quick_replies"), list) else [],
+                ["Open City Map", "Get directions", "Show rooms"],
+                limit=4,
+            )
+        return payload
+    if intent == "room_price":
+        return {
+            "fulfillmentText": (
+                "Room prices depend on the accommodation, room type, guest count, and stay dates. "
+                "I can show approved stays and help create a cost preview. Accommodation booking is still completed through the provider's official contact channel."
+            ),
+            "quick_replies": ["Show approved accommodations", "Show rooms", "Create booking preview", "Contact accommodation provider"],
+        }
+    if intent in {"tour_list", "tour_price"}:
+        schedule_payload = _build_tour_schedule_listing_payload(request, "show tour schedules", {})
+        response = {
+            "fulfillmentText": str(schedule_payload.get("reply") or "Here are available tour schedules right now.").strip(),
+        }
+        if intent == "tour_price":
+            response["fulfillmentText"] = (
+                "Tour prices are shown on available tour packages or schedules when configured. "
+                "Please choose a tour to see details and submit a booking request inside the system.\n\n"
+                + response["fulfillmentText"]
+            ).strip()
+        if isinstance(schedule_payload.get("items"), list) and schedule_payload.get("items"):
+            response["recommendation_trace"] = schedule_payload.get("items")
+            response["response_type"] = "tour_schedules"
+            response["heading"] = "Tour Schedules"
+        response["quick_replies"] = _sanitize_quick_replies(
+            schedule_payload.get("quick_replies") if isinstance(schedule_payload.get("quick_replies"), list) else ["Show available tours", "Book a tour"],
+            limit=4,
+        )
+        return response
+    return {}
 
 
 def _clarification_fallback(message):
@@ -8694,6 +10948,11 @@ def _is_out_of_scope_message(message):
         "translate",
         "who is",
         "what is",
+        "weather",
+        "forecast",
+        "real time",
+        "today's news",
+        "todays news",
         "where is",
         "when did",
         "why is",
@@ -8704,8 +10963,11 @@ def _is_out_of_scope_message(message):
         "president",
         "capital of",
         "medical advice",
+        "medical",
         "legal advice",
+        "legal",
         "financial advice",
+        "financial",
         "java programming",
         "homework",
         "essay",
@@ -9050,6 +11312,224 @@ def _build_owner_booking_count_today_summary(user):
         "Use Monthly Reports to submit Tourism Office monitoring updates.",
     ]
     return "\n".join(lines)
+
+
+def _is_bayawan_encyclopedia_query(message):
+    text = _normalize_chat_text(message)
+    if not text:
+        return False
+    triggers = (
+        "bayawan known for",
+        "what is bayawan known for",
+        "tell me about bayawan",
+        "about bayawan",
+        "bayawan overview",
+        "history of bayawan",
+        "tell me the history of bayawan",
+        "delicacies in bayawan",
+        "what are the delicacies in bayawan",
+        "what food can i try in bayawan",
+        "bayawan delicacies",
+        "culture of bayawan",
+        "what culture does bayawan have",
+        "festival",
+        "festivals in bayawan",
+        "what tourist spots can i visit in bayawan",
+        "tourist spots in bayawan",
+    )
+    return any(t in text for t in triggers) or (
+        "bayawan" in text and any(k in text for k in ("history", "culture", "festival", "known for", "delicacies", "food", "tourist spot"))
+    )
+
+
+def _build_bayawan_encyclopedia_payload(message):
+    text = _normalize_chat_text(message)
+    default_qr = ["Tourist spots", "Dining places", "Approved accommodations", "Open City Map", "Plan my Bayawan trip"]
+    tourism_objects = list(
+        TourismInformation.objects.published()
+        .exclude(spot_name__isnull=True)
+        .exclude(spot_name__exact="")
+        .order_by("spot_name")[:5]
+    )
+    mapped_spot_rows = list(
+        MapBookmark.objects.filter(user__isnull=True, category="landmark")
+        .exclude(name__isnull=True)
+        .exclude(name__exact="")
+        .order_by("name")[:5]
+    )
+    merged_spots = []
+    for name in [str(getattr(v, "spot_name", "") or "").strip() for v in list(tourism_objects)] + [str(getattr(v, "name", "") or "").strip() for v in list(mapped_spot_rows)]:
+        if not name:
+            continue
+        if name.lower() in {x.lower() for x in merged_spots}:
+            continue
+        merged_spots.append(name)
+    related_cards = []
+    for idx, row in enumerate(tourism_objects[:3], 1):
+        card = _tourism_information_card_trace(None, row, idx)
+        if card:
+            related_cards.append(card)
+    for row in mapped_spot_rows:
+        if len(related_cards) >= 5:
+            break
+        marker_name = str(getattr(row, "name", "") or "").strip()
+        if marker_name and marker_name.lower() in {str(card.get("title") or "").lower() for card in related_cards}:
+            continue
+        card = _mapbookmark_card_trace(None, row, len(related_cards) + 1)
+        if card:
+            related_cards.append(card)
+
+    if "tourist spot" in text or "places can i visit" in text:
+        if merged_spots:
+            lines = ["Here are Bayawan tourism places you can explore:"]
+            for idx, spot in enumerate(merged_spots[:5], 1):
+                lines.append(f"{idx}. {spot}")
+            lines.append("You can open the city map for directions and nearby places.")
+            return {
+                "fulfillmentText": "\n".join(lines),
+                "quick_replies": default_qr,
+                "response_type": "tourism_places",
+                "heading": "Tourism Places",
+                **({"recommendation_trace": related_cards} if related_cards else {}),
+            }
+        return {
+            "fulfillmentText": (
+                "I don't see enough verified tourist spot records yet in this assistant. "
+                "You can open the city map to browse mapped places and directions."
+            ),
+            "quick_replies": default_qr,
+        }
+
+    if "delicac" in text or "food" in text:
+        return {
+            "fulfillmentText": (
+                "I only have limited verified information about specific Bayawan delicacies right now. "
+                "For official food highlights, please verify with the Tourism Office. "
+                "I can still show dining places and mapped food spots."
+            ),
+            "quick_replies": ["Dining places", "Show places in the city map", "Open City Map", "Help"],
+            "response_type": "tourism_information",
+            "heading": "Bayawan Tourism Information",
+        }
+    if "history" in text:
+        return {
+            "fulfillmentText": (
+                "I can share a brief Bayawan background, but detailed historical narratives should be verified with the Tourism Office. "
+                "For now, I can help you explore Bayawan tourism places, culture-related stops, map locations, and travel options."
+            ),
+            "quick_replies": default_qr,
+            "response_type": "tourism_information",
+            "heading": "Bayawan Tourism Information",
+            **({"recommendation_trace": related_cards[:3]} if related_cards else {}),
+        }
+    if "festival" in text or "culture" in text:
+        return {
+            "fulfillmentText": (
+                "Bayawan tourism includes local culture, community events, and nature-based attractions. "
+                "I currently have limited verified festival details in this assistant, so Tourism Office confirmation is recommended for exact event schedules."
+            ),
+            "quick_replies": default_qr,
+            "response_type": "tourism_information",
+            "heading": "Bayawan Tourism Information",
+            **({"recommendation_trace": related_cards[:3]} if related_cards else {}),
+        }
+    return {
+        "fulfillmentText": (
+            "Bayawan City is promoted through the Ibayaw Bayawan platform as a local tourism destination where visitors can explore tour packages, approved stays, dining places, mapped locations, and travel guidance. "
+            "For highly specific historical or cultural facts, please verify with the Tourism Office."
+        ),
+        "quick_replies": default_qr,
+        "response_type": "tourism_information",
+        "heading": "Bayawan Tourism Information",
+        **({"recommendation_trace": related_cards[:3]} if related_cards else {}),
+    }
+
+
+def _is_owner_monthly_report_status_command(message):
+    return _contains_any_phrase(
+        message,
+        (
+            "status of my monthly reports",
+            "show my monthly reports",
+            "my monthly reports",
+            "monthly report status",
+            "was my report reviewed",
+            "was my report returned for revision",
+            "do i have reports for",
+        ),
+    )
+
+
+def _build_owner_monthly_report_status_payload(user, message):
+    period_hint = _extract_reporting_period_hint(message)
+    base_qs = (
+        OwnerMonthlyReport.objects.select_related("accommodation", "reviewed_by").prefetch_related("room_usage_rows")
+        .filter(owner=user)
+        .order_by("-reporting_period", "-updated_at")
+    )
+    if period_hint is not None:
+        base_qs = base_qs.filter(
+            reporting_period__year=period_hint.year,
+            reporting_period__month=period_hint.month,
+        )
+
+    rows = list(base_qs[:6])
+    if not rows:
+        period_text = period_hint.strftime("%B %Y") if period_hint is not None else "your account yet"
+        empty_text = (
+            f"I couldn't find owner monthly reports for {period_text}."
+            if period_hint is not None
+            else "I couldn't find owner monthly reports linked to your account yet."
+        )
+        return {
+            "fulfillmentText": empty_text,
+            "quick_replies": ["Submit monthly report", "Open Monthly Reports", "Open Owner Hub"],
+            "billing_link": reverse("admin_app:owner_report_submit"),
+            "billing_link_label": "Open Monthly Reports",
+            "open_in_new_tab": True,
+        }
+
+    lines = []
+    if period_hint is not None:
+        lines.append(f"Here are your monthly report statuses for {period_hint.strftime('%B %Y')}:")
+    else:
+        lines.append("Here are your latest monthly report statuses:")
+    for row in rows:
+        reviewed_by_text = "-"
+        if row.reviewed_by is not None:
+            reviewed_by_text = f"{row.reviewed_by.first_name} {row.reviewed_by.last_name}".strip() or str(row.reviewed_by.emp_id)
+        notes = str(row.review_notes or "").strip() or "-"
+        room_usage_sample = ""
+        usage_rows = list(row.room_usage_rows.all()[:2])
+        if usage_rows:
+            sample_parts = []
+            for usage in usage_rows:
+                selected_id = str(getattr(usage, "selected_room_identifier", "") or "").strip() or "Not specified"
+                ids = str(getattr(usage, "room_identifiers_snapshot", "") or "").strip() or "Not specified"
+                total_rooms = max(1, _to_int(getattr(usage, "total_rooms_snapshot", 1), default=1))
+                sample_parts.append(
+                    f"{usage.room_name_snapshot} (Room ID: {selected_id}, IDs: {ids}, Total: {total_rooms}, In: {usage.check_ins}, Out: {usage.check_outs}, Used: {usage.guests_count})"
+                )
+            room_usage_sample = " | Room usage: " + "; ".join(sample_parts)
+        lines.append(
+            (
+                f"- {row.accommodation.company_name} | {row.reporting_period.strftime('%B %Y')} | "
+                f"Status: {row.get_status_display()} | Check-ins: {row.guests_checked_in} | "
+                f"Check-outs: {row.guests_checked_out} | Rooms used: {row.rooms_used} | "
+                f"Review notes: {notes} | Reviewed by: {reviewed_by_text} | "
+                f"Updated: {timezone.localtime(row.updated_at).strftime('%b %d, %Y %I:%M %p') if row.updated_at else '-'}"
+                f"{room_usage_sample}"
+            )
+        )
+
+    reports_url = reverse("admin_app:owner_report_submit")
+    return {
+        "fulfillmentText": "\n".join(lines),
+        "quick_replies": ["Submit monthly report", "Open Monthly Reports", "Open Owner Hub"],
+        "billing_link": reports_url,
+        "billing_link_label": "Open Monthly Reports",
+        "open_in_new_tab": True,
+    }
 
 
 def _build_owner_available_rooms_today_summary(user):
@@ -9986,6 +12466,7 @@ def _is_guest_map_command(message):
     return _contains_any_phrase(
         message,
         (
+            "map",
             "open map",
             "show map",
             "city map",
@@ -10587,9 +13068,9 @@ def _build_guest_room_detail_payload(message, cached_rows):
         link_label = str(first_action.get("label") or "")
     quick_replies = [
         {"label": "View Details", "value": f"show details for {room.room_name}"},
-        {"label": "Create Booking Preview", "value": f"create booking preview for {getattr(accom, 'company_name', 'this accommodation')}"},
-        {"label": "Open Official Page", "value": "open official page"},
-        {"label": "View Facebook Page", "value": "open facebook page"},
+        {"label": "Preview Cost", "value": f"create booking preview for {getattr(accom, 'company_name', 'this accommodation')}"},
+        {"label": "Contact Accommodation Provider", "value": "contact accommodation provider"},
+        {"label": "Open Official Facebook Page", "value": "open facebook page"},
     ]
     payload = {
         "fulfillmentText": "\n".join(lines),
@@ -10686,6 +13167,24 @@ def _is_guest_view_tour_bookings_command(message):
     )
 
 
+def _is_guest_private_action_request(message):
+    text = _normalize_chat_text(message)
+    if not text:
+        return False
+    private_markers = (
+        "my profile",
+        "update profile",
+        "my notifications",
+        "show notifications",
+        "my account",
+        "view my tour bookings",
+        "show my tour bookings",
+        "view my bookings",
+        "my bookings",
+    )
+    return any(marker in text for marker in private_markers)
+
+
 def _build_guest_tour_bookings_payload(request, user):
     upcoming_count = 0
     current_count = 0
@@ -10737,7 +13236,7 @@ def _build_guest_tour_bookings_payload(request, user):
             past_count += 1
 
     total_count = upcoming_count + current_count + past_count
-    bookings_url = reverse("main-page") + "#myBookings"
+    bookings_url = reverse("my_tour_bookings")
     if hasattr(request, "build_absolute_uri"):
         bookings_url = request.build_absolute_uri(bookings_url)
 
@@ -10791,7 +13290,7 @@ def _extract_tour_date_hint_from_message(message):
     month_names = [m for m in calendar.month_name if m]
     month_pattern = "|".join(month_names)
     month_day = re.search(
-        rf"\b({month_pattern})\s+([0-2]?\d|3[01])(?:,\s*(20\d{{2}}))?\b",
+        rf"\b({month_pattern})\s+([0-2]?\d|3[01])(?:\s*,?\s*(20\d{{2}}))?\b",
         text,
         flags=re.IGNORECASE,
     )
@@ -10848,6 +13347,7 @@ def _extract_tour_name_from_schedule_request(message):
     normalized = re.sub(r"\s+", " ", text).strip()
     patterns = (
         r"\b(?:schedule|schedules)\s+for\s+(.+)$",
+        r"\b(?:show|view)\s+(?:available\s+)?schedules?\s+(?:for\s+)?(.+)$",
         r"\bwhen\s+is\s+(.+?)\s+(?:available|open)\b",
         r"\bavailable\s+dates?\s+for\s+(.+)$",
     )
@@ -10855,13 +13355,117 @@ def _extract_tour_name_from_schedule_request(message):
         match = re.search(pattern, normalized, flags=re.IGNORECASE)
         if match:
             value = str(match.group(1) or "").strip(" .,!?:;")
+            value = re.sub(
+                r"\bon\s+[A-Za-z]+\s+\d{1,2}(?:\s*,?\s*20\d{2})?\b$",
+                "",
+                value,
+                flags=re.IGNORECASE,
+            ).strip(" .,!?:;")
             if value:
                 return value
+    normalized_msg = _normalize_chat_text(normalized)
+    best_name = ""
+    for tour in Tour_Add.objects.filter(publication_status="published").order_by("tour_name")[:120]:
+        name = str(getattr(tour, "tour_name", "") or "").strip()
+        if not name:
+            continue
+        norm_name = _normalize_chat_text(name)
+        if norm_name and norm_name in normalized_msg and len(norm_name) > len(_normalize_chat_text(best_name)):
+            best_name = name
+    if best_name:
+        return best_name
     for tour in Tour_Add.objects.filter(publication_status="published").order_by("tour_name")[:60]:
         name = str(getattr(tour, "tour_name", "") or "").strip()
         if name and _normalize_chat_text(name) in _normalize_chat_text(normalized):
             return name
     return ""
+
+
+def _canonical_tour_name_text(value):
+    normalized = _normalize_chat_text(value)
+    normalized = re.sub(r"[^a-z0-9\s]", " ", normalized)
+    return re.sub(r"\s+", " ", normalized).strip()
+
+
+def _resolve_tour_name_lookup(raw_hint):
+    hint = str(raw_hint or "").strip()
+    response = {
+        "resolved_tour": None,
+        "ambiguous_names": [],
+        "suggested_names": [],
+    }
+    if not hint:
+        return response
+
+    normalized_hint = _canonical_tour_name_text(hint)
+    if not normalized_hint:
+        return response
+
+    published_tours = list(Tour_Add.objects.filter(publication_status="published").order_by("tour_name")[:300])
+    if not published_tours:
+        return response
+
+    exact_matches = []
+    contains_matches = []
+    canonical_name_map = {}
+    for tour in published_tours:
+        name = str(getattr(tour, "tour_name", "") or "").strip()
+        if not name:
+            continue
+        canonical_name = _canonical_tour_name_text(name)
+        if not canonical_name:
+            continue
+        canonical_name_map[canonical_name] = tour
+        if canonical_name == normalized_hint:
+            exact_matches.append(tour)
+        elif normalized_hint in canonical_name or canonical_name in normalized_hint:
+            contains_matches.append(tour)
+
+    if len(exact_matches) == 1:
+        response["resolved_tour"] = exact_matches[0]
+        return response
+    if len(exact_matches) > 1:
+        response["ambiguous_names"] = [
+            str(getattr(t, "tour_name", "") or "").strip()
+            for t in exact_matches[:4]
+            if str(getattr(t, "tour_name", "") or "").strip()
+        ]
+        return response
+
+    if len(contains_matches) == 1:
+        response["resolved_tour"] = contains_matches[0]
+        return response
+    if len(contains_matches) > 1:
+        response["ambiguous_names"] = [
+            str(getattr(t, "tour_name", "") or "").strip()
+            for t in contains_matches[:4]
+            if str(getattr(t, "tour_name", "") or "").strip()
+        ]
+        return response
+
+    close = get_close_matches(normalized_hint, list(canonical_name_map.keys()), n=3, cutoff=0.84)
+    if len(close) == 1:
+        response["resolved_tour"] = canonical_name_map.get(close[0])
+        return response
+    if len(close) > 1:
+        response["ambiguous_names"] = [
+            str(getattr(canonical_name_map.get(key), "tour_name", "") or "").strip()
+            for key in close
+            if canonical_name_map.get(key) is not None
+        ][:4]
+        return response
+
+    response["suggested_names"] = [
+        str(getattr(tour, "tour_name", "") or "").strip()
+        for tour in published_tours[:4]
+        if str(getattr(tour, "tour_name", "") or "").strip()
+    ]
+    return response
+
+
+def _resolve_tour_name_match(raw_hint):
+    lookup = _resolve_tour_name_lookup(raw_hint)
+    return lookup.get("resolved_tour")
 
 
 def _tour_primary_image_url(tour_obj):
@@ -10885,7 +13489,11 @@ def _tour_detail_url(request, tour_obj, schedule=None):
         if sched_id:
             link = f"{link}?sched_id={sched_id}"
         if hasattr(request, "build_absolute_uri"):
-            link = request.build_absolute_uri(link)
+            try:
+                link = request.build_absolute_uri(link)
+            except Exception:
+                # Keep the relative path when absolute-URI construction fails.
+                pass
         return link
     except Exception:
         return ""
@@ -10943,18 +13551,21 @@ def _build_schedule_card_trace(request, schedule):
     slots = max(0, _to_int(getattr(schedule, "slots_available", 0), default=0))
     price_text = f"PHP {_to_decimal(getattr(schedule, 'price', 0), default=Decimal('0')):,.0f} per guest"
     subtitle_parts = [part for part in [date_text, time_text, price_text] if part]
+    availability_text = f"Available slots: {slots}" if slots > 0 else "Fully booked"
     return {
         "kind": "tour_schedule",
         "tour_id": str(getattr(tour_obj, "tour_id", "") or "").strip(),
         "sched_id": str(getattr(schedule, "sched_id", "") or "").strip(),
         "title": tour_name,
         "subtitle": " | ".join(subtitle_parts),
-        "description": f"Available slots: {slots}",
+        "description": availability_text,
         "image_url": _tour_primary_image_url(tour_obj),
+        "slots_available": slots,
         "detail_url": _tour_detail_url(request, tour_obj, schedule=schedule),
         "meta": {
             "sched_id": str(getattr(schedule, "sched_id", "") or "").strip(),
             "tour_id": str(getattr(tour_obj, "tour_id", "") or "").strip(),
+            "slots_available": slots,
         },
     }
 
@@ -10977,10 +13588,78 @@ def _build_tour_schedule_listing_payload(request, message, params):
         qs = qs.filter(start_time__gte=day_start, start_time__lt=day_end)
     else:
         qs = qs.filter(end_time__gte=now)
-    if tour_name_hint:
-        qs = qs.filter(tour__tour_name__icontains=tour_name_hint)
+    tour_lookup = _resolve_tour_name_lookup(tour_name_hint) if tour_name_hint else {"resolved_tour": None}
+    resolved_tour = tour_lookup.get("resolved_tour")
+    ambiguous_names = (
+        tour_lookup.get("ambiguous_names")
+        if isinstance(tour_lookup.get("ambiguous_names"), list)
+        else []
+    )
+    if ambiguous_names:
+        choices = [str(name).strip() for name in ambiguous_names if str(name).strip()][:4]
+        return {
+            "reply": "I found multiple tours with similar names. Which tour schedule would you like to view?",
+            "items": [],
+            "quick_replies": choices or ["show available tours"],
+            "needs_clarification": True,
+            "missing_slot": "tour_name",
+        }
+    if resolved_tour is not None:
+        qs = qs.filter(tour_id=getattr(resolved_tour, "tour_id", ""))
+        tour_name_hint = str(getattr(resolved_tour, "tour_name", "") or "").strip() or tour_name_hint
+    elif tour_name_hint:
+        suggestions = (
+            tour_lookup.get("suggested_names")
+            if isinstance(tour_lookup.get("suggested_names"), list)
+            else []
+        )
+        return {
+            "reply": (
+                f"I couldn't confidently find a published tour named \"{tour_name_hint}\". "
+                "Please choose from available tours below."
+            ),
+            "items": [],
+            "quick_replies": [str(name).strip() for name in suggestions if str(name).strip()][:4]
+            or ["show available tours"],
+            "needs_clarification": True,
+            "missing_slot": "tour_name",
+        }
     rows = list(qs[:8])
     if not rows:
+        if date_hint is not None:
+            nearby_qs = (
+                Tour_Schedule.objects.select_related("tour")
+                .filter(tour__publication_status="published")
+                .exclude(status="cancelled")
+            )
+            if resolved_tour is not None:
+                nearby_qs = nearby_qs.filter(tour_id=getattr(resolved_tour, "tour_id", ""))
+            local_tz = timezone.get_current_timezone()
+            day_start = timezone.make_aware(datetime(date_hint.year, date_hint.month, date_hint.day, 0, 0, 0), local_tz)
+            day_end = day_start + timedelta(days=1)
+            nearby_rows = list(
+                nearby_qs
+                .filter(start_time__gte=day_start - timedelta(days=2), start_time__lt=day_end + timedelta(days=2))
+                .order_by("start_time")[:4]
+            )
+            nearby_items = []
+            for sched in nearby_rows:
+                card = _build_schedule_card_trace(request, sched)
+                if card:
+                    nearby_items.append(card)
+            if nearby_items:
+                label_base = (
+                    f"for {tour_name_hint}" if tour_name_hint else "for your date query"
+                )
+                return {
+                    "reply": (
+                        f"No exact schedules found on {date_hint.strftime('%B %d, %Y')} {label_base}.\n"
+                        "Here are nearby-date alternatives."
+                    ),
+                    "items": nearby_items,
+                    "sched_ids": [str(item.get("sched_id") or "").strip() for item in nearby_items if str(item.get("sched_id") or "").strip()],
+                    "quick_replies": ["show available tours", "book this schedule"],
+                }
         if tour_name_hint:
             return {
                 "reply": "There are no available schedules for this tour right now. You may choose another tour package.",
@@ -11021,7 +13700,7 @@ def _build_tour_schedule_listing_payload(request, message, params):
 
 def _resolve_schedule_for_tour_booking(*, tour_name_hint="", sched_id="", date_hint=None):
     normalized_sched_id = str(sched_id or "").strip()
-    if normalized_sched_id:
+    if normalized_sched_id and date_hint is None:
         schedule = (
             Tour_Schedule.objects.select_related("tour")
             .filter(
@@ -11040,8 +13719,14 @@ def _resolve_schedule_for_tour_booking(*, tour_name_hint="", sched_id="", date_h
         .exclude(status="cancelled")
         .annotate(assigned_count=Count("employee_assignments", distinct=True))
     )
-    if str(tour_name_hint or "").strip():
-        qs = qs.filter(tour__tour_name__icontains=str(tour_name_hint).strip())
+    tour_lookup = _resolve_tour_name_lookup(tour_name_hint)
+    if isinstance(tour_lookup.get("ambiguous_names"), list) and tour_lookup.get("ambiguous_names"):
+        return None, []
+    resolved_tour = tour_lookup.get("resolved_tour")
+    if resolved_tour is not None:
+        qs = qs.filter(tour_id=getattr(resolved_tour, "tour_id", ""))
+    elif str(tour_name_hint or "").strip():
+        return None, []
     if date_hint is not None:
         local_tz = timezone.get_current_timezone()
         day_start = timezone.make_aware(datetime(date_hint.year, date_hint.month, date_hint.day, 0, 0, 0), local_tz)
@@ -11141,7 +13826,7 @@ def _submit_guest_tour_booking_request(request, user, *, schedule, guests):
             title="Tour booking submitted",
             message=f"Your booking request for {sched_locked.tour.tour_name} is pending staff review.",
             notification_type="booking",
-            url=reverse("main-page") + "#user-bookings",
+            url=reverse("my_tour_bookings"),
             dedupe_key=f"tour-pending-{pending.id}",
             related_object_id=str(pending.id),
         )
@@ -12660,10 +15345,74 @@ def ai_chat(request):
         request._chatbot_log_context["resolved_intent"] = "small_talk"
         return _chat_json_response(request, start_time, social_payload)
 
+    if actor.get("role") == "admin" and _is_reporting_summary_request(message):
+        request._chatbot_log_context["resolved_intent"] = "reporting_summary"
+        reporting_payload = _build_reporting_summary_payload(
+            message,
+            {},
+            actor_role="admin",
+        )
+        response_payload = {
+            "fulfillmentText": str(reporting_payload.get("reply") or "").strip(),
+            "quick_replies": _sanitize_quick_replies(
+                reporting_payload.get("quick_replies") if isinstance(reporting_payload.get("quick_replies"), list) else [],
+                limit=5,
+            ),
+        }
+        try:
+            reports_url = reverse("admin_app:owner_reports_review")
+            response_payload["billing_link"] = (
+                request.build_absolute_uri(reports_url) if hasattr(request, "build_absolute_uri") else reports_url
+            )
+            response_payload["billing_link_label"] = "Open reports page"
+        except Exception:
+            pass
+        return _chat_json_response(request, start_time, response_payload)
+
     if _is_help_or_greeting_command(message):
         request._chatbot_log_context["resolved_intent"] = "role_help"
         help_payload = _build_role_help_payload(actor)
         return _chat_json_response(request, start_time, help_payload)
+    if actor.get("role") == "guest" and _is_bayawan_encyclopedia_query(message):
+        request._chatbot_log_context["resolved_intent"] = "bayawan_encyclopedia"
+        return _chat_json_response(
+            request,
+            start_time,
+            _build_bayawan_encyclopedia_payload(message),
+        )
+
+    if actor.get("role") == "guest" and _is_accommodation_scope_safety_request(message):
+        request._chatbot_log_context["resolved_intent"] = "accommodation_scope_safety"
+        return _chat_json_response(
+            request,
+            start_time,
+            _build_accommodation_scope_safety_payload(),
+        )
+
+    if actor.get("role") == "guest" and _is_guest_system_usage_query(message):
+        request._chatbot_log_context["resolved_intent"] = "guest_system_usage_help"
+        return _chat_json_response(
+            request,
+            start_time,
+            _build_guest_system_usage_payload(message),
+        )
+
+    if actor.get("role") == "guest" and _is_guest_tour_faq_query(message):
+        request._chatbot_log_context["resolved_intent"] = "guest_tour_booking_faq"
+        return _chat_json_response(
+            request,
+            start_time,
+            _build_guest_tour_faq_payload(request, user, message),
+        )
+
+    cebuano_tourism_intent = _cebuano_basic_tourism_intent(raw_message)
+    if actor.get("role") == "guest" and cebuano_tourism_intent:
+        request._chatbot_log_context["resolved_intent"] = f"cebuano_basic_{cebuano_tourism_intent}"
+        return _chat_json_response(
+            request,
+            start_time,
+            _build_cebuano_basic_tourism_payload(request, cebuano_tourism_intent),
+        )
 
     if actor.get("role") == "owner" and _is_owner_help_command(message):
         request._chatbot_log_context["resolved_intent"] = "role_help"
@@ -12718,6 +15467,18 @@ def ai_chat(request):
             )
 
     if actor.get("role") == "guest":
+        if (not user or not getattr(user, "is_authenticated", False)) and _is_guest_private_action_request(message):
+            request._chatbot_log_context["resolved_intent"] = "login_required_private_action"
+            return _chat_json_response(
+                request,
+                start_time,
+                {
+                    "fulfillmentText": "Please log in or create an account to continue with booking.",
+                    "billing_link": reverse("login"),
+                    "billing_link_label": "Log In to Continue",
+                    "quick_replies": ["Show available tours", "Open City Map", "Help"],
+                },
+            )
         current_state = _load_chat_state(request)
         fallback_sched_ids = (
             current_state.get("last_tour_recommendation_sched_ids")
@@ -12726,6 +15487,17 @@ def ai_chat(request):
         )
         if _is_guest_view_tour_bookings_command(message):
             request._chatbot_log_context["resolved_intent"] = "guest_view_tour_bookings"
+            if not user or not getattr(user, "is_authenticated", False):
+                return _chat_json_response(
+                    request,
+                    start_time,
+                    {
+                        "fulfillmentText": "Please log in or create an account to continue with booking.",
+                        "billing_link": reverse("login"),
+                        "billing_link_label": "Log In to Continue",
+                        "quick_replies": ["Show available tours", "Open City Map", "Help"],
+                    },
+                )
             return _chat_json_response(
                 request,
                 start_time,
@@ -13060,7 +15832,15 @@ def ai_chat(request):
             },
         )
 
-    if actor.get("role") == "admin" and admin_topic_hint:
+    if actor.get("role") == "owner" and _is_owner_monthly_report_status_command(message):
+        request._chatbot_log_context["resolved_intent"] = "owner_monthly_report_status"
+        return _chat_json_response(
+            request,
+            start_time,
+            _build_owner_monthly_report_status_payload(user, message),
+        )
+
+    if actor.get("role") == "admin" and admin_topic_hint and not _is_reporting_summary_request(message):
         request._chatbot_log_context["resolved_intent"] = admin_topic_hint
         short_admin = {"approve listing", "pending accommodations", "manage users", "admin dashboard", "booking summary"}
 
@@ -13731,8 +16511,253 @@ def ai_chat(request):
                     ),
                 )
 
+    normalized_guest_text = _normalize_chat_text(message)
+    if actor.get("role") == "guest" and normalized_guest_text in {"use my location", "use my current location", "my location"}:
+        return _chat_json_response(
+            request,
+            start_time,
+            {
+                "fulfillmentText": (
+                    "Please use the location button on the City Map so I can help estimate directions from your current position."
+                ),
+                "quick_replies": ["Open City Map", "Choose Destination", "Show Tourist Spots"],
+                "billing_link": reverse("map"),
+                "billing_link_label": "Open City Map",
+            },
+        )
+
+    if actor.get("role") == "guest" and normalized_guest_text in {"choose destination", "choose a destination"}:
+        marker_rows = list(
+            _visible_mapbookmark_queryset_for_request(request)
+            .exclude(name__isnull=True)
+            .exclude(name__exact="")
+            .order_by("name")
+            .values_list("name", flat=True)[:4]
+        )
+        suggestion_names = [str(name or "").strip() for name in marker_rows if str(name or "").strip()]
+        if suggestion_names:
+            destination_lines = ["Which Bayawan place would you like to visit?", "You can choose one of these mapped places:"]
+            for idx, place_name in enumerate(suggestion_names, 1):
+                destination_lines.append(f"{idx}. {place_name}")
+            return _chat_json_response(
+                request,
+                start_time,
+                {
+                    "fulfillmentText": "\n".join(destination_lines),
+                    "quick_replies": _sanitize_quick_replies(
+                        suggestion_names + ["Tourist spots", "Dining places", "Approved accommodations", "Open City Map"],
+                        limit=4,
+                    ),
+                },
+            )
+        return _chat_json_response(
+            request,
+            start_time,
+            {
+                "fulfillmentText": "Which Bayawan place would you like to visit?",
+                "quick_replies": ["Tourist spots", "Dining places", "Approved accommodations", "Open City Map"],
+            },
+        )
+
+    if actor.get("role") == "guest" and normalized_guest_text in {"dining places", "show dining places", "restaurants", "where can i eat"}:
+        dining_rows, _dining_category = _list_mapbookmarks_for_query(request, "what restaurants are on the map", limit=6)
+        if not dining_rows:
+            return _chat_json_response(
+                request,
+                start_time,
+                {
+                    "fulfillmentText": (
+                        "I don't see verified dining map records yet. You can open the City Map or ask for tourist spots and approved stays."
+                    ),
+                    "quick_replies": ["Open City Map", "Tourist spots", "Approved accommodations", "Help"],
+                },
+            )
+        lines = ["Here are dining places currently shown on the City Map:"]
+        for idx, row in enumerate(dining_rows, 1):
+            lines.append(f"{idx}. {str(getattr(row, 'name', '') or '').strip()}")
+        cards = [
+            _mapbookmark_card_trace(request, row, idx)
+            for idx, row in enumerate(dining_rows[:5], 1)
+        ]
+        cards = [card for card in cards if card]
+        return _chat_json_response(
+            request,
+            start_time,
+            {
+                "fulfillmentText": "\n".join(lines),
+                "quick_replies": ["Open City Map", "Get directions", "Tourist spots", "Approved accommodations"],
+                "response_type": "dining",
+                "heading": "Dining Places",
+                "recommendation_trace": cards,
+            },
+        )
+
+    if actor.get("role") == "guest" and normalized_guest_text in {"show tourist spots", "tourist spots"}:
+        tourism_objects = list(
+            TourismInformation.objects.published()
+            .exclude(spot_name__isnull=True)
+            .exclude(spot_name__exact="")
+            .order_by("spot_name")[:5]
+        )
+        tourist_rows, _tourist_category = _list_mapbookmarks_for_query(request, "what tourist spots are on the map", limit=6)
+        names = []
+        for value in [str(getattr(v, "spot_name", "") or "").strip() for v in tourism_objects] + [str(getattr(row, "name", "") or "").strip() for row in tourist_rows]:
+            if value and value.lower() not in {item.lower() for item in names}:
+                names.append(value)
+        if not names:
+            return _chat_json_response(
+                request,
+                start_time,
+                {
+                    "fulfillmentText": (
+                        "I don't see verified tourist spot records yet. You can open the city map or ask about dining places and approved accommodations."
+                    ),
+                    "quick_replies": ["Open City Map", "Dining places", "Approved accommodations", "Help"],
+                },
+            )
+        lines = ["Here are Tourism Office-published or mapped tourist places you can explore:"]
+        for idx, name in enumerate(names[:6], 1):
+            lines.append(f"{idx}. {name}")
+        cards = []
+        for idx, row in enumerate(tourism_objects[:3], 1):
+            card = _tourism_information_card_trace(request, row, idx)
+            if card:
+                cards.append(card)
+        for row in tourist_rows:
+            if len(cards) >= 5:
+                break
+            marker_name = str(getattr(row, "name", "") or "").strip()
+            if marker_name and marker_name.lower() in {str(card.get("title") or "").lower() for card in cards}:
+                continue
+            card = _mapbookmark_card_trace(request, row, len(cards) + 1)
+            if card:
+                cards.append(card)
+        return _chat_json_response(
+            request,
+            start_time,
+            {
+                "fulfillmentText": "\n".join(lines),
+                "quick_replies": ["Open City Map", "Get directions", "Use My Location", "Choose Destination"],
+                "response_type": "tourism_places",
+                "heading": "Tourism Places",
+                "recommendation_trace": cards,
+            },
+        )
+
+    if actor.get("role") == "guest" and _is_map_contents_query(message):
+        rows, category = _list_mapbookmarks_for_query(request, message, limit=6)
+        tourism_names = []
+        if category in {"", "landmark"}:
+            tourism_names = [
+                str(value or "").strip()
+                for value in TourismInformation.objects.published()
+                .exclude(spot_name__isnull=True)
+                .exclude(spot_name__exact="")
+                .order_by("spot_name")
+                .values_list("spot_name", flat=True)[:5]
+                if str(value or "").strip()
+            ]
+        if not rows and not tourism_names:
+            category_label = _map_category_display_label(category)
+            return _chat_json_response(
+                request,
+                start_time,
+                {
+                    "fulfillmentText": f"I don't see verified Tourism Office data for {category_label} yet, but I can help you open the City Map.",
+                    "quick_replies": ["Open map", "Approved accommodations", "Tourist spots", "Dining places"],
+                },
+            )
+        label = _map_category_display_label(category)
+        lines = [f"Here are {label} currently shown on the City Map:"]
+        names = []
+        for value in tourism_names + [str(getattr(row, "name", "") or "").strip() for row in rows]:
+            if value and value.lower() not in {item.lower() for item in names}:
+                names.append(value)
+        for idx, name in enumerate(names[:6], 1):
+            lines.append(f"{idx}. {name}")
+        cards = []
+        for row in rows:
+            if len(cards) >= 5:
+                break
+            card = _mapbookmark_card_trace(request, row, len(cards) + 1)
+            if card:
+                cards.append(card)
+        return _chat_json_response(
+            request,
+            start_time,
+            {
+                "fulfillmentText": "\n".join(lines),
+                "quick_replies": (
+                    ["Open City Map", "Get Directions", "Show Dining Places", "Tourist Spots"]
+                    if category == "restaurant"
+                    else ["Open City Map", "Get Directions", "Show Tourist Spots", "Dining Places"]
+                ),
+                "response_type": "tourism_places" if category != "restaurant" else "dining",
+                "heading": "Dining Places" if category == "restaurant" else "Tourism Places",
+                "recommendation_trace": cards,
+            },
+        )
+
+    if actor.get("role") == "guest" and (
+        _contains_any_phrase(message, ("where is", "location of"))
+        or _contains_any_phrase(message, ("directions to", "navigate to", "take me to", "how do i get to"))
+        or ("show" in normalized_guest_text and "map" in normalized_guest_text)
+    ) and not _is_guest_map_command(message) and ("i m from " not in normalized_guest_text and "i'm from " not in str(message or "").lower() and "from cebu" not in normalized_guest_text and "from manila" not in normalized_guest_text and "from dumaguete" not in normalized_guest_text and "from bacolod" not in normalized_guest_text):
+        marker = _lookup_mapbookmark_place(request, message)
+        if marker is None:
+            return _chat_json_response(
+                request,
+                start_time,
+                {
+                    "fulfillmentText": "I couldn't find that mapped place yet. Please try another place name, or open the city map.",
+                    "quick_replies": ["Open map", "Tourist spots", "Dining places", "Approved accommodations"],
+                },
+            )
+        marker_name = str(getattr(marker, "name", "") or "").strip()
+        marker_category = str(getattr(marker, "category", "") or "").strip()
+        marker_details = str(getattr(marker, "details", "") or "").strip()
+        dir_link = _build_map_direction_link(
+            dest_lat=getattr(marker, "latitude", None),
+            dest_lng=getattr(marker, "longitude", None),
+            client_location=client_location,
+        )
+        lines = [f"{marker_name} ({marker_category})"]
+        if marker_details:
+            lines.append(marker_details)
+        if not dir_link:
+            lines.append("Open the city map to view this place and get directions.")
+        payload = {
+            "fulfillmentText": "\n".join(lines),
+            "quick_replies": ["Open map", "Get directions", "Use my location"],
+            "response_type": "directions",
+            "heading": "Directions / Map Guidance",
+            "recommendation_trace": [_mapbookmark_card_trace(request, marker, 1, client_location=client_location)],
+        }
+        if dir_link:
+            payload["billing_link"] = dir_link
+            payload["billing_link_label"] = f"Get Directions to {marker_name}"
+        return _chat_json_response(request, start_time, payload)
+
     if actor.get("role") == "guest" and _is_guest_map_command(message):
         request._chatbot_log_context["resolved_intent"] = "guest_map"
+        if _normalize_chat_text(message) == "map":
+            return _chat_json_response(
+                request,
+                start_time,
+                {
+                    "fulfillmentText": (
+                        "Which place would you like to locate: an accommodation, tourist spot, dining place, or tour area?"
+                    ),
+                    "quick_replies": [
+                        {"label": "Find accommodations on map", "value": "show approved accommodations in bayawan"},
+                        {"label": "Get directions", "value": "how to get to bayawan city plaza"},
+                        {"label": "Tourist spots", "value": "show tourism information in bayawan"},
+                        {"label": "Dining places", "value": "where can i eat nearby"},
+                    ],
+                    "needs_clarification": True,
+                    "missing_slot": "map_target",
+                },
+            )
         return _chat_json_response(
             request,
             start_time,
@@ -13753,7 +16778,7 @@ def ai_chat(request):
                 "fulfillmentText": (
                     "To search hotels/inns in this system, send a preference sentence with location, guests, and budget.\n"
                     "Example: hotel in Suba barangay for 2 guests under 2000.\n"
-                    "Then choose an option and I can share its official page."
+                    "Then choose an option and I can share its provider page."
                 ),
                 "quick_replies": [
                     "show approved accommodations in bayawan",
@@ -13771,12 +16796,12 @@ def ai_chat(request):
             {
                 "fulfillmentText": (
                     "I can share estimated cost details after you pick a room option and guest count.\n"
-                    "You'll then continue on the accommodation's official page/contact channel."
+                    "You'll then continue on the accommodation's provider page/contact channel."
                 ),
                 "quick_replies": [
                     "show approved accommodations in bayawan",
                     "create booking preview",
-                    "open official page",
+                    "contact accommodation provider",
                 ],
             },
         )
@@ -13789,7 +16814,7 @@ def ai_chat(request):
             _build_link_payload(
                 request,
                 text=(
-                    "Open Accommodation Links to continue to each establishment's official page/contact channel.\n"
+                    "Open Accommodation Links to continue to each establishment's provider page/contact channel.\n"
                     "I can also help you compare options before you open a link."
                 ),
                 route_name="my_accommodation_bookings",
@@ -13821,7 +16846,7 @@ def ai_chat(request):
             _build_link_payload(
                 request,
                 text=(
-                    "Accommodation transactions are now completed on each establishment's official page.\n"
+                    "Accommodation transactions are now completed on each establishment's provider page.\n"
                     "Please contact the accommodation directly for cancellation or date-change requests."
                 ),
                 route_name="my_accommodation_bookings",
@@ -13837,8 +16862,8 @@ def ai_chat(request):
             _build_link_payload(
                 request,
                 text=(
-                    "Date changes are handled by the accommodation's official page/contact channel.\n"
-                    "Open the official link and request a schedule update directly with the property."
+                    "Date changes are handled by the accommodation's provider page/contact channel.\n"
+                    "Open the verified provider contact channel and request a schedule update directly with the property."
                 ),
                 route_name="my_accommodation_bookings",
                 label="Open Accommodation Links",
@@ -13872,7 +16897,7 @@ def ai_chat(request):
             {
                 "fulfillmentText": (
                     "Down payment policy may vary per accommodation.\n"
-                    "Please confirm payment terms directly on the accommodation's official page/contact channel."
+                    "Please confirm payment terms directly on the accommodation's provider page/contact channel."
                 ),
             },
         )
@@ -13903,7 +16928,7 @@ def ai_chat(request):
             "fulfillmentText": (
                 "Great question. Booking has 2 simple steps:\n"
                 "1) Choose a room first from available hotels/inns.\n"
-                "2) Open the property's official page/contact channel.\n\n"
+                "2) Open the property's provider page/contact channel.\n\n"
                 "Required details:\n"
                 "- Room reference (room type or selected option)\n"
                 "- Your preferred check-in date\n"
@@ -13913,7 +16938,7 @@ def ai_chat(request):
                 "- Budget\n"
                 "- Preferred location\n"
                 "- Amenities (Wi-Fi, aircon, etc.)\n\n"
-                "I can then open the property's official page so you can complete booking directly with them."
+                "I can then open the property's provider page so you can complete booking directly with them."
             ),
             "quick_replies": [
                 "show approved accommodations in bayawan",
@@ -14003,7 +17028,7 @@ def ai_chat(request):
         else:
             my_bookings_url = reverse("my_accommodation_bookings")
             booking_label = "Open Accommodation Links"
-            booking_reply = "I found the accommodation links page. Click the button below to open official page/contact options."
+            booking_reply = "I found the accommodation links page. Click the button below to open provider page/contact options."
         if hasattr(request, "build_absolute_uri"):
             my_bookings_url = request.build_absolute_uri(my_bookings_url)
         response_payload = {
@@ -14209,6 +17234,8 @@ def ai_chat(request):
         }
         if isinstance(schedule_payload.get("items"), list) and schedule_payload.get("items"):
             response_payload["recommendation_trace"] = schedule_payload.get("items")
+            response_payload["response_type"] = "tour_schedules"
+            response_payload["heading"] = "Tour Schedules"
         if isinstance(schedule_payload.get("quick_replies"), list):
             response_payload["quick_replies"] = _sanitize_quick_replies(schedule_payload.get("quick_replies"), limit=4)
         sched_ids = schedule_payload.get("sched_ids") if isinstance(schedule_payload.get("sched_ids"), list) else []
@@ -14220,6 +17247,92 @@ def ai_chat(request):
         next_state["params"] = chat_state_params if isinstance(chat_state_params, dict) else {}
         _save_chat_state(request, next_state)
         return _chat_json_response(request, start_time, response_payload)
+
+    if actor.get("role") == "guest" and _is_accommodation_room_listing_command(message):
+        request._chatbot_log_context["resolved_intent"] = "get_accommodation_room_listing"
+        cached_room_listing_rows = (
+            chat_state.get("last_accommodation_recommendations")
+            if isinstance(chat_state.get("last_accommodation_recommendations"), list)
+            else []
+        )
+        target_name = _extract_accommodation_name_for_room_listing(
+            message,
+            cached_room_listing_rows,
+            state_params=chat_state_params,
+        )
+        room_listing_payload = _build_room_listing_response_for_accommodation(target_name, limit=5)
+        room_listing_payload.setdefault("response_type", "room_recommendations")
+        room_listing_payload.setdefault("heading", "Available Rooms")
+        if isinstance(room_listing_payload.get("recommendation_trace"), list):
+            next_state = dict(chat_state)
+            next_state["last_accommodation_recommendations"] = _build_accommodation_selection_cache(
+                room_listing_payload.get("recommendation_trace")
+            )
+            next_params = dict(chat_state_params)
+            selected_accom_id = _to_int(room_listing_payload.get("selected_accommodation_id"), default=0)
+            selected_accom_name = str(room_listing_payload.get("selected_accommodation_name") or "").strip()
+            if selected_accom_id > 0:
+                next_params["selected_accommodation_id"] = selected_accom_id
+            if selected_accom_name:
+                next_params["selected_accommodation_name"] = selected_accom_name
+                next_params["accom_name"] = selected_accom_name
+            next_state["params"] = next_params
+            preview_flow_active = bool(
+                chat_state_pending in {"book_accommodation", "bookhotel", "book_hotel", "reserve_accommodation"}
+                or isinstance(chat_state.get("pending_booking"), dict)
+            )
+            if preview_flow_active:
+                next_state["pending_intent"] = "book_accommodation"
+                next_state["missing_slot"] = "room_reference"
+                next_state["pending_booking"] = {
+                    "params": next_params,
+                    "created_at": int(time.time()),
+                    "stage": "collecting_details",
+                }
+            else:
+                next_state["pending_intent"] = "get_accommodation_recommendation"
+                next_state["missing_slot"] = ""
+                next_state.pop("pending_booking", None)
+            _save_chat_state(request, next_state)
+        return _chat_json_response(request, start_time, room_listing_payload)
+
+    has_pending_accommodation_preview = (
+        isinstance(chat_state.get("pending_booking"), dict)
+        and isinstance(chat_state.get("pending_booking", {}).get("params"), dict)
+        and bool(chat_state.get("pending_booking", {}).get("params"))
+    )
+    if actor.get("role") == "guest" and not has_pending_accommodation_preview and not (
+        _is_accommodation_preview_command(message)
+        or _is_accommodation_how_to_book_request(message)
+    ):
+        deterministic_for_multilingual = _deterministic_intent_route(actor=actor, message=message)
+        local_multilingual = _multilingual_keyword_intent(raw_message)
+        multilingual_classification = local_multilingual or ({} if deterministic_for_multilingual else _classify_multilingual_tourism_intent(raw_message))
+        multilingual_payload = _build_multilingual_tourism_intent_payload(
+            request,
+            raw_message,
+            multilingual_classification,
+            client_location,
+        )
+        if multilingual_payload:
+            request._chatbot_log_context["resolved_intent"] = f"multilingual_{multilingual_classification.get('intent')}"
+            request._chatbot_log_context["intent_classifier"] = {
+                "source": "multilingual_gemini_or_deterministic",
+                "intent": multilingual_classification.get("intent"),
+                "confidence": multilingual_classification.get("confidence"),
+                "language": multilingual_classification.get("language"),
+                "translated_query_en": multilingual_classification.get("translated_query_en"),
+            }
+            if isinstance(request._chatbot_log_context.get("provenance"), dict):
+                request._chatbot_log_context["provenance"]["detected_language"] = str(multilingual_classification.get("language") or detected_language or "")
+            return _chat_json_response(request, start_time, multilingual_payload)
+        if not deterministic_for_multilingual and _is_unrelated_guest_prompt(raw_message):
+            request._chatbot_log_context["resolved_intent"] = "out_of_scope"
+            return _chat_json_response(
+                request,
+                start_time,
+                _build_out_of_scope_payload(actor, message=raw_message),
+            )
 
     if (
         actor.get("role") == "guest"
@@ -14276,6 +17389,8 @@ def ai_chat(request):
         response = {"fulfillmentText": str(reply or "No tours available right now.")}
         if logged_items:
             response["recommendation_trace"] = logged_items
+            response["response_type"] = "tour_recommendations"
+            response["heading"] = "Tour Package Recommendations"
         rec_sched_ids = []
         for item in logged_items:
             if not isinstance(item, dict):
@@ -14360,7 +17475,7 @@ def ai_chat(request):
                 if str(chat_state_params.get("location") or "").strip():
                     travel_params["location"] = str(chat_state_params.get("location") or "").strip()
                     request._chatbot_log_context["provenance"]["context_reply_used"] = True
-        guidance = _build_travel_guidance_payload(message, travel_params, client_location)
+        guidance = _build_travel_guidance_payload(message, travel_params, client_location, request=request)
         guidance_reply = str(guidance.get("reply") or "").strip() or "I can guide you with directions. Please share your destination."
         guidance_response = {"fulfillmentText": guidance_reply}
         if isinstance(guidance.get("quick_replies"), list):
@@ -14404,6 +17519,8 @@ def ai_chat(request):
                 }
                 if isinstance(schedule_payload.get("items"), list) and schedule_payload.get("items"):
                     response_payload["recommendation_trace"] = schedule_payload.get("items")
+                    response_payload["response_type"] = "tour_schedules"
+                    response_payload["heading"] = "Tour Schedules"
                 if isinstance(schedule_payload.get("quick_replies"), list):
                     response_payload["quick_replies"] = _sanitize_quick_replies(schedule_payload.get("quick_replies"), limit=4)
                 return _chat_json_response(request, start_time, response_payload)
@@ -14411,6 +17528,8 @@ def ai_chat(request):
             response_payload = {"fulfillmentText": str(rec_reply or "No tours available right now.")}
             if rec_items:
                 response_payload["recommendation_trace"] = rec_items
+                response_payload["response_type"] = "tour_recommendations"
+                response_payload["heading"] = "Tour Package Recommendations"
             return _chat_json_response(request, start_time, response_payload)
         if booking_stage == "awaiting_confirmation" and _contains_any_phrase(
             normalized_message,
@@ -14418,6 +17537,7 @@ def ai_chat(request):
         ):
             keep_date = pending_date_text
             keep_guests = pending_guests
+            keep_sched_id = pending_sched_id
             expect_slots = ["date", "guests"]
             prompt = "Sure. Please share your updated date and number of adults."
             if _contains_any_phrase(normalized_message, ("change guests", "change guest", "update guests")):
@@ -14426,12 +17546,13 @@ def ai_chat(request):
             elif _contains_any_phrase(normalized_message, ("change date", "update date")):
                 expect_slots = ["date"]
                 prompt = "Sure. What date or schedule would you prefer?"
+                keep_sched_id = ""
             refreshed_state = dict(chat_state)
             refreshed_state["pending_tour_booking"] = {
                 "stage": "awaiting_details",
                 "active_flow": "tour_booking",
                 "tour_name_hint": pending_tour_name,
-                "sched_id": pending_sched_id,
+                "sched_id": keep_sched_id,
                 "date_text": keep_date,
                 "guests": keep_guests,
                 "expected_slots": expect_slots,
@@ -14490,7 +17611,7 @@ def ai_chat(request):
                         "quick_replies": ["show tour schedules", "show available tours"],
                     },
                 )
-            bookings_url = reverse("main-page") + "#user-bookings"
+            bookings_url = reverse("my_tour_bookings")
             if hasattr(request, "build_absolute_uri"):
                 bookings_url = request.build_absolute_uri(bookings_url)
             has_assignment = _to_int(submit_result.get("assignment_count"), default=0) > 0
@@ -14596,11 +17717,20 @@ def ai_chat(request):
                 card = _build_schedule_card_trace(request, sched)
                 if card:
                     schedule_items.append(card)
-            response_payload = {
-                "fulfillmentText": (
+            no_exact_date = date_hint is not None
+            if no_exact_date:
+                missing_date_text = date_hint.strftime("%B %d, %Y")
+                summary_text = (
+                    f"There is no available schedule for {pending_tour_name or 'that tour'} on {missing_date_text}. "
+                    "Here are nearby schedule options for the same tour."
+                )
+            else:
+                summary_text = (
                     f"I found multiple schedules for {pending_tour_name or 'that tour'}. "
                     "Please choose one schedule to continue."
-                ),
+                )
+            response_payload = {
+                "fulfillmentText": summary_text,
                 "quick_replies": ["show available tours"],
             }
             if schedule_items:
@@ -14776,7 +17906,7 @@ def ai_chat(request):
             },
         )
 
-    if pending_booking_params:
+    if pending_booking_params and actor.get("role") == "guest":
         if pending_booking_created_at > 0 and (int(time.time()) - pending_booking_created_at) > _PENDING_BOOKING_TTL_SECONDS:
             expired_state = dict(chat_state)
             expired_state.pop("pending_booking", None)
@@ -15022,14 +18152,15 @@ def ai_chat(request):
                             start_time,
                             {
                                 "fulfillmentText": (
-                                    "This preview is not a confirmed booking. Please use the official link or contact the accommodation to complete your reservation."
+                                    "This preview is not a confirmed booking. Please use the accommodation's official Facebook page or verified contact channel to continue outside the system."
                                 ),
-                                "quick_replies": ["open official page"],
+                                "quick_replies": ["open facebook page"],
                                 "link_actions": preview_payload.get("link_actions") or [],
                                 "billing_link": str(preview_payload.get("billing_link") or ""),
                                 "billing_link_label": str(
-                                    preview_payload.get("billing_link_label") or "Continue to Official Booking Page"
+                                    preview_payload.get("billing_link_label") or "Contact Accommodation Provider"
                                 ),
+                                "accommodation_preview_completed": True,
                             },
                         )
                     if _is_open_official_page_request(normalized_followup):
@@ -15037,12 +18168,12 @@ def ai_chat(request):
                             request,
                             start_time,
                             {
-                                "fulfillmentText": "Opening official accommodation channels for your booking handoff.",
-                                "quick_replies": ["open official page"],
+                                "fulfillmentText": "Opening verified accommodation contact channels for your external handoff.",
+                                "quick_replies": ["open facebook page"],
                                 "link_actions": preview_payload.get("link_actions") or [],
                                 "billing_link": str(preview_payload.get("billing_link") or ""),
                                 "billing_link_label": str(
-                                    preview_payload.get("billing_link_label") or "Continue to Official Booking Page"
+                                    preview_payload.get("billing_link_label") or "Contact Accommodation Provider"
                                 ),
                             },
                         )
@@ -15058,8 +18189,9 @@ def ai_chat(request):
                             "link_actions": preview_payload.get("link_actions") or [],
                             "billing_link": str(preview_payload.get("billing_link") or ""),
                             "billing_link_label": str(
-                                preview_payload.get("billing_link_label") or "Continue to Official Booking Page"
+                                preview_payload.get("billing_link_label") or "Contact Accommodation Provider"
                             ),
+                            "accommodation_preview_completed": True,
                         },
                     )
 
@@ -15168,11 +18300,12 @@ def ai_chat(request):
                     "quick_replies": [
                         "May 10 to May 12 for 2 guests",
                         "2 nights for 2 guests",
-                        "open official page",
+                        "contact accommodation provider",
                     ],
                 }
                 if preview_payload.get("ready"):
                     response["fulfillmentText"] = str(preview_payload.get("text") or "").strip()
+                    response["accommodation_preview_completed"] = True
                     response["quick_replies"] = _sanitize_quick_replies(
                         preview_payload.get("quick_replies"),
                         limit=4,
@@ -15180,7 +18313,7 @@ def ai_chat(request):
                     if preview_payload.get("billing_link"):
                         response["billing_link"] = str(preview_payload.get("billing_link"))
                         response["billing_link_label"] = str(
-                            preview_payload.get("billing_link_label") or "Continue to Official Booking Page"
+                            preview_payload.get("billing_link_label") or "Contact Accommodation Provider"
                         )
                     if isinstance(preview_payload.get("link_actions"), list):
                         response["link_actions"] = preview_payload.get("link_actions")[:4]
@@ -15781,6 +18914,21 @@ def ai_chat(request):
     compact_text = str(message or "").strip()
     compact_lower = compact_text.lower()
     if state_intent in accommodation_intents:
+        short_location_refinement = re.match(
+            r"^\s*(?:how about|what about|in|near|around)?\s*(?:barangay|brgy)?\s*([a-z][a-z\s\-]{1,40})\??\s*$",
+            compact_lower,
+            flags=re.IGNORECASE,
+        )
+        if (
+            not str(params.get("location") or "").strip()
+            and short_location_refinement
+        ):
+            loc_candidate = str(short_location_refinement.group(1) or "").strip().lower()
+            known_loc_tokens = {"suba", "poblacion", "bayawan", "villareal", "tinago", "ubos", "terminal area"}
+            if loc_candidate in known_loc_tokens:
+                params["location"] = loc_candidate
+                params["clear_location_anchor"] = True
+                intent = state_intent
         if state_missing_slot == "company_type" and "company_type" not in params:
             if compact_lower in ("hotel", "inn", "either", "hotel or inn"):
                 params["company_type"] = "either" if compact_lower == "hotel or inn" else compact_lower
@@ -16229,16 +19377,29 @@ def ai_chat(request):
             )
     elif intent in ("reporting_summary",):
         _clear_chat_state(request)
-        reporting_payload = _build_reporting_summary_payload(message, params)
+        reporting_payload = _build_reporting_summary_payload(
+            message,
+            params,
+            actor_role=str(actor.get("role") or ""),
+        )
         reply = str(reporting_payload.get("reply") or "").strip()
         if isinstance(reporting_payload.get("quick_replies"), list):
             billing_actions["quick_replies"] = _sanitize_quick_replies(
                 reporting_payload.get("quick_replies"),
-                limit=4,
+                limit=5,
             )
+        if str(actor.get("role") or "").strip().lower() == "admin":
+            try:
+                reports_url = reverse("admin_app:owner_reports_review")
+                if hasattr(request, "build_absolute_uri"):
+                    reports_url = request.build_absolute_uri(reports_url)
+                billing_actions["billing_link"] = reports_url
+                billing_actions["billing_link_label"] = "Open reports page"
+            except Exception:
+                pass
     elif intent in ("travel_guidance",):
         _clear_chat_state(request)
-        guidance = _build_travel_guidance_payload(message, params, client_location)
+        guidance = _build_travel_guidance_payload(message, params, client_location, request=request)
         reply = str(guidance.get("reply") or "").strip() or "I can guide you with directions. Please share your destination."
         if isinstance(guidance.get("quick_replies"), list):
             billing_actions["quick_replies"] = _sanitize_quick_replies(guidance.get("quick_replies"), limit=4)
@@ -16505,7 +19666,7 @@ def ai_chat(request):
                         prompt_suffix = (
                             f"To refine this recommendation, {next_question}"
                             if next_question else
-                            "Tell me which option you want to explore and I'll share the official page."
+                            "Tell me which option you want to explore and I'll share the provider page."
                         )
                         response = {
                             "fulfillmentText": f"{preview_reply}\n\n{prompt_suffix}"
@@ -16712,6 +19873,7 @@ def ai_chat(request):
         preview_payload = _build_accommodation_preview_response(room=room, params=params)
         if preview_payload.get("ready"):
             reply = str(preview_payload.get("text") or "").strip()
+            billing_actions["accommodation_preview_completed"] = True
             billing_actions["quick_replies"] = _sanitize_quick_replies(
                 preview_payload.get("quick_replies"),
                 limit=4,
@@ -16719,7 +19881,7 @@ def ai_chat(request):
             if preview_payload.get("billing_link"):
                 billing_actions["billing_link"] = str(preview_payload.get("billing_link"))
                 billing_actions["billing_link_label"] = str(
-                    preview_payload.get("billing_link_label") or "Continue to Official Booking Page"
+                    preview_payload.get("billing_link_label") or "Contact Accommodation Provider"
                 )
             if isinstance(preview_payload.get("link_actions"), list):
                 billing_actions["link_actions"] = preview_payload.get("link_actions")[:4]
@@ -16861,8 +20023,9 @@ def ai_chat(request):
         if _is_accommodation_how_to_book_request(message):
             request._chatbot_log_context["resolved_intent"] = "book_accommodation"
             guidance_text = (
-                "You can complete your booking directly with the accommodation using their official page "
-                "or contact details. I can also prepare a booking preview if you'd like to estimate your stay cost."
+                "This system provides a cost preview only. Final accommodation arrangements are completed through "
+                "the accommodation's official Facebook page or verified contact channel when available. I can also "
+                "prepare a preview if you'd like to estimate your stay cost."
             )
             link_actions = _build_accommodation_link_actions(room=room, max_actions=4) if room is not None else []
             return _chat_json_response(
@@ -16879,6 +20042,7 @@ def ai_chat(request):
         preview_payload = _build_accommodation_preview_response(room=room, params=params)
         if preview_payload.get("ready"):
             reply = str(preview_payload.get("text") or "").strip()
+            billing_actions["accommodation_preview_completed"] = True
             billing_actions["quick_replies"] = _sanitize_quick_replies(
                 preview_payload.get("quick_replies"),
                 limit=4,
@@ -16886,7 +20050,7 @@ def ai_chat(request):
             if preview_payload.get("billing_link"):
                 billing_actions["billing_link"] = str(preview_payload.get("billing_link"))
                 billing_actions["billing_link_label"] = str(
-                    preview_payload.get("billing_link_label") or "Continue to Official Booking Page"
+                    preview_payload.get("billing_link_label") or "Contact Accommodation Provider"
                 )
             if isinstance(preview_payload.get("link_actions"), list):
                 billing_actions["link_actions"] = preview_payload.get("link_actions")[:4]
@@ -16990,6 +20154,8 @@ def ai_chat(request):
             response["billing_link_label"] = str(
                 billing_actions.get("billing_link_label") or "Open Official Link"
             )
+        if billing_actions.get("accommodation_preview_completed"):
+            response["accommodation_preview_completed"] = True
     if out_of_scope_quick_replies:
         response["quick_replies"] = out_of_scope_quick_replies
     if cnn_prediction:
@@ -17007,6 +20173,8 @@ def ai_chat(request):
     response["response_nlg_source"] = nlg_source
     if logged_recommended_items and intent in ("get_accommodation_recommendation", "gethotelrecommendation"):
         response["recommendation_trace"] = logged_recommended_items
+        response.setdefault("response_type", "accommodation_recommendations")
+        response.setdefault("heading", "Accommodation Recommendations")
         first_item = logged_recommended_items[0] if isinstance(logged_recommended_items, list) and logged_recommended_items else {}
         first_meta = first_item.get("meta") if isinstance(first_item, dict) and isinstance(first_item.get("meta"), dict) else {}
         first_link_actions = _build_accommodation_link_actions(row_meta=first_meta, max_actions=3)
@@ -17027,6 +20195,8 @@ def ai_chat(request):
         _inject_recommendation_context(response, params if isinstance(params, dict) else {})
     if logged_recommended_items and intent in ("get_recommendation", "gettourrecommendation"):
         response["recommendation_trace"] = logged_recommended_items
+        response.setdefault("response_type", "tour_recommendations")
+        response.setdefault("heading", "Tour Package Recommendations")
         rec_sched_ids = []
         for row in logged_recommended_items:
             if not isinstance(row, dict):
@@ -17305,12 +20475,6 @@ def log_guest_funnel_event(request):
         error_message=detail,
         request=request,
     )
-    if event_key == "billing_link_clicked":
-        _safe_log_chat_step_event(
-            request,
-            event_type="click",
-            item_ref="accommodation_external_handoff_clicked",
-        )
     return JsonResponse({"status": "ok", "event_key": event_key, "item_ref": item_ref, "event_type": event_type})
 
 
@@ -17437,6 +20601,147 @@ def submit_usability_feedback(request):
         return JsonResponse({"status": "error"}, status=500)
 
     return JsonResponse({"status": "ok", "saved_count": 1, "survey_batch_id": batch_id})
+
+
+@csrf_exempt
+def chat_image_predict(request):
+    if request.method != "POST":
+        return JsonResponse(
+            {
+                "status": "ok",
+                "usage": "POST multipart/form-data with field name 'image'.",
+            }
+        )
+
+    actor = _resolve_chat_actor(request)
+    user = actor.get("user")
+    if not actor.get("is_allowed"):
+        return JsonResponse({"fulfillmentText": "Please log in first to use the chatbot."}, status=401)
+
+    upload = request.FILES.get("image")
+    if upload is None:
+        return JsonResponse({"fulfillmentText": "Please attach one image file first."}, status=400)
+    query_text = (
+        str(request.POST.get("message") or "").strip()
+        or str(request.POST.get("query") or "").strip()
+        or str(request.POST.get("caption") or "").strip()
+        or str(request.POST.get("text") or "").strip()
+    )
+    client_location = {}
+    try:
+        client_location_raw = str(request.POST.get("client_location") or "").strip()
+        if client_location_raw:
+            parsed_location = json.loads(client_location_raw)
+            if isinstance(parsed_location, dict):
+                client_location = parsed_location
+    except Exception:
+        client_location = {}
+
+    ext = Path(str(upload.name or "")).suffix.lower()
+    if ext not in _IMAGE_CHAT_ALLOWED_EXTENSIONS:
+        return JsonResponse(
+            {"fulfillmentText": "Unsupported file type. Please upload JPG, JPEG, PNG, or WEBP."},
+            status=400,
+        )
+    if int(getattr(upload, "size", 0) or 0) > _IMAGE_CHAT_MAX_SIZE_BYTES:
+        return JsonResponse(
+            {"fulfillmentText": "Image is too large. Please upload an image up to 5MB only."},
+            status=400,
+        )
+
+    model = _load_image_cnn_model()
+    labels = _load_image_cnn_label_map()
+    config = _load_image_cnn_config()
+
+    if model is None or not labels:
+        payload = _build_image_assisted_recommendation_payload(
+            request,
+            query_text=query_text,
+            predicted_label="unknown",
+            confidence=0.0,
+            model_ready=False,
+            client_location=client_location,
+        )
+        try:
+            ChatbotLog.objects.create(
+                user=user if getattr(user, "is_authenticated", False) else None,
+                user_message=f"[image upload] {str(upload.name or 'unnamed')}" + (f" | {query_text}" if query_text else ""),
+                resolved_intent="image_tourism_assistance",
+                resolved_params_json={
+                    "prediction_status": "model_not_ready",
+                    "query_text": query_text,
+                    "text_intent": _image_text_recommendation_intent(query_text),
+                },
+                bot_response=str(payload.get("fulfillmentText") or ""),
+                intent_classifier_source="image_cnn_tourism",
+                response_nlg_source="deterministic",
+                fallback_used=True,
+                provenance_json={"feature": "image_upload", "reason": "missing_model_or_label_map", "text_plus_image": bool(query_text)},
+            )
+        except Exception:
+            pass
+        payload = _contextualize_quick_replies_for_payload(payload)
+        return JsonResponse(payload, status=200)
+
+    runtime_ready, runtime_err = _ensure_image_cnn_runtime_stack()
+    if not runtime_ready:
+        return JsonResponse(
+            {
+                "fulfillmentText": "Image runtime is not available yet. Please try again later.",
+                "prediction_status": runtime_err or "runtime_unavailable",
+            },
+            status=500,
+        )
+
+    target_size = config.get("image_size") if isinstance(config.get("image_size"), (list, tuple)) else [224, 224]
+    if len(target_size) != 2:
+        target_size = [224, 224]
+
+    try:
+        pil = Image.open(upload).convert("RGB")
+        resized = pil.resize((int(target_size[0]), int(target_size[1])))
+        arr = np.array(resized, dtype="float32")
+        arr = tf.keras.applications.mobilenet_v2.preprocess_input(arr)
+        batch = np.expand_dims(arr, axis=0)
+        probs = model.predict(batch, verbose=0)[0]
+        idx = int(np.argmax(probs))
+        conf = float(probs[idx])
+        label = str(labels.get(str(idx), labels.get(idx, "unknown"))).strip() or "unknown"
+    except Exception:
+        return JsonResponse({"fulfillmentText": "I couldn't process that image. Please try another file."}, status=400)
+
+    response_payload = _build_image_assisted_recommendation_payload(
+        request,
+        query_text=query_text,
+        predicted_label=label,
+        confidence=conf,
+        model_ready=True,
+        client_location=client_location,
+    )
+    response_payload["prediction_status"] = response_payload.get("prediction_status") or "ok"
+
+    try:
+        ChatbotLog.objects.create(
+            user=user if getattr(user, "is_authenticated", False) else None,
+            user_message=f"[image upload] {str(upload.name or 'unnamed')}" + (f" | {query_text}" if query_text else ""),
+            resolved_intent="image_tourism_assistance",
+            resolved_params_json={
+                "predicted_label": label,
+                "confidence": round(conf, 6),
+                "query_text": query_text,
+                "text_intent": _image_text_recommendation_intent(query_text),
+                "image_group": _image_label_recommendation_group(label),
+            },
+            bot_response=str(response_payload.get("fulfillmentText") or ""),
+            intent_classifier_source="image_cnn_tourism",
+            response_nlg_source="deterministic",
+            fallback_used=bool(conf < 0.5),
+            provenance_json={"feature": "image_upload", "text_plus_image": bool(query_text)},
+        )
+    except Exception:
+        pass
+    response_payload = _contextualize_quick_replies_for_payload(response_payload)
+    return JsonResponse(response_payload, status=200)
 
 
 @csrf_exempt

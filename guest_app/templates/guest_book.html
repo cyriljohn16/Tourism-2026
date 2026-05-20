@@ -142,7 +142,7 @@
       background: rgba(0,0,0,0.5);
       z-index: 50;
     }
-    #bookingModal, #payablesModal, #itineraryModal, #confirmationDialog {
+    #bookingModal, #payablesModal, #itineraryModal, #confirmationDialog, #authModal {
       display: none;
       position: fixed;
       top: 50%;
@@ -159,10 +159,154 @@
       overflow: hidden;
     }
     #bookingModal .modal-content,
-    #confirmationDialog .modal-content {
+    #confirmationDialog .modal-content,
+    #authModal .modal-content {
       max-height: calc(85vh - 20px);
       overflow-y: auto;
       padding-right: 4px;
+      position: relative;
+    }
+    #closeModal.close {
+      position: sticky;
+      top: 4px;
+      left: 100%;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 34px;
+      height: 34px;
+      border-radius: 999px;
+      font-size: 26px;
+      line-height: 1;
+      font-weight: 700;
+      color: #fff;
+      background: #dc3545;
+      z-index: 30;
+      cursor: pointer;
+      touch-action: manipulation;
+      user-select: none;
+      -webkit-tap-highlight-color: transparent;
+    }
+    #authModal {
+      max-width: 520px;
+      border-radius: 14px;
+    }
+    .auth-modal-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 14px;
+    }
+    .auth-modal-head h2 {
+      margin: 0;
+      color: #16233a;
+      font-size: 1.55rem;
+    }
+    .auth-close-btn {
+      border: 0;
+      background: #eef2f7;
+      color: #22324a;
+      width: 34px;
+      height: 34px;
+      border-radius: 999px;
+      cursor: pointer;
+      font-weight: 800;
+    }
+    .auth-tabs {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+      margin-bottom: 14px;
+    }
+    .auth-tab {
+      border: 1px solid #cbd9ec;
+      background: #f7faff;
+      color: #16447a;
+      border-radius: 999px;
+      padding: 10px 12px;
+      cursor: pointer;
+      font-weight: 800;
+    }
+    .auth-tab.active {
+      border-color: transparent;
+      background: linear-gradient(45deg, #104CBA, #1A67D2);
+      color: #fff;
+    }
+    .auth-panel[hidden] {
+      display: none;
+    }
+    .auth-form-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+    }
+    .auth-field.full {
+      grid-column: 1 / -1;
+    }
+    .auth-field label {
+      display: block;
+      margin-bottom: 5px;
+      color: #334155;
+      font-weight: 700;
+      font-size: 0.9rem;
+    }
+    .auth-field input,
+    .auth-field select {
+      width: 100%;
+      box-sizing: border-box;
+      border: 1px solid #cbd6e8;
+      border-radius: 9px;
+      padding: 10px;
+      font: inherit;
+    }
+    .auth-submit {
+      width: 100%;
+      margin-top: 12px;
+      border: 0;
+      border-radius: 999px;
+      padding: 12px 16px;
+      background: linear-gradient(45deg, #104CBA, #1A67D2);
+      color: #fff;
+      cursor: pointer;
+      font-weight: 800;
+    }
+    .auth-submit:disabled {
+      opacity: 0.7;
+      cursor: wait;
+    }
+    .auth-feedback {
+      display: none;
+      margin: 10px 0;
+      border-radius: 10px;
+      padding: 10px 12px;
+      font-size: 0.9rem;
+    }
+    .auth-feedback.error {
+      display: block;
+      background: #fff0f0;
+      color: #9b1c1c;
+      border: 1px solid #ffc9c9;
+    }
+    .auth-feedback.success {
+      display: block;
+      background: #edf9f0;
+      color: #176331;
+      border: 1px solid #b9ebc5;
+    }
+    .auth-help {
+      margin-top: 10px;
+      color: #5d6b7d;
+      font-size: 0.88rem;
+      line-height: 1.45;
+    }
+    .auth-required-btn {
+      font-weight: 800;
+    }
+    @media (max-width: 640px) {
+      .auth-form-grid {
+        grid-template-columns: 1fr;
+      }
     }
     #itineraryModal {
       max-width: 600px;
@@ -544,6 +688,52 @@
       font-size: 14px;
       color: #856404;
     }
+    @media (max-width: 768px) {
+      body {
+        padding: 10px;
+        overflow-x: hidden;
+      }
+
+      .container {
+        width: 100%;
+        max-width: 100%;
+        padding: 16px 12px;
+        border-radius: 14px;
+      }
+
+      .tour-header {
+        margin-bottom: 22px;
+      }
+
+      .tour-header h1 {
+        font-size: clamp(1.35rem, 7vw, 2rem);
+        line-height: 1.15;
+      }
+
+      .schedule,
+      .action-buttons,
+      .language-bar {
+        width: 100%;
+      }
+
+      .book-btn,
+      .back-button,
+      .view-itinerary-btn {
+        width: 100%;
+        min-height: 44px;
+        text-align: center;
+      }
+
+      #bookingModal,
+      #payablesModal,
+      #itineraryModal,
+      #confirmationDialog {
+        width: calc(100vw - 20px);
+        max-width: none;
+        max-height: 86dvh;
+        padding: 18px 14px;
+      }
+    }
   </style>
   <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800&family=Dancing+Script:wght@700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/static/css/guest_unified.css">
@@ -582,12 +772,16 @@
         
         <div class="action-buttons">
           {% if schedule.slots_available > 0 %}
+            {% if booking_requires_login %}
+            <button type="button" class="book-btn auth-required-btn" data-auth-open="login">Log in to book</button>
+            {% else %}
             <button class="book-btn" 
                     data-sched-id="{{ schedule.sched_id }}"
                     data-price="{{ schedule.price }}"
                     data-slots="{{ schedule.slots_available }}">
               <span class="book-btn-text">Book This Schedule</span>
             </button>
+            {% endif %}
           {% else %}
             <div class="no-slots-message" style="color: #dc3545; font-weight: bold; margin-top: 10px; padding: 10px; background-color: #f8d7da; border-radius: 4px; text-align: center;">
               <span class="no-slots-text">No more available slots</span>
@@ -607,6 +801,7 @@
     <a href="{% url 'main-page' %}" class="back-button">
       <span class="back-button-text">Back to Main Page</span>
     </a>
+    <button type="button" class="back-button" id="shareTourBtn">Share This Tour</button>
 
     <!-- Confirmation Message -->
     <div class="confirm-message" id="confirmMessage"></div>
@@ -618,14 +813,14 @@
   <!-- Booking Modal -->
   <div id="bookingModal" class="modal">
     <div class="modal-content">
-      <span id="closeModal" class="close">&times;</span>
+      <button type="button" id="closeModal" class="close" aria-label="Close booking modal">&times;</button>
       <h2>Book Tour</h2>
       <p>Please select who will be joining this tour:</p>
       
       <div class="form-row">
         <label>
           <input type="checkbox" id="includeMainUser" checked disabled>
-          <strong>You ({{ request.user.first_name }} {{ request.user.last_name }})</strong>
+          <strong>You ({{ request.user.first_name|default:'Guest' }} {{ request.user.last_name|default:'' }})</strong>
           <span class="small-text">(always included)</span>
         </label>
       </div>
@@ -730,6 +925,107 @@
     <button id="closeItineraryModal" class="close-modal-btn">Close</button>
   </div>
 
+  {% if booking_requires_login %}
+  <div id="authModal" class="modal" aria-label="Login or sign up">
+    <div class="modal-content">
+      <div class="auth-modal-head">
+        <h2>Continue Booking</h2>
+        <button type="button" class="auth-close-btn" id="authModalClose" aria-label="Close login dialog">&times;</button>
+      </div>
+      <div class="auth-tabs" role="tablist" aria-label="Authentication options">
+        <button type="button" class="auth-tab active" data-auth-tab="login">Log In</button>
+        <button type="button" class="auth-tab" data-auth-tab="signup">Sign Up</button>
+      </div>
+      <div id="authFeedback" class="auth-feedback" aria-live="polite"></div>
+
+      <form id="tourLoginForm" class="auth-panel" data-auth-panel="login">
+        {% csrf_token %}
+        <input type="hidden" name="next" value="{{ request.path }}">
+        <div class="auth-form-grid">
+          <div class="auth-field full">
+            <label for="tour-login-email">Email</label>
+            <input type="email" id="tour-login-email" name="email" autocomplete="email" required>
+          </div>
+          <div class="auth-field full">
+            <label for="tour-login-password">Password</label>
+            <input type="password" id="tour-login-password" name="password" autocomplete="current-password" required>
+          </div>
+        </div>
+        <button type="submit" class="auth-submit">Log In and Continue</button>
+        <p class="auth-help">You will stay on this tour page and continue booking after logging in.</p>
+      </form>
+
+      <form id="tourSignupForm" class="auth-panel" data-auth-panel="signup" enctype="multipart/form-data" hidden>
+        {% csrf_token %}
+        <input type="hidden" name="next" value="{{ request.path }}">
+        <input type="hidden" name="username" value="">
+        <input type="hidden" name="owner_signup_intent" value="0">
+        <input type="hidden" name="register_as_accommodation_owner" value="0">
+        <div class="auth-form-grid">
+          <div class="auth-field">
+            <label for="tour-signup-first-name">First Name</label>
+            <input type="text" id="tour-signup-first-name" name="first_name" required>
+          </div>
+          <div class="auth-field">
+            <label for="tour-signup-last-name">Last Name</label>
+            <input type="text" id="tour-signup-last-name" name="last_name" required>
+          </div>
+          <div class="auth-field">
+            <label for="tour-signup-middle">Middle Initial</label>
+            <input type="text" id="tour-signup-middle" name="middle_initial" maxlength="1">
+          </div>
+          <div class="auth-field">
+            <label for="tour-signup-age">Age</label>
+            <input type="number" id="tour-signup-age" name="age" min="18" required>
+          </div>
+          <div class="auth-field">
+            <label for="tour-signup-country">Country</label>
+            <input type="text" id="tour-signup-country" name="country_of_origin" required>
+          </div>
+          <div class="auth-field">
+            <label for="tour-signup-city">City</label>
+            <input type="text" id="tour-signup-city" name="city" required>
+          </div>
+          <div class="auth-field">
+            <label for="tour-signup-phone">Phone Number</label>
+            <input type="tel" id="tour-signup-phone" name="phone_number" required>
+          </div>
+          <div class="auth-field">
+            <label for="tour-signup-sex">Sex</label>
+            <select id="tour-signup-sex" name="sex" required>
+              <option value="">Select</option>
+              <option value="M">Male</option>
+              <option value="F">Female</option>
+            </select>
+          </div>
+          <div class="auth-field full">
+            <label for="tour-signup-email">Email</label>
+            <input type="email" id="tour-signup-email" name="email" autocomplete="email" required>
+          </div>
+          <div class="auth-field">
+            <label for="tour-signup-password">Password</label>
+            <input type="password" id="tour-signup-password" name="password" autocomplete="new-password" required>
+          </div>
+          <div class="auth-field">
+            <label for="tour-signup-confirm-password">Confirm Password</label>
+            <input type="password" id="tour-signup-confirm-password" name="confirm_password" autocomplete="new-password" required>
+          </div>
+          <div class="auth-field full">
+            <label for="tour-signup-picture">Profile Picture</label>
+            <input type="file" id="tour-signup-picture" name="picture" accept="image/*" required>
+          </div>
+          <div class="auth-field full">
+            <label for="tour-signup-company">Company Name (Optional)</label>
+            <input type="text" id="tour-signup-company" name="company_name">
+          </div>
+        </div>
+        <button type="submit" class="auth-submit">Create Account and Continue</button>
+        <p class="auth-help">Your account will be created here, then we will log you in and keep you on this tour page.</p>
+      </form>
+    </div>
+  </div>
+  {% endif %}
+
   <script>
     // Global variables to store current schedule data
     var currentScheduleID = "";
@@ -796,6 +1092,144 @@
 
     $(document).ready(function(){
       console.log("Document ready");
+
+      function getCookie(name) {
+        const value = `; ${document.cookie}`;
+        const parts = value.split(`; ${name}=`);
+        if (parts.length === 2) return parts.pop().split(';').shift();
+        return '';
+      }
+
+      function showAuthFeedback(message, type) {
+        const feedback = $("#authFeedback");
+        if (!feedback.length) return;
+        feedback.removeClass("error success");
+        const safeType = type === "success" ? "success" : "error";
+        feedback.addClass(safeType).text(message || "");
+      }
+
+      function clearAuthFeedback() {
+        $("#authFeedback").removeClass("error success").text("");
+      }
+
+      function openAuthModal(panel) {
+        clearAuthFeedback();
+        const targetPanel = panel === "signup" ? "signup" : "login";
+        $("#authModal").show();
+        $("#modalOverlay").show();
+        $(".auth-tab").removeClass("active");
+        $(`.auth-tab[data-auth-tab="${targetPanel}"]`).addClass("active");
+        $(".auth-panel").attr("hidden", true);
+        $(`.auth-panel[data-auth-panel="${targetPanel}"]`).removeAttr("hidden");
+        setTimeout(function() {
+          const firstInput = targetPanel === "signup" ? $("#tour-signup-first-name") : $("#tour-login-email");
+          if (firstInput.length) firstInput.trigger("focus");
+        }, 50);
+      }
+
+      window.IbayawOpenAuthModal = openAuthModal;
+
+      function closeAuthModal() {
+        $("#authModal").hide();
+        if (!$("#bookingModal:visible, #confirmationDialog:visible, #itineraryModal:visible").length) {
+          $("#modalOverlay").hide();
+        }
+      }
+
+      async function postAuthForm(url, formEl) {
+        const response = await fetch(url, {
+          method: "POST",
+          body: new FormData(formEl),
+          credentials: "same-origin",
+          headers: {
+            "X-Requested-With": "XMLHttpRequest",
+            "X-CSRFToken": getCookie("csrftoken"),
+          },
+        });
+        const contentType = (response.headers.get("content-type") || "").toLowerCase();
+        const data = contentType.includes("application/json")
+          ? await response.json()
+          : { success: response.ok, redirect_url: response.url || "" };
+        if (!response.ok) {
+          throw new Error(data.message || "Request failed. Please check your details and try again.");
+        }
+        return data;
+      }
+
+      $("[data-auth-open]").on("click", function(e) {
+        e.preventDefault();
+        openAuthModal($(this).data("auth-open") || "login");
+      });
+
+      $(".auth-tab").on("click", function() {
+        openAuthModal($(this).data("auth-tab") || "login");
+      });
+
+      $("#authModalClose").on("click", closeAuthModal);
+
+      $("#tourLoginForm").on("submit", async function(e) {
+        e.preventDefault();
+        clearAuthFeedback();
+        const submitBtn = $(this).find(".auth-submit");
+        submitBtn.prop("disabled", true).text("Logging in...");
+        try {
+          const data = await postAuthForm("{% url 'login' %}", this);
+          if (!data.success) {
+            throw new Error(data.message || "Invalid email or password.");
+          }
+          showAuthFeedback("Login successful. Reloading this tour page...", "success");
+          window.location.href = data.redirect_url || window.location.pathname;
+        } catch (error) {
+          showAuthFeedback(error.message || "Login failed. Please try again.", "error");
+        } finally {
+          submitBtn.prop("disabled", false).text("Log In and Continue");
+        }
+      });
+
+      $("#tourSignupForm").on("submit", async function(e) {
+        e.preventDefault();
+        clearAuthFeedback();
+        const formEl = this;
+        const submitBtn = $(formEl).find(".auth-submit");
+        const password = String($("#tour-signup-password").val() || "");
+        const confirmPassword = String($("#tour-signup-confirm-password").val() || "");
+        if (password !== confirmPassword) {
+          showAuthFeedback("Passwords do not match.", "error");
+          return;
+        }
+        submitBtn.prop("disabled", true).text("Creating account...");
+        try {
+          const signupData = await postAuthForm("{% url 'register' %}", formEl);
+          if (!signupData.success) {
+            throw new Error(signupData.message || "Registration failed. Please check your details.");
+          }
+          showAuthFeedback("Account created. Logging you in...", "success");
+
+          const loginForm = new FormData();
+          loginForm.append("email", String($("#tour-signup-email").val() || ""));
+          loginForm.append("password", password);
+          loginForm.append("next", window.location.pathname);
+          loginForm.append("csrfmiddlewaretoken", getCookie("csrftoken"));
+          const loginResponse = await fetch("{% url 'login' %}", {
+            method: "POST",
+            body: loginForm,
+            credentials: "same-origin",
+            headers: {
+              "X-Requested-With": "XMLHttpRequest",
+              "X-CSRFToken": getCookie("csrftoken"),
+            },
+          });
+          const loginData = await loginResponse.json();
+          if (!loginResponse.ok || !loginData.success) {
+            throw new Error(loginData.message || "Account created, but login failed. Please log in manually.");
+          }
+          window.location.href = loginData.redirect_url || window.location.pathname;
+        } catch (error) {
+          showAuthFeedback(error.message || "Registration failed. Please try again.", "error");
+        } finally {
+          submitBtn.prop("disabled", false).text("Create Account and Continue");
+        }
+      });
       
       // Clear companion cache when opening modal
       $("#modalOverlay").on("click", function(e) {
@@ -803,6 +1237,9 @@
           // Clear cached companion data from session storage
           sessionStorage.removeItem('userCompanions');
           sessionStorage.removeItem('userCompanionsTimestamp');
+          if ($("#authModal:visible").length) {
+            closeAuthModal();
+          }
         }
       });
       
@@ -978,7 +1415,7 @@
       }
       
       // Handle book button click
-      $(".book-btn").click(function() {
+      $(".book-btn[data-sched-id]").click(function() {
         currentScheduleID = $(this).data("sched-id");
         currentPrice = parseFloat($(this).data("price"));
         currentAvailableSlots = parseInt($(this).data("slots"));
@@ -1046,7 +1483,7 @@
         let companionsListHtml = `
           <li>
             <img src="${userPicture}" class="selected-companion-pic">
-            <span>You ({{ request.user.first_name }} {{ request.user.last_name }})</span>
+            <span>You ({{ request.user.first_name|default:'Guest' }} {{ request.user.last_name|default:'' }})</span>
           </li>
         `;
         
@@ -1108,10 +1545,19 @@
         });
       });
 
-      // Close the booking modal when "Close" is clicked
-      $("#closeModal").click(function(){
+      // Close the booking modal when "Close" is clicked/tapped
+      $("#closeModal").on("click touchend", function(e){
+        e.preventDefault();
         $("#bookingModal").hide();
         $("#modalOverlay").hide();
+      });
+
+      // Desktop keyboard close support without changing booking flow.
+      $(document).on("keydown", function(e) {
+        if (e.key === "Escape" && $("#bookingModal").is(":visible")) {
+          $("#bookingModal").hide();
+          $("#modalOverlay").hide();
+        }
       });
 
       // Close the itinerary modal when "Close" is clicked
@@ -1181,7 +1627,7 @@
           url: "/guest_app/book_tour/",
           type: "POST",
           data: {
-            guest_id: "{{ request.user.guest_id }}",
+            guest_id: "{{ request.user.guest_id|default:'' }}",
             sched_id: currentScheduleID,
             price: currentPrice,
             selected_companions: JSON.stringify(selectedCompanionIds),
@@ -1370,6 +1816,25 @@
         }
       } catch (e) {
         console.error('Error initializing translations:', e);
+      }
+      const shareTourBtn = document.getElementById('shareTourBtn');
+      if (shareTourBtn) {
+        shareTourBtn.addEventListener('click', async function () {
+          const title = document.getElementById('tour-name') ? document.getElementById('tour-name').textContent.trim() : 'Bayawan Tour';
+          const url = window.location.href;
+          if (navigator.share) {
+            try {
+              await navigator.share({ title, url });
+              return;
+            } catch (e) {}
+          }
+          try {
+            await navigator.clipboard.writeText(url);
+            alert('Link copied to clipboard.');
+          } catch (e) {
+            prompt('Copy this link:', url);
+          }
+        });
       }
     });
   </script>

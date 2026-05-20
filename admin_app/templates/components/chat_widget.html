@@ -1,21 +1,21 @@
 ﻿<style>
   .staff-chat-fab {
     position: fixed;
-    right: 20px;
-    top: 96px;
+    right: 18px;
+    top: calc(84px + env(safe-area-inset-top, 0px));
     bottom: auto;
-    width: 62px;
-    height: 62px;
+    width: 64px;
+    height: 64px;
     z-index: 2105;
     border: 1px solid rgba(255, 255, 255, 0.35);
-    border-radius: 20px;
+    border-radius: 16px;
     padding: 0;
     background:
       radial-gradient(circle at 25% 20%, rgba(255,255,255,0.28), transparent 42%),
       linear-gradient(135deg, #7f542c, #9b6a3a 50%, #1a67d2);
     color: #fff;
     cursor: pointer;
-    box-shadow: 0 18px 30px rgba(15, 78, 168, 0.30);
+    box-shadow: 0 14px 30px rgba(7, 17, 34, 0.3);
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -31,8 +31,8 @@
   }
 
   .staff-chat-fab svg {
-    width: 24px;
-    height: 24px;
+    width: 28px;
+    height: 28px;
     fill: #fff;
   }
 
@@ -50,12 +50,12 @@
 
   .staff-chat-modal {
     position: fixed;
-    right: 20px;
-    top: 96px;
+    right: 18px;
+    top: calc(150px + env(safe-area-inset-top, 0px));
     bottom: auto;
     transform: none;
-    width: 390px;
-    height: 590px;
+    width: min(390px, calc(100vw - 28px));
+    height: min(74dvh, 620px);
     background: linear-gradient(180deg, #ffffff 0%, #f6faff 100%);
     border-radius: 20px;
     border: 1px solid rgba(255, 255, 255, 0.7);
@@ -71,9 +71,10 @@
 
   .staff-chat-header {
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     justify-content: space-between;
-    padding: 14px 16px 18px;
+    gap: 8px;
+    padding: 12px 14px 18px;
     color: #fff;
     background:
       radial-gradient(circle at 12% 10%, rgba(255,255,255,0.25), transparent 42%),
@@ -88,14 +89,14 @@
     left: 16px;
     bottom: 5px;
     font-size: 0.7rem;
-    letter-spacing: 0.04em;
+    letter-spacing: 0.02em;
     opacity: 0.9;
     font-weight: 500;
   }
   .staff-chat-title {
     margin: 0;
-    font-size: 1rem;
-    font-weight: 700;
+    font-size: 1.06rem;
+    font-weight: 800;
     letter-spacing: 0.02em;
     padding-bottom: 10px;
   }
@@ -148,13 +149,14 @@
   }
 
   .staff-chat-message {
-    max-width: 85%;
-    padding: 11px 13px;
-    border-radius: 14px;
+    max-width: 90%;
+    padding: 10px 11px;
+    border-radius: 13px;
     line-height: 1.45;
     white-space: pre-wrap;
     overflow-wrap: anywhere;
     word-break: break-word;
+    font-size: 0.86rem;
   }
 
   .staff-chat-message.user {
@@ -166,9 +168,9 @@
 
   .staff-chat-message.bot {
     align-self: flex-start;
-    background: rgba(255, 255, 255, 0.86);
-    color: #223;
-    border: 1px solid #d8e2f2;
+    background: rgba(255, 255, 255, 0.94);
+    color: #1f2f45;
+    border: 1px solid #d8e2f3;
     border-bottom-left-radius: 8px;
     backdrop-filter: blur(1px);
   }
@@ -226,8 +228,26 @@
     border: 1px solid #d8e6f9;
     border-radius: 12px;
     background: linear-gradient(180deg, rgba(255, 255, 255, 0.9), rgba(246, 250, 255, 0.88));
-    padding: 9px 10px;
+    padding: 0;
+    overflow: hidden;
     box-shadow: 0 4px 10px rgba(15, 58, 104, 0.06);
+  }
+
+  .staff-chat-message.bot .bot-reco-image {
+    width: 100%;
+    height: 118px;
+    object-fit: cover;
+    display: block;
+    background: linear-gradient(135deg, #edf4ff, #dfeafa);
+  }
+
+  .staff-chat-message.bot .bot-reco-image.is-placeholder {
+    object-fit: contain;
+    padding: 12px;
+  }
+
+  .staff-chat-message.bot .bot-reco-body {
+    padding: 9px 10px;
   }
 
   .staff-chat-message.bot .bot-reco-item-head {
@@ -244,6 +264,37 @@
     color: #3b4a5d;
     border-top: 1px dashed #dce8f8;
     padding-top: 6px;
+  }
+
+  .staff-chat-message.bot .bot-reco-desc {
+    margin-top: 6px;
+    font-size: 0.78rem;
+    line-height: 1.4;
+    color: #2f4668;
+  }
+
+  .staff-chat-message.bot .bot-reco-badges {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin-top: 6px;
+  }
+
+  .staff-chat-message.bot .bot-reco-badge {
+    border-radius: 999px;
+    background: #eef5ff;
+    border: 1px solid #d5e4f7;
+    color: #225487;
+    font-size: 0.66rem;
+    font-weight: 750;
+    padding: 3px 7px;
+  }
+
+  .staff-chat-message.bot .bot-reco-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 8px;
   }
 
   .staff-chat-message.bot .bot-booking-summary {
@@ -746,7 +797,7 @@
     display: grid;
     grid-template-columns: 1fr auto;
     gap: 8px;
-    padding: 12px;
+    padding: 10px;
     border-top: 1px solid #e0e8f5;
     background: #fff;
   }
@@ -754,7 +805,7 @@
   .staff-chat-input {
     width: 100%;
     padding: 10px 12px;
-    border-radius: 15px;
+    border-radius: 12px;
     border: 1px solid #bfd1ee;
     outline: none;
     background: #f8fbff;
@@ -769,9 +820,9 @@
 
   .staff-chat-send {
     border: none;
-    border-radius: 15px;
-    width: 46px;
-    height: 46px;
+    border-radius: 12px;
+    width: 44px;
+    height: 44px;
     padding: 0;
     background: linear-gradient(135deg, #7f542c, #9b6a3a 45%, #1a67d2);
     color: #fff;
@@ -783,29 +834,29 @@
     box-shadow: 0 10px 18px rgba(26, 103, 210, 0.28);
   }
   .staff-chat-send svg {
-    width: 18px;
-    height: 18px;
+    width: 20px;
+    height: 20px;
     fill: #fff;
   }
 
   @media (max-width: 768px) {
     .staff-chat-modal {
-      top: calc(84px + env(safe-area-inset-top, 0px));
-      right: 12px;
-      left: 12px;
-      width: calc(100vw - 24px);
-      max-width: none;
-      height: min(75dvh, 620px);
-      border-radius: 18px;
+      right: 10px;
+      left: 10px;
+      width: auto;
+      height: min(72dvh, 620px);
+      top: auto;
+      bottom: calc(10px + env(safe-area-inset-bottom, 0px));
+      border-radius: 16px;
     }
 
     .staff-chat-fab {
       top: auto;
       bottom: calc(14px + env(safe-area-inset-bottom, 0px));
-      right: 16px;
-      width: 58px;
-      height: 58px;
-      border-radius: 18px;
+      right: 10px;
+      width: 60px;
+      height: 60px;
+      border-radius: 14px;
     }
 
     .staff-chat-header {
@@ -836,10 +887,29 @@
       padding: 12px 10px;
     }
 
+    .staff-chat-modal {
+      top: auto;
+      left: 10px;
+      right: 10px;
+      width: auto;
+      height: min(72dvh, 620px);
+      bottom: calc(10px + env(safe-area-inset-bottom, 0px));
+      border-radius: 16px;
+    }
+
+    .staff-chat-fab {
+      right: 10px;
+      top: auto;
+      bottom: calc(14px + env(safe-area-inset-bottom, 0px));
+      width: 60px;
+      height: 60px;
+      border-radius: 14px;
+    }
+
     .staff-chat-message {
-      max-width: 92%;
+      max-width: 94%;
       padding: 10px 11px;
-      font-size: 0.9rem;
+      font-size: 0.86rem;
     }
 
     .staff-chat-input-row {
@@ -848,28 +918,26 @@
     }
 
     .staff-chat-send {
-      width: 42px;
-      height: 42px;
-      border-radius: 13px;
       flex-shrink: 0;
     }
   }
 
   @media (max-width: 480px) {
     .staff-chat-modal {
-      top: calc(66px + env(safe-area-inset-top, 0px));
+      top: auto;
       left: 8px;
       right: 8px;
       width: auto;
-      height: min(80dvh, 640px);
-      border-radius: 16px;
+      height: min(74dvh, 560px);
+      bottom: calc(8px + env(safe-area-inset-bottom, 0px));
+      border-radius: 14px;
     }
 
     .staff-chat-fab {
-      right: 10px;
-      width: 54px;
-      height: 54px;
-      border-radius: 16px;
+      right: 8px;
+      width: 56px;
+      height: 56px;
+      border-radius: 14px;
     }
 
     .staff-chat-quick-btn {
@@ -896,11 +964,11 @@
   <div
     class="staff-chat-header"
     id="staffChatHeader"
-    data-chat-subtitle="Hotels | Explore | Official Pages"
-    data-chat-subtitle-admin="Admin | Tours | Approvals"
-    data-chat-subtitle-employee="Employee | Tours | Tasks"
-    data-chat-subtitle-owner="Owner | Rooms | Reports"
-    data-chat-subtitle-guest="Hotels | Explore | Official Pages"
+    data-chat-subtitle="Tours • Accommodations • Directions • Trip Planning"
+    data-chat-subtitle-admin="Monitoring • Reports • Overrides"
+    data-chat-subtitle-employee="Assigned Tours • Booking Updates"
+    data-chat-subtitle-owner="Rooms • Reports • Listings"
+    data-chat-subtitle-guest="Tours • Accommodations • Directions • Trip Planning"
   >
     <h3 class="staff-chat-title">Ibayaw Tour Assistant</h3>
     <div class="staff-chat-header-actions">
@@ -2110,6 +2178,116 @@
       return root;
     }
 
+    const chatCardPlaceholder = "/static/images/image.png";
+
+    function normalizeTraceKind(item) {
+      const raw = String((item && (item.kind || item.item_type)) || "").toLowerCase();
+      if (raw === "tour" || raw === "tour_schedule" || raw === "room" || raw === "accommodation" || raw === "tourism_place" || raw === "dining" || raw === "map_place") return raw;
+      if (item && (item.tour_id || item.sched_id)) return "tour";
+      if (item && item.room_id) return "room";
+      return "accommodation";
+    }
+
+    function inferChatResponseType(payload, traceItems, text) {
+      const explicit = String((payload && (payload.response_type || payload.type)) || "").toLowerCase();
+      if (explicit) return explicit;
+      const items = Array.isArray(traceItems) ? traceItems : [];
+      if (items.length) {
+        const kinds = items.map(normalizeTraceKind);
+        if (kinds.some((kind) => kind === "tour" || kind === "tour_schedule")) return "tour_recommendations";
+        if (kinds.some((kind) => kind === "room")) return "room_recommendations";
+        return "accommodation_recommendations";
+      }
+      const body = String(text || (payload && payload.fulfillmentText) || "").toLowerCase();
+      if (
+        (payload && payload.accommodation_preview_completed)
+        || body.includes("estimated accommodation booking preview")
+        || (body.includes("estimated total") && body.includes("accommodation:") && body.includes("room:"))
+      ) return "accommodation_cost_preview";
+      if (
+        body.includes("tour payment")
+        || body.includes("payment is handled only after")
+      ) return "tour_payment_information";
+      if (
+        body.includes("tour booking request")
+        || body.includes("pending means your tour booking")
+        || body.includes("check your tour booking status")
+      ) return "tour_booking_status";
+      if (payload && (payload.billing_link || payload.map_action || payload.open_map)) return "directions";
+      if (body.includes("direction") || body.includes("get directions") || body.includes("city map") || body.includes("current location")) return "directions";
+      if (body.includes("dining") || body.includes("restaurant") || body.includes("food") || body.includes("eat") || body.includes("mangaon") || body.includes("kaon")) return "dining";
+      if (body.includes("tourist spot") || body.includes("tourism place") || body.includes("landmark") || body.includes("places you can visit")) return "tourism_places";
+      if (body.includes("bayawan tourism") || body.includes("history") || body.includes("culture") || body.includes("festival")) return "tourism_information";
+      return "";
+    }
+
+    function resolveChatResponseHeading(payload, traceItems, text) {
+      const explicitTitle = String((payload && (payload.title || payload.response_title || payload.heading)) || "").trim();
+      if (explicitTitle) return explicitTitle;
+      const responseType = inferChatResponseType(payload, traceItems, text);
+      if (responseType.includes("tour_schedule")) return "Tour Schedules";
+      if (responseType.includes("tour_payment_information")) return "Tour Payment Information";
+      if (responseType.includes("tour_booking_status")) return "Tour Booking Status";
+      if (responseType.includes("tour")) return "Tour Package Recommendations";
+      if (responseType.includes("room")) return "Available Rooms";
+      if (responseType.includes("accommodation_cost_preview") || responseType.includes("booking_preview")) return "Accommodation Cost Preview";
+      if (responseType.includes("accommodation") || responseType.includes("hotel")) return "Accommodation Recommendations";
+      if (responseType.includes("dining") || responseType.includes("food")) return "Dining Places";
+      if (responseType.includes("tourist") || responseType.includes("tourism_place") || responseType.includes("landmark") || responseType.includes("map_place")) return "Tourism Places";
+      if (responseType.includes("direction") || responseType.includes("map") || responseType.includes("current_location")) return "Directions / Map Guidance";
+      if (responseType.includes("history") || responseType.includes("culture") || responseType.includes("tourism_information") || responseType.includes("bayawan_overview")) return "Bayawan Tourism Information";
+      return "";
+    }
+
+    function normalizeTraceActionKey(label, target) {
+      const normalizedLabel = String(label || "").trim().toLowerCase().replace(/\s+/g, " ");
+      const normalizedTarget = String(target || "").trim().toLowerCase().replace(/\s+/g, " ");
+      if (normalizedLabel === "open map" || normalizedLabel === "open city map") return "open-city-map";
+      if (normalizedTarget === "open map" || normalizedTarget === "open city map" || normalizedTarget === "/guest_app/map/") return "open-city-map";
+      return `${normalizedLabel}|${normalizedTarget}`;
+    }
+
+    function dedupeTraceActions(actions) {
+      const seen = new Set();
+      const deduped = [];
+      (Array.isArray(actions) ? actions : []).forEach((action) => {
+        if (!action) return;
+        const key = normalizeTraceActionKey(action.label, action.url || action.chat || "");
+        if (seen.has(key)) return;
+        seen.add(key);
+        deduped.push(action);
+      });
+      return deduped;
+    }
+
+    function buildTraceActions(item, kind) {
+      const actions = [];
+      const title = String((item && (item.title || item.accommodation_name || item.name || "")) || "").trim();
+      const detailUrl = String((item && item.detail_url) || "").trim();
+      const directionsUrl = String((item && (item.directions_url || item.direction_url)) || "").trim();
+      if (kind === "tour" || kind === "tour_schedule") {
+        if (detailUrl) actions.push({ label: "View Tour Details", url: detailUrl, newTab: true });
+        if (kind === "tour" && title) actions.push({ label: "View Tour Schedules", chat: `show schedules for ${title}` });
+        if (title) actions.push({ label: "Book a Tour", chat: `book ${title}` });
+        return actions.slice(0, 4);
+      }
+      if (kind === "tourism_place" || kind === "dining" || kind === "map_place") {
+        actions.push({ label: "Open City Map", url: detailUrl || "/guest_app/map/" });
+        if (directionsUrl) actions.push({ label: title ? `Get Directions to ${title}` : "Get Directions", url: directionsUrl, newTab: true });
+        if (title) actions.push({ label: "Ask About This Place", chat: `tell me about ${title}` });
+        return dedupeTraceActions(actions).slice(0, 4);
+      }
+      if (detailUrl) actions.push({ label: "View Details", url: detailUrl, newTab: true });
+      if (kind === "accommodation" && title) {
+        actions.push({ label: "Preview Cost", chat: `show rooms for ${title}` });
+      }
+      const facebookUrl = String((item && (item.facebook_url || item.official_contact_url)) || "").trim();
+      const providerUrl = String((item && item.official_url) || "").trim();
+      if (facebookUrl) actions.push({ label: "Open Official Facebook Page", url: facebookUrl, newTab: true });
+      else if (providerUrl) actions.push({ label: "Contact Accommodation Provider", url: providerUrl, newTab: true });
+      return dedupeTraceActions(actions).slice(0, 4);
+    }
+
     function addMessage(text, kind, payload = null, options = {}) {
       const persist = options.persist !== false;
       const msg = document.createElement("div");
@@ -2119,20 +2297,36 @@
         const traceItems = Array.isArray(payload?.recommendation_trace)
           ? payload.recommendation_trace
           : [];
+        const responseHeading = resolveChatResponseHeading(payload, traceItems, text);
         if (traceItems.length > 0) {
           const traceCard = document.createElement("div");
           traceCard.className = "bot-reco-summary";
           const title = document.createElement("div");
           title.className = "bot-reco-title";
-          title.textContent = "Accommodation Recommendations";
+          title.textContent = responseHeading || "Recommendations";
           traceCard.appendChild(title);
-          traceItems.slice(0, 3).forEach((item, idx) => {
+          traceItems.slice(0, 5).forEach((item, idx) => {
+            const traceKind = normalizeTraceKind(item);
             const box = document.createElement("div");
             box.className = "bot-reco-item";
+            const imageUrl = String((item && (item.profile_image_url || item.image_url)) || "").trim() || chatCardPlaceholder;
+            const image = document.createElement("img");
+            image.className = "bot-reco-image";
+            image.src = imageUrl;
+            image.alt = String(item?.title || "Recommendation image").trim();
+            image.loading = "lazy";
+            image.onerror = function () {
+              image.src = chatCardPlaceholder;
+              image.classList.add("is-placeholder");
+            };
+            if (imageUrl === chatCardPlaceholder) image.classList.add("is-placeholder");
+            box.appendChild(image);
+            const body = document.createElement("div");
+            body.className = "bot-reco-body";
             const head = document.createElement("div");
             head.className = "bot-reco-item-head";
             head.textContent = `${idx + 1}. ${String(item?.title || "Option").trim()}`;
-            box.appendChild(head);
+            body.appendChild(head);
             const meta = document.createElement("div");
             meta.className = "bot-reco-meta";
             const titleText = String(item?.title || "Option").trim();
@@ -2141,11 +2335,76 @@
               ? ""
               : subtitle;
             meta.textContent = dedupedSubtitle || "Please provide your filters to refine these options.";
-            box.appendChild(meta);
+            body.appendChild(meta);
+            const description = String((item && item.description) || "").trim();
+            if (description) {
+              const desc = document.createElement("div");
+              desc.className = "bot-reco-desc";
+              desc.textContent = description.length > 170 ? `${description.slice(0, 167)}...` : description;
+              body.appendChild(desc);
+            }
+            const badges = Array.isArray(item?.badges) ? item.badges : [];
+            const badgeTexts = badges.concat(traceKind === "accommodation" ? ["Tourism Office Approved"] : [])
+              .map((badge) => String(badge || "").trim())
+              .filter(Boolean)
+              .filter((badge, badgeIndex, arr) => arr.findIndex((value) => value.toLowerCase() === badge.toLowerCase()) === badgeIndex)
+              .slice(0, 3);
+            if (badgeTexts.length) {
+              const badgeWrap = document.createElement("div");
+              badgeWrap.className = "bot-reco-badges";
+              badgeTexts.forEach((badgeText) => {
+                const badge = document.createElement("span");
+                badge.className = "bot-reco-badge";
+                badge.textContent = badgeText;
+                badgeWrap.appendChild(badge);
+              });
+              body.appendChild(badgeWrap);
+            }
+            const actions = buildTraceActions(item, traceKind);
+            if (actions.length) {
+              const actionWrap = document.createElement("div");
+              actionWrap.className = "bot-reco-actions";
+              actions.forEach((action) => {
+                const btn = document.createElement("button");
+                btn.type = "button";
+                btn.className = "staff-chat-quick-btn";
+                btn.textContent = action.label;
+                btn.addEventListener("click", function () {
+                  if (action.chat) {
+                    inputEl.value = String(action.chat);
+                    sendMessage();
+                    return;
+                  }
+                  if (action.url) {
+                    if (action.newTab === true || /^https?:\/\//i.test(String(action.url))) {
+                      const opened = window.open(String(action.url), "_blank", "noopener,noreferrer");
+                      if (!opened) {
+                        const a = document.createElement("a");
+                        a.href = String(action.url);
+                        a.target = "_blank";
+                        a.rel = "noopener noreferrer";
+                        a.click();
+                      }
+                    } else {
+                      window.location.href = String(action.url);
+                    }
+                  }
+                });
+                actionWrap.appendChild(btn);
+              });
+              body.appendChild(actionWrap);
+            }
+            box.appendChild(body);
             traceCard.appendChild(box);
           });
           msg.appendChild(traceCard);
         } else {
+          if (responseHeading) {
+            const heading = document.createElement("div");
+            heading.className = "bot-text-heading";
+            heading.textContent = responseHeading;
+            msg.appendChild(heading);
+          }
           appendFormattedBotText(msg, text);
         }
 
@@ -2185,10 +2444,15 @@
       const row = document.createElement("div");
       row.className = "staff-chat-quick-replies";
       const serialized = [];
-      list.slice(0, 4).forEach((item) => {
+      const seen = new Set();
+      list.forEach((item) => {
         const label = typeof item === "string" ? item : String(item.label || item.value || "");
         const value = typeof item === "string" ? item : String(item.value || item.label || "");
         if (!label || !value) return;
+        const key = normalizeTraceActionKey(label, value);
+        if (seen.has(key)) return;
+        seen.add(key);
+        if (row.children.length >= 4) return;
         const btn = document.createElement("button");
         btn.type = "button";
         btn.className = "staff-chat-quick-btn";
