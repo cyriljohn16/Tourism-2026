@@ -227,13 +227,50 @@
         aspect-ratio: 4 / 3;
       }
     }
+    @media (max-width: 768px) {
+      body {
+        overflow-x: hidden;
+      }
+
+      .container,
+      .booking-container,
+      .content-wrapper,
+      .form-container {
+        width: 100%;
+        max-width: 100%;
+        padding-left: 12px;
+        padding-right: 12px;
+      }
+
+      .form-row,
+      .button-row,
+      .actions {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 10px;
+      }
+
+      input,
+      select,
+      textarea,
+      button,
+      .btn {
+        max-width: 100%;
+      }
+
+      button,
+      .btn {
+        min-height: 44px;
+        white-space: normal;
+      }
+    }
   </style>
 </head>
 <body>
   <div class="container">
     <section class="hero">
       <h1>Discover Bayawan Accommodations</h1>
-      <p>Explore approved hotels and inns, check details, and use preview-only estimates before continuing to official booking pages.</p>
+      <p>Explore approved hotels and inns, check details, and use preview-only estimates before continuing through verified Facebook or provider contact channels.</p>
       <div class="top-actions">
         <a class="btn secondary" href="{% url 'main-page' %}#approved-stays">Go Back to Main Page</a>
       </div>
@@ -268,18 +305,20 @@
           {% if row.person_limit %} | up to {{ row.person_limit }} guests{% endif %}
         </p>
         {% endif %}
+        {% if row.rating_label %}
+        <p class="meta">Rating: {{ row.rating_label }}</p>
+        {% endif %}
         <p class="meta">{{ row.accommodation.description|default:"No description available yet."|truncatechars:120 }}</p>
 
         <div class="actions">
           <a class="btn primary" href="{% url 'accommodation_detail_page' accom_id=row.accommodation.accom_id %}">View Details</a>
           <a class="btn open-chat-query" href="#" data-query="create booking preview for {{ row.accommodation.company_name|escape }}">Preview Cost</a>
-          {% if row.official_page_url %}
-            <a class="btn" href="{{ row.official_page_url }}" target="_blank" rel="noopener noreferrer">Open Official Page</a>
-          {% else %}
-            <span class="btn disabled">Official page unavailable</span>
-          {% endif %}
           {% if row.facebook_url %}
-            <a class="btn secondary" href="{{ row.facebook_url }}" target="_blank" rel="noopener noreferrer">View Facebook</a>
+            <a class="btn" href="{{ row.facebook_url }}" target="_blank" rel="noopener noreferrer">Open Official Facebook Page</a>
+          {% elif row.contact_channel_url %}
+            <a class="btn" href="{{ row.contact_channel_url }}" target="_blank" rel="noopener noreferrer">Contact Accommodation Provider</a>
+          {% else %}
+            <span class="btn disabled">No verified provider link available yet</span>
           {% endif %}
         </div>
       </article>

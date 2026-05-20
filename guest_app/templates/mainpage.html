@@ -4,6 +4,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#12335e">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-title" content="Ibayaw Tour">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <link rel="icon" type="image/jpeg" href="{% static 'images/experience_bayawan.jpg' %}?v=1">
+    <link rel="shortcut icon" type="image/jpeg" href="{% static 'images/experience_bayawan.jpg' %}?v=1">
+    <link rel="apple-touch-icon" href="{% static 'images/experience_bayawan.jpg' %}?v=1">
+    <link rel="manifest" href="/guest_app/manifest.webmanifest">
     <title>Ibayaw Tour</title>
     <style>
         /* Reset and base styles */
@@ -53,11 +61,22 @@
             display: flex;
             align-items: center;
         }
+        .brand-link {
+            display: inline-flex;
+            align-items: center;
+            text-decoration: none;
+            color: inherit;
+            cursor: pointer;
+        }
         
         .logo img {
-            height: 24px;
+            width: 28px;
+            height: 28px;
             margin-right: 8px;
-            filter: drop-shadow(0 0 5px rgba(255, 255, 255, 0.3));
+            border-radius: 50%;
+            object-fit: cover;
+            border: 1px solid rgba(255, 255, 255, 0.45);
+            filter: drop-shadow(0 0 4px rgba(0, 0, 0, 0.25));
         }
 
         .logo-fallback {
@@ -3132,17 +3151,19 @@
             --promo-radius-lg: 18px;
             --promo-radius-md: 14px;
             --promo-shadow: 0 14px 32px rgba(23, 52, 92, 0.14);
-            --hero-display-font: "BaraBara", "Bara Bara", "Arial Black", sans-serif;
+            --hero-display-font: "BaraBara", "Bara Bara", "Arial Black", "Poppins", sans-serif;
         }
 
         @font-face {
             font-family: "BaraBara";
-            src: local("Bara Bara"), local("BaraBara"), local("Bara Bara Script");
+            src:
+                url("/static/fonts/BaraBara.otf") format("opentype"),
+                local("Bara Bara"),
+                local("BaraBara"),
+                local("Bara Bara Script");
             font-weight: 700;
             font-style: normal;
             font-display: swap;
-            /* Optional local file (if licensed and included):
-               /static/fonts/BaraBara.woff2 */
         }
 
         body.mainpage-page {
@@ -3183,12 +3204,12 @@
 
         .hero::before {
             background:
-                radial-gradient(circle at 78% 14%, rgba(245, 183, 103, 0.25), transparent 37%),
-                linear-gradient(125deg, rgba(7, 33, 68, 0.78), rgba(14, 62, 121, 0.56), rgba(11, 30, 64, 0.78));
+                radial-gradient(circle at 78% 14%, rgba(245, 183, 103, 0.24), transparent 37%),
+                linear-gradient(125deg, rgba(5, 24, 53, 0.88), rgba(12, 56, 112, 0.66), rgba(7, 25, 55, 0.84));
         }
 
         .hero-content {
-            max-width: 760px;
+            max-width: 820px;
             margin-left: clamp(12px, 8vw, 110px);
             margin-right: auto;
             text-align: left;
@@ -3212,21 +3233,22 @@
 
         .hero-title {
             font-family: var(--hero-display-font);
-            font-size: clamp(2.55rem, 7.2vw, 5.15rem);
+            font-size: clamp(3rem, 8vw, 5.7rem);
             line-height: 0.98;
-            margin-bottom: 12px;
-            letter-spacing: 0.045em;
+            margin-bottom: 8px;
+            letter-spacing: 0.06em;
             text-transform: uppercase;
             color: #ffffff;
             text-shadow: 0 8px 24px rgba(7, 30, 62, 0.44);
         }
 
         .city-name {
-            font-size: clamp(1.26rem, 3.3vw, 1.88rem);
+            font-family: var(--hero-display-font);
+            font-size: clamp(1.55rem, 3.7vw, 2.3rem);
             margin-top: 0;
-            margin-bottom: 9px;
+            margin-bottom: 12px;
             color: #f6d8af;
-            letter-spacing: 0.05em;
+            letter-spacing: 0.045em;
             line-height: 1.34;
         }
 
@@ -3234,11 +3256,17 @@
             display: none;
         }
 
+        .section-head h2,
+        .header-title h2:last-child {
+            font-family: var(--hero-display-font);
+            letter-spacing: 0.025em;
+        }
+
         .hero-description {
-            max-width: 640px;
-            margin-top: 13px;
+            max-width: 760px;
+            margin-top: 10px;
             font-size: clamp(0.95rem, 1.66vw, 1.08rem);
-            line-height: 1.66;
+            line-height: 1.58;
             color: rgba(255, 255, 255, 0.96);
             text-shadow: 0 2px 10px rgba(4, 20, 45, 0.28);
         }
@@ -3289,7 +3317,7 @@
         }
 
         .hero-highlight {
-            background: rgba(10, 33, 68, 0.62);
+            background: rgba(8, 31, 66, 0.72);
             border: 1px solid rgba(255, 255, 255, 0.24);
             border-radius: 12px;
             padding: 10px 12px;
@@ -4624,6 +4652,55 @@
                 overflow-x: hidden;
             }
 
+            .navbar {
+                padding: 7px 10px;
+                row-gap: 7px;
+            }
+
+            .logo h1 {
+                font-size: 0.88rem;
+                line-height: 1.1;
+            }
+
+            .nav-links {
+                gap: 6px;
+                padding-bottom: 4px;
+            }
+
+            .nav-links a {
+                font-size: 0.72rem;
+                min-height: 30px;
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                padding: 4px 10px;
+            }
+
+            .nav-links a[href="#approved-stays"] {
+                color: transparent;
+                position: relative;
+            }
+
+            .nav-links a[href="#approved-stays"]::before {
+                content: "Stays";
+                color: #fff;
+            }
+
+            .hero {
+                min-height: 56vh;
+                padding: 78px 10px 60px;
+            }
+
+            .hero-description {
+                margin-top: 6px;
+                font-size: 0.84rem;
+                line-height: 1.4;
+            }
+
+            .hero-actions {
+                margin-top: 10px;
+            }
+
             .section-shell,
             .approved-stays-panel,
             .programs-panel,
@@ -4633,9 +4710,16 @@
                 max-width: 100%;
             }
 
-            .approved-stays-featured-grid,
+            .approved-stays-featured-grid {
+                grid-template-columns: 1fr;
+            }
+
             .approved-stays-carousel-viewport {
-                grid-auto-columns: 100%;
+                grid-auto-flow: row;
+                grid-template-columns: 1fr;
+                overflow: visible;
+                gap: 12px;
+                padding-right: 0;
             }
 
             .approved-stay-card,
@@ -4643,6 +4727,25 @@
                 width: 100%;
                 min-width: 0;
                 max-width: 100%;
+            }
+
+            .approved-stay-featured-card {
+                display: grid;
+                grid-template-rows: 190px auto;
+                min-height: 0;
+            }
+
+            .approved-stay-featured-overlay {
+                position: static;
+                background: #fff;
+                color: #1f3553;
+                gap: 7px;
+            }
+
+            .approved-stay-featured-overlay .approved-stay-title,
+            .approved-stay-featured-overlay .approved-stay-meta {
+                color: #1f3553;
+                text-shadow: none;
             }
 
             .approved-stay-featured-overlay {
@@ -4663,7 +4766,7 @@
 
             .approved-stay-image-wrap,
             .approved-stay-featured-media {
-                min-height: 210px;
+                min-height: 190px;
             }
 
             .approved-stay-placeholder {
@@ -4672,11 +4775,23 @@
             }
 
             .packages-grid {
+                display: grid;
+                grid-template-columns: 1fr;
+                overflow: visible;
                 padding-right: 0;
+                gap: 12px;
             }
 
             .package-card {
-                width: min(92vw, 320px);
+                width: 100%;
+                max-width: 100%;
+                height: auto;
+                min-height: 320px;
+            }
+
+            .approved-stays-carousel-arrow,
+            .approved-stays-carousel-hint {
+                display: none;
             }
         }
 
@@ -4711,9 +4826,10 @@
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800&family=Dancing+Script:wght@700&display=swap" rel="stylesheet">
     <!-- FontAwesome for icons -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
-  <link rel="stylesheet" href="/static/css/guest_unified.css">
+  <link rel="stylesheet" href="/static/css/guest_unified.css?v=tour-section-card">
 </head>
 <body
+    id="top"
     class="guest-booking mainpage-page"
     data-authenticated="{% if user.is_authenticated %}true{% else %}false{% endif %}"
 >
@@ -4726,15 +4842,17 @@
             {% csrf_token %}
         </div>
         <div class="logo">
-            <img src="{% if active_logo_url %}{{ active_logo_url }}{% else %}/static/images/logo.png{% endif %}" alt="Ibayaw Tour Logo" onerror="this.style.display='none'; var fb=document.getElementById('ibayaw-logo-fallback'); if(fb){fb.style.display='inline-flex';}">
-            <span id="ibayaw-logo-fallback" class="logo-fallback" aria-hidden="true">IT</span>
-            <h1>Ibayaw Tour</h1>
+            <a href="{% url 'main-page' %}" class="brand-link" aria-label="Go to Ibayaw Tour homepage">
+                <img src="{% if active_logo_url %}{{ active_logo_url }}{% else %}{% static 'images/experience_bayawan.jpg' %}{% endif %}" alt="Ibayaw Tour Logo" onerror="this.style.display='none'; var fb=document.getElementById('ibayaw-logo-fallback'); if(fb){fb.style.display='inline-flex';}">
+                <span id="ibayaw-logo-fallback" class="logo-fallback" aria-hidden="true">IT</span>
+                <h1>Ibayaw Tour</h1>
+            </a>
         </div>
         <div class="nav-links">
             <a href="#discovery">Discover</a>
-            <a href="#tour-packages">Tour Packs</a>
+            <a href="#tour-packages">Tour Packages</a>
             <a href="#approved-stays">Accommodations</a>
-            <a href="{% url 'map' %}">City Map</a>
+            <a href="#city-map-section">City Map</a>
             <a href="#about-us">About Us</a>
             <a href="#contact">Contact</a>
         </div>
@@ -4782,7 +4900,7 @@
                         <a href="#" id="update-profile-link"><i class="fas fa-user-edit"></i> Update Profile</a>
                     </div>
                     <div class="dropdown-divider"></div>
-                    <a href="{% url 'my_accommodation_bookings' %}"><i class="fas fa-hotel"></i> Accommodation Links</a>
+                    <a href="{% url 'my_tour_bookings' %}"><i class="fas fa-ticket-alt"></i> My Tour Bookings</a>
                     <div class="dropdown-divider"></div>
                     {% if is_accommodation_owner_user %}
                     <a href="{% url 'admin_app:owner_hub' %}"><i class="fas fa-columns"></i> Owner Hub</a>
@@ -4810,22 +4928,22 @@
     <!-- Hero Section -->
     <section class="hero"{% if hero_backgrounds %} style="background-image: url('{{ hero_backgrounds.0 }}');"{% endif %}>
         <div class="hero-content">
-            <span class="hero-kicker">BAYAWAN CITY TOURISM</span>
-            <h1 class="hero-title">BAYAWAN TOURS</h1>
-            <h2 class="initiative">Initiative</h2>
-            <h1 class="city-name">TOURS, APPROVED STAYS, MAPS, AND SMART TRIP PLANNING</h1>
+            <h1 class="hero-title">IBAYAW TOURS</h1>
+            <h2 class="initiative">IBAYAW BAYAWAN</h2>
+            <h1 class="city-name">IBAYAW BAYAWAN</h1>
             <p class="hero-description">
-                Plan your Bayawan visit with guided tours, official accommodation links, city map tools, and a helpful assistant in one place.
+                Explore Tourism Office-approved stays, local tour packages, dining spots, destinations, culture, maps, and travel guidance in one platform.
             </p>
+            <p class="hero-description">Plan your visit with verified tourism information and friendly AI assistance.</p>
             <div class="hero-actions">
-                <a href="#tour-packages" class="hero-cta primary">Start with Tours</a>
-                <a href="#discovery" class="hero-cta secondary">Plan My Trip</a>
+                <a href="#tour-packages" class="hero-cta primary">Explore Tour Packages</a>
                 <a href="#discovery" class="hero-cta secondary">Find Approved Stays</a>
+                <a href="#discovery" class="hero-cta secondary">Plan My Trip</a>
             </div>
             <div class="hero-highlights">
-                <div class="hero-highlight">Tour booking stays in-system with clear Treasurer payment handoff.</div>
-                <div class="hero-highlight">Accommodation recommendations are promotional with official outbound links only.</div>
-                <div class="hero-highlight">Use the assistant for planning, directions, nearby places, and travel guidance.</div>
+                <div class="hero-highlight">Tour packages follow the Tourism Office workflow with clear status updates.</div>
+                <div class="hero-highlight">Approved stays are for tourism promotion and continue through verified provider links.</div>
+                <div class="hero-highlight">Ask the assistant for tourism information, maps, directions, and trip planning.</div>
             </div>
         </div>
         <div class="carousel-dots">
@@ -4842,15 +4960,15 @@
     <section class="discovery-section" id="discovery">
         <div class="section-shell">
             <div class="discovery-head">
-                <h2>Plan Your Bayawan Experience in One Place</h2>
-                <p>Jump into the most-used traveler tools to explore tours, approved stays, maps, and guided trip planning faster.</p>
+                <h2>Plan Your Bayawan Tourism Experience in One Place</h2>
+                <p>Explore verified stays, local tours, tourist spots, dining places, map guidance, and Tourism Office-approved information.</p>
             </div>
             <div class="discovery-grid">
                 <article class="discovery-card">
                     <i class="fas fa-route"></i>
                     <h3>Tour Packages</h3>
                     <p>Browse featured Bayawan tours, check key details, and open schedules quickly.</p>
-                    <a href="#tour-packages" class="discovery-link">Explore Tours</a>
+                    <a href="#tour-packages" class="discovery-link">Explore Tour Packages</a>
                 </article>
                 <article class="discovery-card">
                     <i class="fas fa-hotel"></i>
@@ -4862,7 +4980,7 @@
                     <i class="fas fa-map-marked-alt"></i>
                     <h3>City Map & Directions</h3>
                     <p>Open the city map, locate places, and get practical travel guidance for your trip.</p>
-                    <a href="{% url 'map' %}" class="discovery-link">Open City Map</a>
+                    <a href="{% url 'map' %}" class="discovery-link">Open Tourism Map</a>
                 </article>
                 <article class="discovery-card">
                     <i class="fas fa-robot"></i>
@@ -4881,10 +4999,10 @@
                 <div>
             <div class="header-title">
                 <h2>Featured</h2>
-                <h2>Bayawan Tours</h2>
+                <h2>Bayawan Tour Packages</h2>
             </div>
             <div class="packages-description">
-                <p>Choose from city highlights, nature adventures, and cultural experiences designed for local and visiting travelers.</p>
+                    <p>Explore local activities, food experiences, nature attractions, and hidden gems through Tourism Office-guided tour packages.</p>
                         <a href="#tour-packages" class="explore-link">View All Tour Options</a>
             </div>
             <img src="/static/images/arrow.png" alt="Arrow" class="arrow-img">
@@ -4964,6 +5082,7 @@
                             </div>
                             {% if tour.schedules.exists %}
                             <a href="{% url 'guest_book' tour_id=tour.tour_id %}" class="package-cta">View Tour Details</a>
+                            <button type="button" class="package-cta share-link-btn" data-share-title="{{ tour.tour_name|escape }}" data-share-url="{% url 'guest_book' tour_id=tour.tour_id %}">Share</button>
                             {% else %}
                             <span class="package-cta disabled">Schedule Coming Soon</span>
                             {% endif %}
@@ -4979,13 +5098,139 @@
         </div>
     </section>
 
+    <section class="tourism-places-section" id="tourism-places">
+        <div class="section-shell">
+            <div class="tourism-places-panel">
+                <div class="section-head">
+                    <span class="section-eyebrow">Tourism Office-Approved Places</span>
+                    <h2>Explore Tourism Places</h2>
+                    <p>Discover Tourism Office-approved destinations, dining spots, landmarks, and local places around Bayawan.</p>
+                </div>
+
+                {% if tourism_place_groups %}
+                <div class="tourism-category-grid tourism-category-accordion" aria-label="Available tourism place categories">
+                    {% for group in tourism_place_groups %}
+                    <article class="tourism-category-card tourism-category-toggle-card" data-tourism-category-card>
+                        <button
+                            class="tourism-category-toggle"
+                            type="button"
+                            aria-expanded="false"
+                            aria-controls="tourism-category-panel-{{ forloop.counter }}"
+                            data-tourism-category-toggle
+                        >
+                            <span class="tourism-category-card-top">
+                                <span class="tourism-category-icon" aria-hidden="true"></span>
+                                <strong class="tourism-category-count">{{ group.count|default:0 }}</strong>
+                            </span>
+                            <span class="tourism-category-copy">
+                                <strong>{{ group.label }}</strong>
+                                <span>{{ group.description }}</span>
+                            </span>
+                            <span class="tourism-category-action">
+                                <span>View Places</span>
+                                <i class="fas fa-chevron-down" aria-hidden="true"></i>
+                            </span>
+                        </button>
+                        <div class="tourism-category-panel" id="tourism-category-panel-{{ forloop.counter }}" hidden data-tourism-category-panel>
+                            {% if group.places %}
+                            <div class="tourism-place-grid">
+                                {% for place in group.places %}
+                                <article class="tourism-place-card">
+                                    <div class="tourism-place-media {% if not place.image_url %}no-image{% endif %}">
+                                        {% if place.image_url %}
+                                        <img src="{{ place.image_url }}" alt="{{ place.name }}" loading="lazy" decoding="async" onerror="this.style.display='none'; if(this.nextElementSibling){this.nextElementSibling.style.display='flex';}">
+                                        <div class="tourism-place-placeholder" style="display:none;">{{ place.category }}</div>
+                                        {% else %}
+                                        <div class="tourism-place-placeholder">{{ place.category }}</div>
+                                        {% endif %}
+                                        <span class="tourism-place-badge">{{ place.badge }}</span>
+                                    </div>
+                                    <div class="tourism-place-body">
+                                        <p class="tourism-place-category">{{ place.category }}</p>
+                                        <h3>{{ place.name }}</h3>
+                                        {% if place.location %}
+                                        <p class="tourism-place-meta">{{ place.location }}</p>
+                                        {% endif %}
+                                        {% if place.description %}
+                                        <p class="tourism-place-description">{{ place.description|truncatechars:120 }}</p>
+                                        {% else %}
+                                        <p class="tourism-place-description">Tourism Office-approved place information is being completed. Open the City Map for location details.</p>
+                                        {% endif %}
+                                        <div class="tourism-place-actions">
+                                            {% if place.detail_url %}
+                                            <a href="{{ place.detail_url }}" class="tourism-place-btn primary">View Details</a>
+                                            {% endif %}
+                                            {% if place.has_map_marker or not place.detail_url %}
+                                            <a href="{% url 'map' %}?q={{ place.map_query|urlencode }}" class="tourism-place-btn primary">Open City Map</a>
+                                            {% endif %}
+                                            {% if place.directions_url %}
+                                            <a href="{{ place.directions_url }}" target="_blank" rel="noopener noreferrer" class="tourism-place-btn">Get Directions</a>
+                                            {% endif %}
+                                            {% if place.contact_url %}
+                                            <a href="{{ place.contact_url }}" target="_blank" rel="noopener noreferrer" class="tourism-place-btn secondary">{{ place.contact_label|default:"Contact Provider" }}</a>
+                                            {% endif %}
+                                            {% if place.detail_url %}
+                                            <button type="button" class="tourism-place-btn secondary share-link-btn" data-share-title="{{ place.name|escape }}" data-share-url="{{ place.detail_url }}">Share</button>
+                                            {% else %}
+                                            <button type="button" class="tourism-place-btn secondary share-link-btn" data-share-title="{{ place.name|escape }}" data-share-url="{% url 'map' %}?q={{ place.map_query|urlencode }}">Share</button>
+                                            {% endif %}
+                                        </div>
+                                    </div>
+                                </article>
+                                {% endfor %}
+                            </div>
+                            {% else %}
+                            <div class="tourism-place-empty">
+                                More Tourism Office-approved places for this category will be added soon. You can still open the City Map for verified mapped locations.
+                                <a href="{% url 'map' %}?q={{ group.map_query|urlencode }}" class="tourism-category-link">Open City Map</a>
+                            </div>
+                            {% endif %}
+                        </div>
+                    </article>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <div class="tourism-place-empty">
+                    More Tourism Office-approved places will be added soon. You can still open the City Map for verified mapped locations.
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </section>
+
+    <script>
+    document.addEventListener('DOMContentLoaded', function () {
+        const cards = Array.from(document.querySelectorAll('[data-tourism-category-card]'));
+        cards.forEach((card) => {
+            const toggle = card.querySelector('[data-tourism-category-toggle]');
+            const panel = card.querySelector('[data-tourism-category-panel]');
+            if (!toggle || !panel) return;
+            toggle.addEventListener('click', function () {
+                const willOpen = toggle.getAttribute('aria-expanded') !== 'true';
+                cards.forEach((otherCard) => {
+                    const otherToggle = otherCard.querySelector('[data-tourism-category-toggle]');
+                    const otherPanel = otherCard.querySelector('[data-tourism-category-panel]');
+                    if (!otherToggle || !otherPanel || otherCard === card) return;
+                    otherToggle.setAttribute('aria-expanded', 'false');
+                    otherPanel.hidden = true;
+                    otherCard.classList.remove('is-open');
+                });
+                toggle.setAttribute('aria-expanded', willOpen ? 'true' : 'false');
+                panel.hidden = !willOpen;
+                card.classList.toggle('is-open', willOpen);
+            });
+        });
+    });
+    </script>
+
     <section class="approved-stays-section" id="approved-stays">
         <div class="section-shell">
             <div class="approved-stays-panel">
                 <div class="section-head">
                     <span class="section-eyebrow">Approved Accommodations</span>
-                    <h2>Visual Guide to Bayawan Stays</h2>
-                    <p>Explore Tourism Office-approved stays and continue through each establishment's official page.</p>
+                    <h2>Tourism Office-Approved Stays</h2>
+                    <p>Browse verified accommodations promoted for visitors and continue through each establishment's official Facebook page or verified provider link.</p>
+                    <p><strong>Listed accommodations and establishments are Tourism Office Approved.</strong></p>
                 </div>
                 {% if approved_accommodation_cards %}
                 <div class="approved-stays-featured-grid">
@@ -5017,18 +5262,23 @@
                             {% if row.capacity_cue %}
                             <p class="approved-stay-meta">{{ row.capacity_cue }}</p>
                             {% endif %}
+                            {% if row.rating_label %}
+                            <p class="approved-stay-meta">Rating: {{ row.rating_label }}</p>
+                            {% endif %}
                             {% if row.accommodation.description %}
                             <p class="approved-stay-meta">{{ row.accommodation.description|truncatechars:100 }}</p>
                             {% endif %}
                             <div class="approved-stay-actions">
                                 <a href="{% url 'accommodation_detail_page' accom_id=row.accommodation.accom_id %}" class="approved-stay-btn primary">View Details</a>
-                                <a href="#" class="approved-stay-btn open-chat-query" data-query="create booking preview for {{ row.accommodation.company_name|escape }}">Preview Cost</a>
-                                {% if row.official_page_url %}
-                                <a href="{{ row.official_page_url }}" target="_blank" rel="noopener noreferrer" class="approved-stay-btn primary">Open Official Page</a>
-                                {% endif %}
+                                <a href="{% url 'accommodation_detail_page' accom_id=row.accommodation.accom_id %}?preview=1#cost-preview" class="approved-stay-btn open-chat-query" data-query="create booking preview for {{ row.accommodation.company_name|escape }}">Preview Cost</a>
                                 {% if row.facebook_url %}
-                                <a href="{{ row.facebook_url }}" target="_blank" rel="noopener noreferrer" class="approved-stay-btn secondary">View Facebook</a>
+                                <a href="{{ row.facebook_url }}" target="_blank" rel="noopener noreferrer" class="approved-stay-btn primary">Open Official Facebook Page</a>
+                                {% elif row.contact_channel_url %}
+                                <a href="{{ row.contact_channel_url }}" target="_blank" rel="noopener noreferrer" class="approved-stay-btn primary">Contact Accommodation Provider</a>
+                                {% else %}
+                                <span class="approved-stay-btn secondary disabled">No verified provider link yet</span>
                                 {% endif %}
+                                <button type="button" class="approved-stay-btn secondary share-link-btn" data-share-title="{{ row.accommodation.company_name|escape }}" data-share-url="{% url 'accommodation_detail_page' accom_id=row.accommodation.accom_id %}">Share</button>
                             </div>
                         </div>
                     </article>
@@ -5069,18 +5319,23 @@
                                 {% if row.capacity_cue %}
                                 <p class="approved-stay-meta">{{ row.capacity_cue }}</p>
                                 {% endif %}
+                                {% if row.rating_label %}
+                                <p class="approved-stay-meta">Rating: {{ row.rating_label }}</p>
+                                {% endif %}
                                 {% if row.accommodation.description %}
                                 <p class="approved-stay-meta">{{ row.accommodation.description|truncatechars:100 }}</p>
                                 {% endif %}
                                 <div class="approved-stay-actions">
                                     <a href="{% url 'accommodation_detail_page' accom_id=row.accommodation.accom_id %}" class="approved-stay-btn primary">View Details</a>
-                                    <a href="#" class="approved-stay-btn open-chat-query" data-query="create booking preview for {{ row.accommodation.company_name|escape }}">Preview Cost</a>
-                                    {% if row.official_page_url %}
-                                    <a href="{{ row.official_page_url }}" target="_blank" rel="noopener noreferrer" class="approved-stay-btn primary">Open Official Page</a>
-                                    {% endif %}
+                                    <a href="{% url 'accommodation_detail_page' accom_id=row.accommodation.accom_id %}?preview=1#cost-preview" class="approved-stay-btn open-chat-query" data-query="create booking preview for {{ row.accommodation.company_name|escape }}">Preview Cost</a>
                                     {% if row.facebook_url %}
-                                    <a href="{{ row.facebook_url }}" target="_blank" rel="noopener noreferrer" class="approved-stay-btn secondary">View Facebook</a>
+                                    <a href="{{ row.facebook_url }}" target="_blank" rel="noopener noreferrer" class="approved-stay-btn primary">Open Official Facebook Page</a>
+                                    {% elif row.contact_channel_url %}
+                                    <a href="{{ row.contact_channel_url }}" target="_blank" rel="noopener noreferrer" class="approved-stay-btn primary">Contact Accommodation Provider</a>
+                                    {% else %}
+                                    <span class="approved-stay-btn secondary disabled">No verified provider link yet</span>
                                     {% endif %}
+                                    <button type="button" class="approved-stay-btn secondary share-link-btn" data-share-title="{{ row.accommodation.company_name|escape }}" data-share-url="{% url 'accommodation_detail_page' accom_id=row.accommodation.accom_id %}">Share</button>
                                 </div>
                             </div>
                         </article>
@@ -5116,7 +5371,7 @@
                 <div class="section-head">
                     <span class="section-eyebrow">About Bayawan Tourism</span>
                     <h2>Experience Bayawan Through Local Stories, Nature, and Culture</h2>
-                    <p>Ibayaw Tour supports tourism discovery in Bayawan City by helping guests explore tours, approved accommodations, attractions, and practical travel guidance in one friendly platform.</p>
+                    <p>Ibayaw Bayawan supports local tourism discovery by helping guests explore tour packages, approved accommodations, attractions, dining spots, and practical travel guidance in one platform.</p>
                 </div>
                 <div class="about-grid">
                     <article class="about-card">
@@ -5135,36 +5390,6 @@
                         <p>Showcasing Bayawan's traditions, local identity, and meaningful travel experiences.</p>
                     </article>
                 </div>
-            </div>
-        </div>
-    </section>
-
-    <section class="programs-section" id="programs">
-        <div class="section-shell">
-            <div class="programs-panel">
-                <div class="section-head">
-                    <span class="section-eyebrow">Featured Programs</span>
-                    <h2>Choose the Kind of Bayawan Adventure You Want</h2>
-                    <p>From first-time city explorers to returning travelers, use these starting points to discover the best of Bayawan.</p>
-                </div>
-                <div class="programs-grid">
-                    <article class="program-card">
-                        <i class="fas fa-map-signs"></i>
-                        <h3>City Highlights</h3>
-                        <p>Explore key landmarks, local markets, and community spaces in a compact city tour experience.</p>
-                    </article>
-                    <article class="program-card">
-                        <i class="fas fa-water"></i>
-                        <h3>Nature and Leisure</h3>
-                        <p>Discover relaxing destinations, outdoor experiences, and scenic local attractions.</p>
-                    </article>
-                    <article class="program-card">
-                        <i class="fas fa-utensils"></i>
-                        <h3>Food and Local Finds</h3>
-                        <p>Pair your trip with nearby dining and local spots through map and assistant guidance.</p>
-                    </article>
-                </div>
-                <a href="#tour-packages" class="programs-cta">Explore Tour Packages</a>
             </div>
         </div>
     </section>
@@ -5527,6 +5752,40 @@
     </div>
     {% endif %}
 
+    <section class="city-map-section" id="city-map-section">
+        <div class="section-shell">
+            <div class="city-map-panel">
+                <div class="section-head">
+                    <span class="section-eyebrow">City Map</span>
+                    <h2>City Map & Directions</h2>
+                    <p>Locate tourism places, approved stays, dining spots, tour areas, and nearby points of interest.</p>
+                </div>
+                <div class="city-map-embed-wrap">
+                    <div class="city-map-preview">
+                        <img src="{{ official_tourist_map_url|default:'/static/images/bayawan_map.jpg' }}" alt="Official Bayawan tourism map preview" class="city-map-preview-image" loading="lazy" onerror="this.src='/static/images/bayawan_map.png';">
+                        <div class="city-map-preview-overlay">
+                            <div class="city-map-preview-copy">
+                                <h3>Official Tourism Map</h3>
+                                <p>Open the full map to view verified tourism places, dining spots, approved stays, public facilities, and directions.</p>
+                                <div class="city-map-chips">
+                                    <span class="city-map-chip">Tourist Spots</span>
+                                    <span class="city-map-chip">Dining</span>
+                                    <span class="city-map-chip">Approved Stays</span>
+                                    <span class="city-map-chip">Directions</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="city-map-actions">
+                    <a href="{% url 'map' %}" class="city-map-btn primary">Open Full Map</a>
+                    <a href="{% url 'map' %}?locate=1" class="city-map-btn">Use My Location</a>
+                    <a href="#" class="city-map-btn open-chat-query" data-query="help me with directions in bayawan">Ask Chatbot for Directions</a>
+                </div>
+            </div>
+        </div>
+    </section>
+
     <section class="contact-section" id="contact">
         <div class="section-shell">
             <div class="contact-panel">
@@ -5570,9 +5829,7 @@
         </div>
     </footer>
 
-    {% if user.is_authenticated %}
     {% include "components/guest_chat_widget.html" %}
-    {% endif %}
 
     <script>
         document.addEventListener('DOMContentLoaded', function() {
@@ -7333,6 +7590,15 @@
                     const bookingUrl = String(item?.official_booking_url || item?.meta?.official_booking_url || '').trim();
                     const contactUrl = String(item?.official_contact_url || item?.meta?.official_contact_url || '').trim();
                     const name = String(accommodationName || item?.title || '').trim() || 'Accommodation';
+                    const isFacebookUrl = (url) => {
+                        const lowered = String(url || '').toLowerCase();
+                        return lowered.includes('facebook.com') || lowered.includes('fb.com');
+                    };
+                    const isThirdPartyBookingUrl = (url) => {
+                        const lowered = String(url || '').toLowerCase();
+                        return ['booking.com', 'agoda.', 'traveloka.', 'expedia.', 'hotels.com', 'tripadvisor.', 'airbnb.', 'trivago.', 'kayak.']
+                            .some((host) => lowered.includes(host));
+                    };
 
                     const addAction = (url, label) => {
                         const cleaned = String(url || '').trim();
@@ -7340,23 +7606,17 @@
                         const key = cleaned.toLowerCase();
                         if (seen.has(key)) return;
                         seen.add(key);
-                        actions.push({ url: cleaned, label: String(label || 'Open Official Page') });
+                        actions.push({ url: cleaned, label: String(label || 'Contact Accommodation Provider') });
                     };
 
-                    if (bookingUrl) {
-                        if (bookingUrl.toLowerCase().includes('facebook.com')) {
-                            addAction(bookingUrl, 'View Facebook');
-                        } else {
-                            addAction(bookingUrl, `Open ${name} Official Page`);
+                    [bookingUrl, contactUrl].forEach((url) => {
+                        if (isFacebookUrl(url)) addAction(url, 'Open Official Facebook Page');
+                    });
+                    [contactUrl, bookingUrl].forEach((url) => {
+                        if (url && !isFacebookUrl(url) && !isThirdPartyBookingUrl(url)) {
+                            addAction(url, `Contact ${name} Provider`);
                         }
-                    }
-                    if (contactUrl) {
-                        if (contactUrl.toLowerCase().includes('facebook.com')) {
-                            addAction(contactUrl, 'View Facebook');
-                        } else {
-                            addAction(contactUrl, `Open ${name} Official Page`);
-                        }
-                    }
+                    });
                     return actions.slice(0, 2);
                 };
 
@@ -7516,7 +7776,8 @@
                         linkBtn.className = 'promo-reco-btn primary';
                         linkBtn.textContent = entry.label;
                         linkBtn.addEventListener('click', () => {
-                            window.open(entry.url, '_blank');
+                            const newWin = window.open(entry.url, '_blank', 'noopener,noreferrer');
+                            if (newWin) newWin.opener = null;
                         });
                         actionsRow.appendChild(linkBtn);
                     });
@@ -7626,12 +7887,29 @@
             }
 
             function addLinkMessage(label, url) {
+                const openExternalInNewTab = (targetUrl) => {
+                    const cleanedUrl = String(targetUrl || '').trim();
+                    if (!cleanedUrl) return;
+                    const newWin = window.open(cleanedUrl, '_blank', 'noopener,noreferrer');
+                    if (newWin) {
+                        newWin.opener = null;
+                        return;
+                    }
+                    const anchor = document.createElement('a');
+                    anchor.href = cleanedUrl;
+                    anchor.target = '_blank';
+                    anchor.rel = 'noopener noreferrer';
+                    anchor.style.display = 'none';
+                    document.body.appendChild(anchor);
+                    anchor.click();
+                    anchor.remove();
+                };
                 const messageDiv = document.createElement('div');
                 messageDiv.className = 'message bot';
                 const actionButton = document.createElement('button');
                 actionButton.type = 'button';
-                actionButton.textContent = label || 'Visit Official Page';
-                actionButton.title = 'Open official page';
+                actionButton.textContent = label || 'Open Provider Page';
+                actionButton.title = 'Open provider page';
                 actionButton.style.display = 'inline-block';
                 actionButton.style.marginTop = '2px';
                 actionButton.style.padding = '8px 12px';
@@ -7642,13 +7920,13 @@
                 actionButton.style.color = '#fff';
                 actionButton.style.fontWeight = '600';
                 actionButton.style.wordBreak = 'normal';
-                actionButton.addEventListener('click', async function() {
-                    await logGuestFunnelEvent('billing_link_clicked', { detail: String(label || 'billing_link_click') });
-                    await logRecommendationClick({
+                actionButton.addEventListener('click', function() {
+                    openExternalInNewTab(url);
+                    logGuestFunnelEvent('billing_link_clicked', { detail: String(label || 'billing_link_click') });
+                    logRecommendationClick({
                         item_ref: 'chat:billing_link_click',
                         scoring_mode: 'billing_link',
                     });
-                    window.open(url, '_blank');
                 });
                 messageDiv.appendChild(actionButton);
                 chatMessages.appendChild(messageDiv);
@@ -7656,13 +7934,30 @@
             }
 
             function addLinkActionsMessage(actions) {
+                const openExternalInNewTab = (targetUrl) => {
+                    const cleanedUrl = String(targetUrl || '').trim();
+                    if (!cleanedUrl) return;
+                    const newWin = window.open(cleanedUrl, '_blank', 'noopener,noreferrer');
+                    if (newWin) {
+                        newWin.opener = null;
+                        return;
+                    }
+                    const anchor = document.createElement('a');
+                    anchor.href = cleanedUrl;
+                    anchor.target = '_blank';
+                    anchor.rel = 'noopener noreferrer';
+                    anchor.style.display = 'none';
+                    document.body.appendChild(anchor);
+                    anchor.click();
+                    anchor.remove();
+                };
                 const validActions = Array.isArray(actions)
                     ? actions
                         .map((entry) => {
                             if (!entry || typeof entry !== 'object') return null;
                             const url = String(entry.url || '').trim();
                             if (!url) return null;
-                            const label = String(entry.label || 'Visit Official Page').trim();
+                            const label = String(entry.label || 'Open Provider Page').trim();
                             return { url, label };
                         })
                         .filter(Boolean)
@@ -7682,13 +7977,13 @@
                     actionButton.type = 'button';
                     actionButton.className = 'promo-reco-btn primary';
                     actionButton.textContent = entry.label;
-                    actionButton.addEventListener('click', async function() {
-                        await logGuestFunnelEvent('billing_link_clicked', { detail: String(entry.label || 'official_link_click') });
-                        await logRecommendationClick({
+                    actionButton.addEventListener('click', function() {
+                        openExternalInNewTab(entry.url);
+                        logGuestFunnelEvent('billing_link_clicked', { detail: String(entry.label || 'official_link_click') });
+                        logRecommendationClick({
                             item_ref: 'chat:official_link_action',
                             scoring_mode: 'official_link',
                         });
-                        window.open(entry.url, '_blank');
                     });
                     wrap.appendChild(actionButton);
                 });
@@ -8047,6 +8342,7 @@
             
             <form id="login-form">
                 {% csrf_token %}
+                <input type="hidden" id="login_next" name="next" value="">
                 
                 <div class="form-group">
                     <label for="login-email" class="required">Email</label>
@@ -8240,6 +8536,7 @@
         document.addEventListener("DOMContentLoaded", function() {
             const urlParams = new URLSearchParams(window.location.search);
             const nextUrl = String(urlParams.get('next') || '').trim();
+            const loginIntent = urlParams.get('login') === '1';
             const ownerSignupIntent = urlParams.get('owner_signup') === '1';
 
             // Add body attribute for authentication state
@@ -8266,15 +8563,19 @@
             if (signupNextInput && nextUrl) {
                 signupNextInput.value = nextUrl;
             }
+            const loginNextInput = document.getElementById('login_next');
+            if (loginNextInput && nextUrl) {
+                loginNextInput.value = nextUrl;
+            }
 
-            // Automatically show login/signup modal if user is not authenticated
-            if (document.body.getAttribute('data-authenticated') === 'false') {
-                if (ownerSignupIntent) {
-                    loginModal.style.display = "none";
-                    signupModal.style.display = "block";
-                } else {
-                    loginModal.style.display = "block";
-                }
+            // Do not auto-open auth modals during public browsing.
+            // Keep owner-signup deep-link intent only.
+            if (document.body.getAttribute('data-authenticated') === 'false' && ownerSignupIntent) {
+                loginModal.style.display = "none";
+                signupModal.style.display = "block";
+            } else if (document.body.getAttribute('data-authenticated') === 'false' && loginIntent) {
+                signupModal.style.display = "none";
+                loginModal.style.display = "block";
             }
             
             // Login functionality
@@ -8500,14 +8801,12 @@
         document.addEventListener("DOMContentLoaded", function() {
             const pageParams = new URLSearchParams(window.location.search);
             const nextUrl = String(pageParams.get('next') || '').trim();
+            const loginIntent = pageParams.get('login') === '1';
 
             // Add body attribute for authentication state
             document.body.setAttribute('data-authenticated', '{% if user.is_authenticated %}true{% else %}false{% endif %}');
             
-            // Automatically show login modal if user is not authenticated
-            if (document.body.getAttribute('data-authenticated') === 'false') {
-                document.getElementById('loginModal').style.display = "block";
-            }
+            // Public browsing mode: do not auto-open login modal.
             
             // Login functionality
             function loginUser() {
@@ -8558,6 +8857,19 @@
             const loginModal = document.getElementById("loginModal");
             const closeSignupBtn = document.querySelector(".close-modal");
             const closeLoginBtn = document.getElementById("close-login");
+
+            const loginNextInput = document.getElementById('login_next');
+            if (loginNextInput && nextUrl) {
+                loginNextInput.value = nextUrl;
+            }
+            const signupNextInput = document.getElementById('signup_next');
+            if (signupNextInput && nextUrl) {
+                signupNextInput.value = nextUrl;
+            }
+            if (document.body.getAttribute('data-authenticated') === 'false' && loginIntent && loginModal) {
+                if (signupModal) signupModal.style.display = "none";
+                loginModal.style.display = "block";
+            }
             
             // Show signup modal and hide login modal
             document.getElementById('show-signup').addEventListener('click', function(e) {
@@ -8616,13 +8928,8 @@
                     // Store the URL for later use after signup/login
                     clickedCardUrl = this.getAttribute('data-url') || '';
                     
-                    if (isAuthenticated) {
-                        // If user is logged in, redirect to the tour page
-                        if (clickedCardUrl) window.location.href = clickedCardUrl;
-                    } else {
-                        // If user is not logged in, show the login modal instead of signup
-                        loginModal.style.display = "block";
-                    }
+                    // Tour details/schedules are public; booking itself is login-gated later.
+                    if (clickedCardUrl) window.location.href = clickedCardUrl;
                 });
             });
             
@@ -9672,9 +9979,9 @@
             });
 
             // Hero section
-            document.querySelector('.hero-title').textContent = translations['hero_title'] || 'BAYAWAN TOURS';
-            document.querySelector('.initiative').textContent = translations['initiative'] || 'Initiative';
-            document.querySelector('.city-name').textContent = translations['bayawan_city'] || 'TOURS, APPROVED STAYS, MAPS, AND SMART TRIP PLANNING';
+            document.querySelector('.hero-title').textContent = translations['hero_title'] || 'IBAYAW TOURS';
+            document.querySelector('.initiative').textContent = translations['initiative'] || 'IBAYAW BAYAWAN';
+            document.querySelector('.city-name').textContent = translations['bayawan_city'] || 'IBAYAW BAYAWAN';
             document.querySelector('.hero-description').textContent = translations['hero_description'] || document.querySelector('.hero-description').textContent;
 
             // User dropdown (selector-based so added links don't break translation order)
@@ -9705,8 +10012,8 @@
                     translations['update_profile'] || 'Update Profile'
                 );
                 setDropdownLinkText(
-                    Array.from(userDropdown.querySelectorAll('a')).find(el => (el.getAttribute('href') || '').includes('/accommodations/my-bookings/')),
-                    translations['my_hotel_inn_bookings'] || 'Accommodation Links'
+                    Array.from(userDropdown.querySelectorAll('a')).find(el => (el.getAttribute('href') || '').includes('/tour-bookings/')),
+                    translations['my_hotel_inn_bookings'] || 'My Tour Bookings'
                 );
                 setDropdownLinkText(
                     Array.from(userDropdown.querySelectorAll('a')).find(el => (el.getAttribute('href') || '').includes('/companion/') && !el.classList.contains('request-notification')),
@@ -9730,7 +10037,7 @@
             
             const tourPacksTitle = document.querySelector('.packages-header .header-title h2:last-child');
             if (tourPacksTitle) {
-                tourPacksTitle.textContent = translations['tour_packs'] || 'TOUR PACKS';
+                tourPacksTitle.textContent = translations['tour_packs'] || 'TOUR PACKAGES';
             }
             
             const packagesDesc = document.querySelector('.packages-description p');
@@ -9770,20 +10077,6 @@
                 const p = aboutCards[2].querySelector('p');
                 if (h) h.textContent = translations['cultural_heritage'] || 'Cultural Heritage';
                 if (p) p.textContent = translations['cultural_heritage_desc'] || p.textContent;
-            }
-
-            // Programs section
-            const programsHeading = document.querySelector('#programs h2');
-            if (programsHeading) {
-                programsHeading.textContent = translations['our_programs'] || 'Our Programs';
-            }
-            const programsLead = document.querySelector('#programs p');
-            if (programsLead) {
-                programsLead.textContent = translations['programs_description'] || programsLead.textContent;
-            }
-            const programsCta = document.querySelector('#programs a[href="#tour-packages"]');
-            if (programsCta) {
-                programsCta.textContent = translations['explore_our_tours'] || 'Explore Our Tours';
             }
 
             // User bookings section tabs (tour bookings)
@@ -9830,7 +10123,7 @@
             const chatHeader = document.querySelector('.chat-header');
             if (chatHeader) {
                 const ownerSubtitleFallback = chatHeader.getAttribute('data-chat-subtitle-owner') || 'Owner | Rooms | Reports';
-                const guestSubtitleFallback = chatHeader.getAttribute('data-chat-subtitle-guest') || 'Hotels | Explore | Official Pages';
+                const guestSubtitleFallback = chatHeader.getAttribute('data-chat-subtitle-guest') || 'Stays | Explore | Verified Contacts';
                 chatHeader.setAttribute(
                     'data-chat-subtitle',
                     (isOwnerMode
@@ -10110,6 +10403,15 @@
                         bookingsPanel.scrollIntoView({ behavior: 'smooth', block: 'start' });
                     }
                 });
+
+                const normalizedHash = (window.location.hash || '').toLowerCase();
+                if (normalizedHash === '#mybookings' || normalizedHash === '#user-bookings') {
+                    bookingsPanel.classList.remove('bookings-collapsed');
+                    bookingsPanelToggle.textContent = 'Hide My Tour Dashboard';
+                    setTimeout(function () {
+                        bookingsPanel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    }, 50);
+                }
             }
 
             function applyBookingFilters() {
@@ -10353,9 +10655,20 @@
                         window.IbayawGuestChat.openAndSend(query);
                         return;
                     }
+                    const guestFab = document.getElementById('guestChatFab');
+                    if (guestFab) {
+                        guestFab.click();
+                        const guestInput = document.getElementById('guestChatInput');
+                        if (guestInput) {
+                            guestInput.value = query;
+                            guestInput.dispatchEvent(new KeyboardEvent('keypress', { key: 'Enter' }));
+                        }
+                        return;
+                    }
 
-                    if (typeof loginUser === 'function') {
-                        loginUser();
+                    const fallbackHref = String(link.getAttribute('href') || '').trim();
+                    if (fallbackHref && fallbackHref !== '#') {
+                        window.location.href = fallbackHref;
                     }
                 });
             });
@@ -11383,6 +11696,7 @@
             const parsedPrice = priceMatch ? parseInt(String(priceMatch[1]).replace(/,/g, ''), 10) : NaN;
 
             const badgeLabels = [];
+            badgeLabels.push('Tourism Office Approved');
             if (Number.isFinite(parsedPrice) && parsedPrice > 0 && parsedPrice <= 1800) {
                 badgeLabels.push('Budget Friendly');
             }
@@ -11459,7 +11773,7 @@
         });
 
         const revealTargets = Array.from(document.querySelectorAll(
-            '.discovery-section, .tour-packages, .approved-stays-section, .about-section, .programs-section, .contact-section'
+            '.discovery-section, .tour-packages, .approved-stays-section, .about-section, .contact-section'
         ));
         revealTargets.forEach((node) => node.classList.add('reveal-on-scroll'));
         if ('IntersectionObserver' in window) {
@@ -11504,6 +11818,55 @@
             }
         }
     });
+    </script>
+    <script>
+    (function () {
+        window.IbayawOpenAuthModal = function (panel) {
+            const loginModal = document.getElementById('loginModal');
+            const signupModal = document.getElementById('signupModal');
+            if (panel === 'signup' && signupModal) {
+                if (loginModal) loginModal.style.display = 'none';
+                signupModal.style.display = 'block';
+                return;
+            }
+            if (signupModal) signupModal.style.display = 'none';
+            if (loginModal) loginModal.style.display = 'block';
+        };
+
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', function () {
+                navigator.serviceWorker.register("/guest_app/service-worker.js", { scope: "/guest_app/" })
+                    .catch(function () {
+                        // PWA registration should never block public browsing.
+                    });
+            });
+        }
+
+        async function shareOrCopy(title, url) {
+            const absoluteUrl = new URL(String(url || ''), window.location.origin).href;
+            if (navigator.share) {
+                try {
+                    await navigator.share({ title: String(title || 'Bayawan Tourism'), url: absoluteUrl });
+                    return;
+                } catch (e) {}
+            }
+            try {
+                await navigator.clipboard.writeText(absoluteUrl);
+                alert('Link copied to clipboard.');
+            } catch (e) {
+                prompt('Copy this link:', absoluteUrl);
+            }
+        }
+        document.addEventListener('click', function (event) {
+            const btn = event.target.closest('.share-link-btn');
+            if (!btn) return;
+            event.preventDefault();
+            shareOrCopy(
+                String(btn.getAttribute('data-share-title') || 'Bayawan Tourism'),
+                String(btn.getAttribute('data-share-url') || window.location.href)
+            );
+        });
+    })();
     </script>
 </body>
 </html>

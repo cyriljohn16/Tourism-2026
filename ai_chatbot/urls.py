@@ -9,10 +9,12 @@ from .views import (
     log_guest_funnel_event,
     accommodation_booking_notifications,
     submit_usability_feedback,
+    chat_image_predict,
 )
 
 urlpatterns = [
     path("chat/", ai_chat, name="ai_chat"),
+    path("chat/image/", chat_image_predict, name="chat_image_predict"),
     # Backward-compatible route name retained for older reverse() calls.
     path("chat/", openai_chat, name="openai_chat"),
     path("chat/health/", chat_runtime_health, name="chat_runtime_health"),

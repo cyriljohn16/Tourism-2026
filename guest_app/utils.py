@@ -24,9 +24,9 @@ SYSTEM_TRANSLATIONS = {
         'es': 'Tour Ibayaw'
     },
     'nav_tour_packs': {
-        'en': 'Tour Packs',
-        'tl': 'Mga Tour Pack', 
-        'ceb': 'Mga Tour Pack',
+        'en': 'Tour Packages',
+        'tl': 'Mga Tour Package', 
+        'ceb': 'Mga Tour Package',
         'es': 'Paquetes de Tour'
     },
     'nav_programs': {
@@ -56,28 +56,28 @@ SYSTEM_TRANSLATIONS = {
     
     # Hero section
     'hero_title': {
-        'en': 'BAYAWAN TOURS',
-        'tl': 'MGA TOUR SA BAYAWAN',
-        'ceb': 'MGA TOUR SA BAYAWAN',
-        'es': 'TOURS EN BAYAWAN'
+        'en': 'IBAYAW TOURS',
+        'tl': 'IBAYAW TOURS',
+        'ceb': 'IBAYAW TOURS',
+        'es': 'IBAYAW TOURS'
     },
     'initiative': {
-        'en': 'Initiative',
-        'tl': 'Inisyatiba',
-        'ceb': 'Inisyatiba',
-        'es': 'Iniciativa'
+        'en': 'IBAYAW BAYAWAN',
+        'tl': 'IBAYAW BAYAWAN',
+        'ceb': 'IBAYAW BAYAWAN',
+        'es': 'IBAYAW BAYAWAN'
     },
     'bayawan_city': {
-        'en': 'BAYAWAN CITY',
-        'tl': 'LUNGSOD NG BAYAWAN',
-        'ceb': 'SYUDAD SA BAYAWAN',
-        'es': 'CIUDAD DE BAYAWAN'
+        'en': 'IBAYAW BAYAWAN',
+        'tl': 'IBAYAW BAYAWAN',
+        'ceb': 'IBAYAW BAYAWAN',
+        'es': 'IBAYAW BAYAWAN'
     },
     'hero_description': {
-        'en': 'We exist to improve the quality of Bayawanons, maximizing its tourism potential, using a website that will help elevate the already existing tours',
-        'tl': 'Kami ay naririto upang mapabuti ang kalidad ng buhay ng mga Bayawanon, pinapakinabangan ang potensyal nito sa turismo, gamit ang website na tutulong na maangat ang mga umiiral na turing',
-        'ceb': 'Ania kami aron pagpalambo sa kalidad sa mga Bayawanon, pagpaayo sa potensyal sa turismo, gamit ang website nga motabang sa pagpalambo sa mga tour nga anaa na',
-        'es': 'Existimos para mejorar la calidad de los Bayawanones, maximizando su potencial turístico, utilizando un sitio web que ayudará a elevar los tours ya existentes'
+        'en': 'Explore Tourism Office-approved stays, local tour packages, dining spots, destinations, culture, maps, and travel guidance in one platform.',
+        'tl': 'Explore Tourism Office-approved stays, local tour packages, dining spots, destinations, culture, maps, and travel guidance in one platform.',
+        'ceb': 'Explore Tourism Office-approved stays, local tour packages, dining spots, destinations, culture, maps, and travel guidance in one platform.',
+        'es': 'Explore Tourism Office-approved stays, local tour packages, dining spots, destinations, culture, maps, and travel guidance in one platform.'
     },
     
     # Tour packages section
@@ -88,16 +88,16 @@ SYSTEM_TRANSLATIONS = {
         'es': 'Ibayaw'
     },
     'tour_packs': {
-        'en': 'TOUR PACKS',
+        'en': 'TOUR PACKAGES',
         'tl': 'MGA PACKAGE NG TOUR',
-        'ceb': 'MGA TOUR PACK',
+        'ceb': 'MGA TOUR PACKAGE',
         'es': 'PAQUETES DE TOUR'
     },
     'tour_packs_description': {
-        'en': 'Now, let\'s see what activities can be seen in Bayawan, foods and its Hidden gems!',
-        'tl': 'Ngayon, tingnan natin ang mga aktibidad na makikita sa Bayawan, mga pagkain at mga hidden gems nito!',
-        'ceb': 'Karon, tan-awon nato unsa nga mga kalihokan ang makita sa Bayawan, mga pagkaon ug mga tinago nga bahandi niini!',
-        'es': '¡Ahora, veamos qué actividades se pueden ver en Bayawan, comidas y sus joyas escondidas!'
+        'en': 'Explore local activities, food experiences, nature attractions, and hidden gems through Tourism Office-guided tour packages.',
+        'tl': 'Explore local activities, food experiences, nature attractions, and hidden gems through Tourism Office-guided tour packages.',
+        'ceb': 'Explore local activities, food experiences, nature attractions, and hidden gems through Tourism Office-guided tour packages.',
+        'es': 'Explore local activities, food experiences, nature attractions, and hidden gems through Tourism Office-guided tour packages.'
     },
     'explore_all_tour': {
         'en': 'EXPLORE ALL TOUR',
@@ -191,10 +191,10 @@ SYSTEM_TRANSLATIONS = {
     },
     
     'my_hotel_inn_bookings': {
-        'en': 'My Hotel/Inn Bookings',
-        'tl': 'Aking Booking sa Hotel/Inn',
-        'ceb': 'Akong mga Booking sa Hotel/Inn',
-        'es': 'Mis Reservas de Hotel/Posada'
+        'en': 'My Tour Bookings',
+        'tl': 'Aking Tour Bookings',
+        'ceb': 'Akong mga Tour Bookings',
+        'es': 'Mis Reservas de Tours'
     },
     'add_companion': {
         'en': 'Add Companion',
@@ -298,10 +298,10 @@ SYSTEM_TRANSLATIONS = {
         'es': 'Sobre Ibayaw Tour'
     },
     'about_ibayaw_description': {
-        'en': 'Ibayaw Tour is dedicated to promoting tourism in Bayawan City, Negros Oriental, Philippines. We exist to improve the quality of life for Bayawanons by maximizing the city\'s tourism potential through innovative web solutions and exceptional tour experiences.',
-        'tl': 'Ang Ibayaw Tour ay nakatuon sa pagtataguyod ng turismo sa Bayawan City, Negros Oriental, Pilipinas. Layunin naming mapabuti ang kalidad ng buhay ng mga Bayawanon sa pamamagitan ng pagpapalakas ng potensyal ng lungsod sa turismo gamit ang makabagong web solutions at mahusay na karanasan sa tour.',
-        'ceb': 'Ang Ibayaw Tour nakatuon sa pagpalambo sa turismo sa Bayawan City, Negros Oriental, Pilipinas. Tumong namo ang pagpaayo sa kalidad sa kinabuhi sa mga Bayawanon pinaagi sa pagpalig-on sa potensyal sa syudad sa turismo gamit ang inobatibong web solutions ug maayong mga kasinatian sa tour.',
-        'es': 'Ibayaw Tour esta dedicado a promover el turismo en Bayawan City, Negros Oriental, Filipinas. Buscamos mejorar la calidad de vida de los Bayawanons maximizando el potencial turistico de la ciudad mediante soluciones web innovadoras y excelentes experiencias de tour.'
+        'en': 'Ibayaw Tour promotes Bayawan tourism through verified information, Tourism Office-guided tour packages, approved stays, maps, directions, and AI-assisted trip planning.',
+        'tl': 'Ibayaw Tour promotes Bayawan tourism through verified information, Tourism Office-guided tour packages, approved stays, maps, directions, and AI-assisted trip planning.',
+        'ceb': 'Ibayaw Tour promotes Bayawan tourism through verified information, Tourism Office-guided tour packages, approved stays, maps, directions, and AI-assisted trip planning.',
+        'es': 'Ibayaw Tour promotes Bayawan tourism through verified information, Tourism Office-guided tour packages, approved stays, maps, directions, and AI-assisted trip planning.'
     },
     'nature_adventure': {
         'en': 'Nature & Adventure',

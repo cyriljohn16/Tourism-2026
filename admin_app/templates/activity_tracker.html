@@ -35,6 +35,7 @@
         .content {
             flex: 1;
             padding: 26px;
+            min-width: 0;
         }
 
         .tracker-card {
@@ -42,6 +43,8 @@
             border-radius: 12px;
             box-shadow: 0 10px 24px rgba(15, 23, 42, 0.08);
             padding: 24px;
+            max-width: 1320px;
+            margin: 0 auto;
         }
 
         .heading {
@@ -96,6 +99,12 @@
             flex-wrap: wrap;
             gap: 10px;
             align-items: center;
+        }
+
+        .filter-row label {
+            font-size: 0.83rem;
+            font-weight: 700;
+            color: #334155;
         }
 
         .filter-row input,
@@ -155,6 +164,13 @@
             text-align: left;
             vertical-align: top;
             border-bottom: 1px solid var(--line);
+        }
+
+        td:nth-child(6),
+        td:nth-child(7) {
+            min-width: 180px;
+            white-space: normal;
+            word-break: break-word;
         }
 
         th {

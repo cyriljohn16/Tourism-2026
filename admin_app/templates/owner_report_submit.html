@@ -1,4 +1,5 @@
 {% load static %}
+<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
@@ -6,9 +7,19 @@
   <title>Owner Monthly Reports</title>
   <link rel="stylesheet" href="{% static 'css/navigation.css' %}">
   <style>
+    body {
+      font-family: "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      margin: 0;
+      background: #f4f7fc;
+      color: #1f2937;
+    }
+
     .owner-report-content {
       display: grid;
       gap: 18px;
+      max-width: 1200px;
+      margin: 0 auto;
+      width: 100%;
     }
 
     .owner-report-card {
@@ -17,6 +28,33 @@
       border-radius: 16px;
       box-shadow: 0 8px 24px rgba(15, 23, 42, 0.06);
       padding: 18px;
+    }
+
+    .history-card {
+      order: 1;
+    }
+
+    .form-card {
+      order: 2;
+    }
+
+    .owner-form-toggle {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-bottom: 12px;
+    }
+
+    .owner-form-toggle p {
+      margin: 0;
+      color: #475569;
+      font-size: 0.9rem;
+    }
+
+    .owner-form-body.is-collapsed {
+      display: none;
     }
 
     .owner-report-hero h1 {
@@ -138,6 +176,29 @@
       font-size: 0.85rem;
       color: #64748b;
       padding: 6px 4px;
+    }
+    .room-usage-type-card {
+      border: 1px solid #dbe5f4;
+      border-radius: 10px;
+      background: #fff;
+      padding: 10px;
+      display: grid;
+      gap: 8px;
+    }
+    .room-usage-type-head {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .room-usage-type-meta {
+      font-size: 0.82rem;
+      color: #475569;
+      margin-top: 2px;
+    }
+    .room-identifier-manual.is-hidden {
+      display: none;
     }
 
     .owner-report-btn {
@@ -320,7 +381,8 @@
     {% include 'components/owner_navigation.html' %}
   </aside>
 
-  <main class="content owner-report-content">
+  <main class="content">
+    <div class="owner-report-content">
     <section class="owner-report-card owner-report-hero">
       <h1>Tourism Office Monthly Reports</h1>
       <p>Submit required tourism monitoring data for each accommodation and reporting period.</p>
@@ -334,8 +396,13 @@
     </section>
     {% endif %}
 
-    <section class="owner-report-card">
+    <section class="owner-report-card form-card" id="ownerReportFormCard" data-has-reports="{% if report_rows and report_rows.paginator.count > 0 %}1{% else %}0{% endif %}">
       <h2 class="owner-report-title">Submit / Update Report</h2>
+      <div class="owner-form-toggle">
+        <p>Open the form when you are ready to submit a new report or update an existing period.</p>
+        <button class="owner-report-btn secondary" type="button" id="toggleOwnerReportForm">Submit / Update Report</button>
+      </div>
+      <div class="owner-form-body" id="ownerReportFormBody">
       <form method="post">
         {% csrf_token %}
         <div class="owner-form-grid">
@@ -386,45 +453,79 @@
             <label>Room Usage (Tourism Office Required)</label>
             <div class="owner-room-usage-grid">
               <div class="owner-room-usage-head">
-                Enter check-ins/check-outs per room type. Totals are computed from this section when provided.
+                Report monthly room usage by room type, then add specific room ID rows as needed.
               </div>
               {% for group in owner_accommodation_room_rows %}
                 <div class="room-usage-group" data-accom-id="{{ group.accom_id }}" style="display:none;">
                   {% if group.rooms %}
-                  <table class="owner-room-usage-table">
-                    <thead>
-                      <tr>
-                        <th>Room Type</th>
-                        <th>Check-ins</th>
-                        <th>Check-outs</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {% for room in group.rooms %}
-                      <tr>
-                        <td>{{ room.room_name }}</td>
-                        <td>
-                          <input
-                            type="number"
-                            min="0"
-                            value="0"
-                            name="room_checkins_{{ room.room_id }}"
-                            inputmode="numeric"
-                          >
-                        </td>
-                        <td>
-                          <input
-                            type="number"
-                            min="0"
-                            value="0"
-                            name="room_checkouts_{{ room.room_id }}"
-                            inputmode="numeric"
-                          >
-                        </td>
-                      </tr>
-                      {% endfor %}
-                    </tbody>
-                  </table>
+                    {% for room in group.rooms %}
+                    <div
+                      class="room-usage-type-card"
+                      data-room-id="{{ room.room_id }}"
+                      data-known-ids="{{ room.known_identifiers|join:'||' }}"
+                    >
+                      <div class="room-usage-type-head">
+                        <div>
+                          <strong>{{ room.room_name }}</strong>
+                          <div class="room-usage-type-meta">
+                            Room IDs/Numbers:
+                            {% if room.room_identifiers %}
+                              {{ room.room_identifiers }}
+                            {% else %}
+                              No room IDs encoded yet
+                            {% endif %}
+                            | Total Rooms: {{ room.total_rooms|default:1 }}
+                          </div>
+                        </div>
+                        <button type="button" class="owner-report-btn secondary room-usage-add-row">+ Add Room Usage Row</button>
+                      </div>
+                      <table class="owner-room-usage-table">
+                        <thead>
+                          <tr>
+                            <th>Room ID / Number</th>
+                            <th>Custom Room ID (optional)</th>
+                            <th>Check-ins</th>
+                            <th>Check-outs</th>
+                            <th></th>
+                          </tr>
+                        </thead>
+                        <tbody class="room-usage-rows">
+                          <tr class="room-usage-row">
+                            <td>
+                              <input type="hidden" name="room_usage_room_id" value="{{ room.room_id }}">
+                              <select name="room_usage_identifier" class="room-identifier-select">
+                                {% if room.known_identifiers %}
+                                  {% for identifier in room.known_identifiers %}
+                                    <option value="{{ identifier }}">{{ identifier }}</option>
+                                  {% endfor %}
+                                  <option value="__manual__">Other (type manually)</option>
+                                {% else %}
+                                  <option value="__manual__">No IDs encoded yet</option>
+                                {% endif %}
+                              </select>
+                            </td>
+                            <td>
+                              <input
+                                type="text"
+                                name="room_usage_identifier_manual"
+                                class="room-identifier-manual {% if room.known_identifiers %}is-hidden{% endif %}"
+                                placeholder="e.g., 101"
+                              >
+                            </td>
+                            <td>
+                              <input type="number" min="0" value="0" name="room_usage_checkins" inputmode="numeric">
+                            </td>
+                            <td>
+                              <input type="number" min="0" value="0" name="room_usage_checkouts" inputmode="numeric">
+                            </td>
+                            <td>
+                              <button type="button" class="owner-report-btn secondary room-usage-remove-row">Remove</button>
+                            </td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+                    {% endfor %}
                   {% else %}
                     <div class="owner-room-usage-empty">
                       No rooms found for this accommodation yet. Add rooms first, then submit room-level reporting.
@@ -454,9 +555,10 @@
           <a class="owner-report-btn secondary" href="{% url 'admin_app:owner_hub' %}">Back to Owner Hub</a>
         </div>
       </form>
+      </div>
     </section>
 
-    <section class="owner-report-card">
+    <section class="owner-report-card history-card">
       <h2 class="owner-report-title">My Submitted Reports</h2>
       <div class="owner-report-table-wrap">
         <table class="owner-report-table">
@@ -469,6 +571,9 @@
               <th>Check-outs</th>
               <th>Rooms Used</th>
               <th>Room-level</th>
+              <th>Room Usage Detail</th>
+              <th>Admin Review Notes</th>
+              <th>Reviewed By</th>
               <th>Updated</th>
             </tr>
           </thead>
@@ -488,11 +593,32 @@
                   Total-only (legacy)
                 {% endif %}
               </td>
-              <td>{{ row.updated_at|date:"M d, Y H:i" }}</td>
+              <td>
+                {% if row.room_usage_rows.all %}
+                  {% regroup row.room_usage_rows.all by room_name_snapshot as usage_groups %}
+                  {% for group in usage_groups %}
+                    <strong>{{ group.grouper }}</strong> (Total rooms: {{ group.list.0.total_rooms_snapshot|default:1 }})<br>
+                    {% for usage in group.list %}
+                      - Room {{ usage.selected_room_identifier|default:"Not specified" }}: {{ usage.check_ins }} in / {{ usage.check_outs }} out<br>
+                    {% endfor %}
+                  {% endfor %}
+                {% else %}
+                  -
+                {% endif %}
+              </td>
+              <td>{{ row.review_notes|default:"-" }}</td>
+              <td>
+                {% if row.reviewed_by %}
+                  {{ row.reviewed_by.first_name }} {{ row.reviewed_by.last_name }}
+                {% else %}
+                  -
+                {% endif %}
+              </td>
+              <td>{{ row.updated_at|date:"M d, Y" }}</td>
             </tr>
             {% empty %}
             <tr>
-              <td colspan="8" class="owner-report-empty">No reports submitted yet.</td>
+              <td colspan="11" class="owner-report-empty">No reports submitted yet.</td>
             </tr>
             {% endfor %}
           </tbody>
@@ -510,12 +636,33 @@
       </div>
       {% endif %}
     </section>
+    </div>
   </main>
   <script>
     (function () {
+      const formCard = document.getElementById("ownerReportFormCard");
+      const formBody = document.getElementById("ownerReportFormBody");
+      const formToggle = document.getElementById("toggleOwnerReportForm");
       const accommodationSelect = document.getElementById("accommodation_id");
       const groups = Array.from(document.querySelectorAll(".room-usage-group"));
       const emptyState = document.getElementById("room-usage-empty");
+      if (formCard && formBody && formToggle) {
+        const hasReports = String(formCard.getAttribute("data-has-reports") || "") === "1";
+        if (hasReports) {
+          formBody.classList.add("is-collapsed");
+          formToggle.textContent = "Submit New Report";
+        } else {
+          formBody.classList.remove("is-collapsed");
+          formToggle.textContent = "Submit / Update Report";
+        }
+        formToggle.addEventListener("click", function () {
+          const collapsed = formBody.classList.toggle("is-collapsed");
+          formToggle.textContent = collapsed ? "Submit New Report" : "Hide Report Form";
+          if (!collapsed) {
+            formCard.scrollIntoView({ behavior: "smooth", block: "start" });
+          }
+        });
+      }
       if (!accommodationSelect || !groups.length || !emptyState) return;
       function syncRoomGroup() {
         const selected = String(accommodationSelect.value || "");
@@ -529,6 +676,85 @@
       }
       accommodationSelect.addEventListener("change", syncRoomGroup);
       syncRoomGroup();
+
+      function bindIdentifierToggle(row) {
+        const select = row.querySelector(".room-identifier-select");
+        const manual = row.querySelector(".room-identifier-manual");
+        if (!select || !manual) return;
+        const toggle = () => {
+          const isManual = String(select.value || "") === "__manual__";
+          manual.classList.toggle("is-hidden", !isManual);
+          if (!isManual) manual.value = "";
+        };
+        select.addEventListener("change", toggle);
+        toggle();
+      }
+
+      function buildUsageRow(roomId, knownIds) {
+        const tr = document.createElement("tr");
+        tr.className = "room-usage-row";
+        const options = (Array.isArray(knownIds) ? knownIds : [])
+          .filter((id) => String(id || "").trim())
+          .map((id) => `<option value="${String(id).replace(/"/g, "&quot;")}">${String(id)}</option>`)
+          .join("");
+        tr.innerHTML = `
+          <td>
+            <input type="hidden" name="room_usage_room_id" value="${roomId}">
+            <select name="room_usage_identifier" class="room-identifier-select">
+              ${options}
+              <option value="__manual__">${options ? "Other (type manually)" : "No IDs encoded yet"}</option>
+            </select>
+          </td>
+          <td>
+            <input
+              type="text"
+              name="room_usage_identifier_manual"
+              class="room-identifier-manual ${options ? "is-hidden" : ""}"
+              placeholder="e.g., 101"
+            >
+          </td>
+          <td><input type="number" min="0" value="0" name="room_usage_checkins" inputmode="numeric"></td>
+          <td><input type="number" min="0" value="0" name="room_usage_checkouts" inputmode="numeric"></td>
+          <td><button type="button" class="owner-report-btn secondary room-usage-remove-row">Remove</button></td>
+        `;
+        bindIdentifierToggle(tr);
+        return tr;
+      }
+
+      document.querySelectorAll(".room-usage-row").forEach(bindIdentifierToggle);
+      document.querySelectorAll(".room-usage-type-card").forEach((card) => {
+        const rowsWrap = card.querySelector(".room-usage-rows");
+        const addBtn = card.querySelector(".room-usage-add-row");
+        if (!rowsWrap || !addBtn) return;
+        const roomId = String(card.getAttribute("data-room-id") || "");
+        const knownRaw = String(card.getAttribute("data-known-ids") || "");
+        const knownIds = knownRaw
+          ? knownRaw.split("||").map((v) => String(v || "").trim()).filter(Boolean)
+          : [];
+        addBtn.addEventListener("click", () => {
+          rowsWrap.appendChild(buildUsageRow(roomId, knownIds));
+        });
+        rowsWrap.addEventListener("click", (event) => {
+          const target = event.target;
+          if (!(target instanceof HTMLElement) || !target.classList.contains("room-usage-remove-row")) return;
+          const allRows = Array.from(rowsWrap.querySelectorAll(".room-usage-row"));
+          if (allRows.length <= 1) {
+            const row = allRows[0];
+            if (!row) return;
+            row.querySelectorAll("input[type='number']").forEach((input) => { input.value = "0"; });
+            const select = row.querySelector(".room-identifier-select");
+            if (select) select.selectedIndex = 0;
+            const manual = row.querySelector(".room-identifier-manual");
+            if (manual) manual.value = "";
+            if (select && manual) {
+              manual.classList.toggle("is-hidden", String(select.value || "") !== "__manual__");
+            }
+            return;
+          }
+          const row = target.closest(".room-usage-row");
+          if (row) row.remove();
+        });
+      });
     })();
   </script>
 </body>

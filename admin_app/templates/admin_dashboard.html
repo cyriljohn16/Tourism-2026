@@ -1401,7 +1401,8 @@
       margin-top: 10px;
       padding: 8px 12px;
       background-color: #875a34;
-      color: white;
+      color: #fff !important;
+      text-decoration: none;
       border: none;
       border-radius: 4px;
       cursor: pointer;
@@ -1409,10 +1410,21 @@
       font-weight: 500;
       transition: background-color 0.2s;
       width: 100%;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
     }
     
     .view-itinerary-btn:hover {
       background-color: #6d4827;
+      color: #fff !important;
+      text-decoration: none;
+    }
+
+    .survey-details-btn {
+      width: auto;
+      min-width: 110px;
+      padding: 7px 12px;
     }
     
     /* Flip Calendar Styles */
@@ -2182,7 +2194,7 @@
       <div class="stats-container">
         <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; border:1px solid #d8e7ff; border-left:3px solid #2f80ed; border-radius:8px; background:#fff; padding:10px 12px;">
           <div style="font-size:15px; font-weight:600; color:#1f2937;">Total Survey Responses</div>
-          <a href="{% url 'admin_app:survey_results_dashboard' %}" class="view-itinerary-btn">View Details</a>
+          <a href="{% url 'admin_app:survey_results_dashboard' %}" class="view-itinerary-btn survey-details-btn">View Details</a>
         </div>
       </div>
 

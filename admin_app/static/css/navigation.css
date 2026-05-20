@@ -1,6 +1,7 @@
 /* Ibayaw Unified Navigation + Workspace Design System */
 
 :root {
+  --font-sans: "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   --brand-50: #f8f3ee;
   --brand-100: #f2e6d8;
   --brand-200: #e6c8a6;
@@ -55,9 +56,11 @@ html {
 
 body {
   margin: 0;
+  font-family: var(--font-sans);
   color: var(--ink-900);
   background: radial-gradient(circle at top right, #f6efe7 0%, #f7f9fc 35%, #f4f6fb 100%);
   line-height: 1.45;
+  overflow-x: hidden;
 }
 
 img,
@@ -100,9 +103,12 @@ a:hover {
 }
 
 .content {
+  font-family: var(--font-sans);
   margin-left: var(--nav-width);
   min-height: 100vh;
   padding: var(--space-6);
+  min-width: 0;
+  overflow-x: hidden;
 }
 
 /* Shared workspace aesthetics for role pages */
@@ -125,6 +131,13 @@ a:hover {
   border: 1px solid var(--ink-200);
   border-radius: var(--radius-md);
   overflow: hidden;
+}
+
+.content :where(.table-wrap, .table-responsive, .owner-report-table-wrap) {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 .content :where(th, td) {
@@ -647,5 +660,16 @@ a:hover {
 
   .nav-sidebar {
     min-height: auto;
+  }
+
+  .content :where(table) {
+    display: block;
+    white-space: nowrap;
+    overflow-x: auto;
+  }
+
+  .content :where(button, .btn, a.btn) {
+    max-width: 100%;
+    white-space: normal;
   }
 }

@@ -560,14 +560,20 @@
 
   <div class="category-filters" aria-label="Category filters">
     <h4>Filter Categories</h4>
+    {% if map_mode == 'guest' %}
+    <p style="margin: 0 0 8px; font-size: 0.78rem; line-height: 1.35; color: #41556f;">
+      Official Bayawan tourism markers are shown on the map. Use filters to view accommodations, dining places, landmarks, and other tourism locations.
+    </p>
+    {% endif %}
     <div class="filter-grid">
       <label class="filter-chip"><input type="checkbox" class="category-filter" data-category="restaurant" checked> Dining</label>
-      <label class="filter-chip"><input type="checkbox" class="category-filter" data-category="hotel" checked> Hotels</label>
-      <label class="filter-chip"><input type="checkbox" class="category-filter" data-category="landmark" checked> Landmarks</label>
-      <label class="filter-chip"><input type="checkbox" class="category-filter" data-category="public" checked> Public</label>
-      <label class="filter-chip"><input type="checkbox" class="category-filter" data-category="shopping" checked> Shopping</label>
-      <label class="filter-chip"><input type="checkbox" class="category-filter" data-category="custom" checked> Other</label>
+      <label class="filter-chip"><input type="checkbox" class="category-filter" data-category="hotel" checked> Approved Stays</label>
+      <label class="filter-chip"><input type="checkbox" class="category-filter" data-category="landmark" checked> Tourist Spots / Landmarks</label>
+      <label class="filter-chip"><input type="checkbox" class="category-filter" data-category="public" checked> Public Facilities</label>
+      <label class="filter-chip"><input type="checkbox" class="category-filter" data-category="shopping" checked> Shopping / Local Products</label>
+      <label class="filter-chip"><input type="checkbox" class="category-filter" data-category="custom" checked> Other Tourism Places</label>
     </div>
+    <p id="map-filter-status" style="margin: 8px 0 0; font-size: 0.77rem; color: #41556f;"></p>
   </div>
   
   <!-- Legend -->
@@ -575,27 +581,27 @@
     <h4>Map Legend</h4>
     <div class="legend-item">
       <div class="legend-color" style="background-color: #e25562;"></div>
-      <div class="legend-label">Food & Restaurants</div>
+      <div class="legend-label">Dining</div>
     </div>
     <div class="legend-item">
       <div class="legend-color" style="background-color: #ffd700;"></div>
-      <div class="legend-label">Hotels & Accommodations</div>
+      <div class="legend-label">Approved Stays</div>
     </div>
     <div class="legend-item">
       <div class="legend-color" style="background-color: #2A81CB;"></div>
-      <div class="legend-label">Public Services</div>
+      <div class="legend-label">Public Facilities</div>
     </div>
     <div class="legend-item">
       <div class="legend-color" style="background-color: #2AAD27;"></div>
-      <div class="legend-label">Shopping</div>
+      <div class="legend-label">Shopping / Local Products</div>
     </div>
     <div class="legend-item">
       <div class="legend-color" style="background-color: #f49630;"></div>
-      <div class="legend-label">Landmarks</div>
+      <div class="legend-label">Tourist Spots / Landmarks</div>
     </div>
     <div class="legend-item">
       <div class="legend-color" style="background-color: #2A81CB;"></div>
-      <div class="legend-label">Custom Places</div>
+      <div class="legend-label">Other Tourism Places</div>
     </div>
   </div>
   
@@ -605,12 +611,12 @@
     <h4>Add Custom Marker</h4>
     <input type="text" class="custom-input" id="marker-name" placeholder="Enter location name">
     <select class="custom-input" id="marker-category">
-      <option value="restaurant">Food & Restaurant</option>
-      <option value="hotel">Hotel & Accommodation</option>
-      <option value="public">Public Service</option>
-      <option value="shopping">Shopping</option>
-      <option value="landmark">Landmark</option>
-      <option value="custom">Custom Place</option>
+      <option value="restaurant">Dining</option>
+      <option value="hotel">Approved Stays</option>
+      <option value="public">Public Facilities</option>
+      <option value="shopping">Shopping / Local Products</option>
+      <option value="landmark">Tourist Spots / Landmarks</option>
+      <option value="custom">Other Tourism Places</option>
     </select>
     <textarea class="custom-input" id="marker-details" placeholder="Additional details (optional)"></textarea>
     
@@ -702,13 +708,21 @@
     // Initialize map
     var map = L.map('map', {
       crs: L.CRS.Simple,
-      minZoom: -1,
-      maxZoom: 2
+      minZoom: -3,
+      maxZoom: 3,
+      zoomSnap: 0.25
     });
     
-    var bounds = [[0, 0], [1500, 1200]];
-    L.imageOverlay("{% static 'images/bayawan_map.png' %}", bounds).addTo(map);
+    const LEGACY_MAP_HEIGHT = 1500;
+    const LEGACY_MAP_WIDTH = 1200;
+    const OFFICIAL_MAP_HEIGHT = 6250;
+    const OFFICIAL_MAP_WIDTH = 4419;
+    const LEGACY_TO_OFFICIAL_SCALE_Y = OFFICIAL_MAP_HEIGHT / LEGACY_MAP_HEIGHT;
+    const LEGACY_TO_OFFICIAL_SCALE_X = OFFICIAL_MAP_WIDTH / LEGACY_MAP_WIDTH;
+    var bounds = [[0, 0], [OFFICIAL_MAP_HEIGHT, OFFICIAL_MAP_WIDTH]];
+    L.imageOverlay("/static/images/bayawan_tourist_map_official.png", bounds).addTo(map);
     map.fitBounds(bounds);
+    map.setMaxBounds(bounds);
     const MAP_COORD_BOUNDS = {
       latMin: bounds[0][0],
       latMax: bounds[1][0],
@@ -728,6 +742,43 @@
         lngVal >= (MAP_COORD_BOUNDS.lngMin - padding) &&
         lngVal <= (MAP_COORD_BOUNDS.lngMax + padding)
       );
+    }
+
+    function isLegacyImageCoordinate(lat, lng) {
+      const latVal = Number(lat);
+      const lngVal = Number(lng);
+      return (
+        Number.isFinite(latVal) &&
+        Number.isFinite(lngVal) &&
+        latVal >= 0 &&
+        latVal <= LEGACY_MAP_HEIGHT &&
+        lngVal >= 0 &&
+        lngVal <= LEGACY_MAP_WIDTH
+      );
+    }
+
+    function scaleLegacyPointToOfficial(point) {
+      const latVal = Number(point && point.lat);
+      const lngVal = Number(point && point.lng);
+      if (!Number.isFinite(latVal) || !Number.isFinite(lngVal)) {
+        return { lat: latVal, lng: lngVal };
+      }
+      return {
+        lat: latVal * LEGACY_TO_OFFICIAL_SCALE_Y,
+        lng: lngVal * LEGACY_TO_OFFICIAL_SCALE_X
+      };
+    }
+
+    function normalizeStoredMapCoordinate(lat, lng) {
+      const latVal = Number(lat);
+      const lngVal = Number(lng);
+      if (!Number.isFinite(latVal) || !Number.isFinite(lngVal)) {
+        return null;
+      }
+      if (isLegacyImageCoordinate(latVal, lngVal)) {
+        return scaleLegacyPointToOfficial({ lat: latVal, lng: lngVal });
+      }
+      return { lat: latVal, lng: lngVal };
     }
 
     function normalizePlaceName(value) {
@@ -771,11 +822,11 @@
     function normalizeCategoryKey(rawCategory) {
       const normalized = normalizePlaceName(rawCategory);
       if (!normalized) return "custom";
-      if (normalized.includes("restaurant") || normalized.includes("food") || normalized.includes("dining")) return "restaurant";
-      if (normalized.includes("hotel") || normalized.includes("inn") || normalized.includes("accommodation")) return "hotel";
-      if (normalized.includes("public") || normalized.includes("service")) return "public";
-      if (normalized.includes("shop") || normalized.includes("market")) return "shopping";
-      if (normalized.includes("landmark") || normalized.includes("tourist") || normalized.includes("spot")) return "landmark";
+      if (normalized.includes("restaurant") || normalized.includes("food") || normalized.includes("dining") || normalized.includes("cafe")) return "restaurant";
+      if (normalized.includes("hotel") || normalized.includes("inn") || normalized.includes("accommodation") || normalized.includes("approved stay")) return "hotel";
+      if (normalized.includes("public") || normalized.includes("service") || normalized.includes("facility") || normalized.includes("terminal")) return "public";
+      if (normalized.includes("shop") || normalized.includes("market") || normalized.includes("local product") || normalized.includes("souvenir")) return "shopping";
+      if (normalized.includes("landmark") || normalized.includes("tourist") || normalized.includes("spot") || normalized.includes("attraction") || normalized.includes("nature") || normalized.includes("falls")) return "landmark";
       if (normalized.includes("custom") || normalized.includes("other")) return "custom";
       return "custom";
     }
@@ -803,6 +854,7 @@
     
     // Track markers by ID for editing
     var markersById = {};
+    var allMapMarkers = [];
     var markerLayers = {
       restaurant: L.layerGroup(),
       hotel: L.layerGroup(),
@@ -823,17 +875,51 @@
       return enabled;
     }
 
+    function getActiveSearchTerm() {
+      const input = document.getElementById('search-input');
+      return String((input && input.value) || '').trim().toLowerCase();
+    }
+
     function applyCategoryFilterState() {
       const enabled = collectEnabledCategories();
-      Object.entries(markerLayers).forEach(([category, layer]) => {
-        if (enabled.has(category)) {
-          if (!map.hasLayer(layer)) {
-            map.addLayer(layer);
+      const searchTerm = getActiveSearchTerm();
+      const statusEl = document.getElementById('map-filter-status');
+      let visibleCount = 0;
+
+      Object.values(markerLayers).forEach(layer => layer.clearLayers());
+
+      allMapMarkers.forEach((entry) => {
+        if (!entry || !entry.marker) return;
+        const categoryKey = String(entry.categoryKey || 'custom').toLowerCase();
+        const categoryMatch = enabled.has(categoryKey);
+        const searchMatch = !searchTerm || String(entry.searchText || '').includes(searchTerm);
+        if (categoryMatch && searchMatch) {
+          const layer = markerLayers[categoryKey] || markerLayers.custom;
+          if (layer) {
+            layer.addLayer(entry.marker);
+            visibleCount += 1;
           }
-        } else if (map.hasLayer(layer)) {
+        }
+      });
+
+      Object.entries(markerLayers).forEach(([category, layer]) => {
+        if (enabled.has(category) && !map.hasLayer(layer)) {
+          map.addLayer(layer);
+        }
+        if (!enabled.has(category) && map.hasLayer(layer)) {
           map.removeLayer(layer);
         }
       });
+
+      if (statusEl) {
+        if (visibleCount === 0) {
+          statusEl.textContent = searchTerm
+            ? `No places match "${searchTerm}" for the selected filters.`
+            : 'No places match the selected filters.';
+        } else {
+          statusEl.textContent = `Showing ${visibleCount} place${visibleCount === 1 ? '' : 's'}.`;
+        }
+      }
     }
     
     // Add all layer groups to the map
@@ -851,13 +937,14 @@
         console.info("Guest marker hidden by configured rule:", loc.name);
         return null;
       }
-      if (!isMapCoordinateWithinBounds(loc.lat, loc.lng)) {
+      const displayCoords = normalizeStoredMapCoordinate(loc.lat, loc.lng);
+      if (!displayCoords || !isMapCoordinateWithinBounds(displayCoords.lat, displayCoords.lng)) {
         console.warn("Skipping marker outside map bounds:", loc.name, loc.lat, loc.lng);
         return null;
       }
       const categoryKey = normalizeCategoryKey(loc.category);
       const allowEdit = Boolean(CAN_EDIT_BOOKMARKS && id);
-      var marker = L.marker([loc.lat, loc.lng], {
+      var marker = L.marker([displayCoords.lat, displayCoords.lng], {
         icon: icons[categoryKey] || icons.custom,
         draggable: Boolean(isDraggable && CAN_EDIT_BOOKMARKS)
       });
@@ -865,6 +952,8 @@
       // Store the location's name and GPS coordinates in the marker's options for later use
       marker.options.locationName = loc.name;
       marker.options.categoryKey = categoryKey;
+      marker.options.originalCategory = loc.category;
+      marker.options.storedMapCoords = { lat: Number(loc.lat), lng: Number(loc.lng) };
       
       // Find corresponding GPS coordinates if this is a known location
       let gpsCoords = null;
@@ -878,7 +967,7 @@
       
       // If we couldn't find it in reference points, calculate it
       if (!gpsCoords) {
-        gpsCoords = mapToGpsCoordinates(loc.lat, loc.lng);
+        gpsCoords = mapToGpsCoordinates(displayCoords.lat, displayCoords.lng);
       }
       
       // Store GPS coordinates in marker options
@@ -926,6 +1015,13 @@
       // Add to appropriate layer group and set up popup events
       if (markerLayers[categoryKey]) {
         marker.addTo(markerLayers[categoryKey]);
+        allMapMarkers.push({
+          marker: marker,
+          markerId: id,
+          categoryKey: categoryKey,
+          originalCategory: String(loc.category || ''),
+          searchText: `${String(loc.name || '')} ${String(loc.details || '')}`.toLowerCase(),
+        });
         
         // Store reference if it has an ID
         if (id) {
@@ -988,12 +1084,12 @@
     // Helper function to get human-readable category name
     function getCategoryName(category) {
       switch(normalizeCategoryKey(category)) {
-        case 'restaurant': return 'Food & Restaurant';
-        case 'hotel': return 'Hotel & Accommodation';
-        case 'public': return 'Public Service';
-        case 'shopping': return 'Shopping';
-        case 'landmark': return 'Landmark';
-        case 'custom': return 'Custom Place';
+        case 'restaurant': return 'Dining';
+        case 'hotel': return 'Approved Stays';
+        case 'public': return 'Public Facilities';
+        case 'shopping': return 'Shopping / Local Products';
+        case 'landmark': return 'Tourist Spots / Landmarks';
+        case 'custom': return 'Other Tourism Places';
         default: return category;
       }
     }
@@ -1055,6 +1151,7 @@
     function clearBookmarkMarkers() {
       Object.values(markerLayers).forEach(layer => layer.clearLayers());
       markersById = {};
+      allMapMarkers = [];
     }
 
     function loadBookmarks() {
@@ -1237,12 +1334,12 @@
             
             <select id="edit-category" style="width: 100%; padding: 8px; margin-bottom: 10px; 
                     border: 1px solid #ccc; border-radius: 4px;">
-              <option value="restaurant" ${bookmark.category === 'restaurant' ? 'selected' : ''}>Food & Restaurant</option>
-              <option value="hotel" ${bookmark.category === 'hotel' ? 'selected' : ''}>Hotel & Accommodation</option>
-              <option value="public" ${bookmark.category === 'public' ? 'selected' : ''}>Public Service</option>
-              <option value="shopping" ${bookmark.category === 'shopping' ? 'selected' : ''}>Shopping</option>
-              <option value="landmark" ${bookmark.category === 'landmark' ? 'selected' : ''}>Landmark</option>
-              <option value="custom" ${bookmark.category === 'custom' ? 'selected' : ''}>Custom Place</option>
+              <option value="restaurant" ${bookmark.category === 'restaurant' ? 'selected' : ''}>Dining</option>
+              <option value="hotel" ${bookmark.category === 'hotel' ? 'selected' : ''}>Approved Stays</option>
+              <option value="public" ${bookmark.category === 'public' ? 'selected' : ''}>Public Facilities</option>
+              <option value="shopping" ${bookmark.category === 'shopping' ? 'selected' : ''}>Shopping / Local Products</option>
+              <option value="landmark" ${bookmark.category === 'landmark' ? 'selected' : ''}>Tourist Spots / Landmarks</option>
+              <option value="custom" ${bookmark.category === 'custom' ? 'selected' : ''}>Other Tourism Places</option>
             </select>
             
             <textarea id="edit-details" placeholder="Additional details" 
@@ -1434,30 +1531,21 @@
     
     // Search functionality
     document.getElementById('search-input').addEventListener('input', function(e) {
-      var searchTerm = e.target.value.toLowerCase();
-      if (searchTerm.length < 2) {
+      const searchTerm = String(e.target.value || '').trim().toLowerCase();
+      applyCategoryFilterState();
+      if (!searchTerm) {
         setStatusMessage("");
         return;
       }
-      
-      // Search in our markers
-      var results = [];
-      
-      Object.entries(markersById).forEach(([id, marker]) => {
-        const name = marker.options.locationName || '';
-        
-        if (name.toLowerCase().includes(searchTerm)) {
-          results.push({
-            id: id,
-            marker: marker,
-            name: name
-          });
-        }
+
+      const enabled = collectEnabledCategories();
+      const result = allMapMarkers.find((entry) => {
+        if (!entry || !entry.marker) return false;
+        const categoryKey = String(entry.categoryKey || 'custom').toLowerCase();
+        return enabled.has(categoryKey) && String(entry.searchText || '').includes(searchTerm);
       });
-      
-      if (results.length > 0) {
-        // Center map on first result
-        const result = results[0];
+
+      if (result && result.marker) {
         map.setView(result.marker.getLatLng(), 1);
         result.marker.openPopup();
         setStatusMessage("");
@@ -1580,7 +1668,7 @@
     }
     
     // Reference points for coordinate conversion
-    const referencePoints = [
+    let referencePoints = [
       {
         name: "Partosa Store",
         gps: { lat: 9.368771, lng: 122.805572 },
@@ -1817,6 +1905,11 @@
         map: { lat: 9.3, lng: 431.0 }
       }
     ];
+    referencePoints.forEach(point => {
+      if (point && point.map && isLegacyImageCoordinate(point.map.lat, point.map.lng)) {
+        point.map = scaleLegacyPointToOfficial(point.map);
+      }
+    });
 
     function haversineDistanceKm(lat1, lng1, lat2, lng2) {
       const toRad = value => (Number(value) * Math.PI) / 180;
@@ -2349,6 +2442,13 @@
           stopLocationTracking();
         }
       });
+
+      const params = new URLSearchParams(window.location.search || "");
+      if (params.get("locate") === "1") {
+        setTimeout(function() {
+          locateMeBtn.click();
+        }, 500);
+      }
     }
 
     const startNavBtn = document.getElementById('start-navigation');
@@ -2392,6 +2492,7 @@
       clearSearchBtn.addEventListener('click', function() {
         document.getElementById('search-input').value = '';
         setStatusMessage("");
+        applyCategoryFilterState();
         map.fitBounds(bounds);
       });
     }

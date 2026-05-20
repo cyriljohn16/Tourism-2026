@@ -1,22 +1,31 @@
 {% load static %}
+<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Owner Reports Review</title>
-  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="{% static 'css/navigation.css' %}">
   <style>
     body,
     .navigation,
     .content,
     .owner-review-content {
-      font-family: "Poppins", "Segoe UI", Arial, sans-serif;
+      font-family: "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    }
+
+    body {
+      margin: 0;
+      background: #f4f7fc;
+      color: #1f2937;
     }
 
     .owner-review-content {
       display: grid;
       gap: 18px;
+      max-width: 1200px;
+      margin: 0 auto;
+      width: 100%;
     }
 
     .owner-review-card {
@@ -62,6 +71,100 @@
       padding: 14px;
       margin-bottom: 12px;
       background: #fff;
+    }
+
+    .owner-review-toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      align-items: flex-end;
+      justify-content: space-between;
+      margin-bottom: 12px;
+    }
+
+    .owner-review-filter {
+      display: grid;
+      gap: 6px;
+      min-width: min(420px, 100%);
+      flex: 1 1 320px;
+    }
+
+    .owner-review-filter label {
+      font-size: 0.8rem;
+      font-weight: 700;
+      color: #334155;
+      letter-spacing: 0.01em;
+    }
+
+    .owner-review-filter select {
+      width: 100%;
+      min-height: 40px;
+      border: 1px solid #cfd8e6;
+      border-radius: 10px;
+      padding: 8px 10px;
+      font-size: 0.93rem;
+      color: #0f172a;
+      background: #fff;
+    }
+
+    .owner-review-toolbar-actions {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .owner-review-link-btn {
+      border: 1px solid #d3deef;
+      border-radius: 10px;
+      min-height: 40px;
+      padding: 10px 13px;
+      font-size: 0.84rem;
+      font-weight: 700;
+      text-decoration: none;
+      color: #1e3a8a;
+      background: #f8fbff;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .owner-review-link-btn.primary {
+      color: #fff;
+      border-color: #1f63d3;
+      background: linear-gradient(180deg, #1f63d3 0%, #0f52c0 100%);
+    }
+
+    .owner-review-accommodation-list {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+      gap: 8px;
+      margin-bottom: 14px;
+    }
+
+    .owner-review-accommodation-pill {
+      border: 1px solid #dae5f5;
+      border-radius: 10px;
+      padding: 9px 10px;
+      background: #f8fbff;
+      text-decoration: none;
+      color: #123a6c;
+      font-size: 0.82rem;
+      font-weight: 700;
+      line-height: 1.35;
+      display: block;
+    }
+
+    .owner-review-accommodation-pill.active {
+      background: #e3efff;
+      border-color: #9fc0ef;
+      color: #0f2f57;
+    }
+
+    .owner-review-hint {
+      margin: 0 0 10px;
+      font-size: 0.84rem;
+      color: #475569;
+      line-height: 1.4;
     }
 
     .owner-review-meta {
@@ -256,7 +359,8 @@
     {% include 'components/navigation.html' %}
   </aside>
 
-  <main class="content owner-review-content">
+  <main class="content">
+    <div class="owner-review-content">
     <section class="owner-review-card owner-review-hero">
       <h1>Accommodation Owner Report Review</h1>
       <p>Review monthly tourism-office submissions from accommodation owners.</p>
@@ -271,6 +375,42 @@
     {% endif %}
 
     <section class="owner-review-card">
+      <div class="owner-review-toolbar">
+        <form method="get" class="owner-review-filter">
+          <label for="accommodation_id">Filter by accommodation</label>
+          <select id="accommodation_id" name="accommodation_id" onchange="this.form.submit()">
+            <option value="">All accommodations</option>
+            {% for option in accommodation_choices %}
+              <option value="{{ option.accommodation_id }}" {% if selected_accommodation_id == option.accommodation_id|stringformat:'s' %}selected{% endif %}>
+                {{ option.accommodation__company_name }} ({{ option.report_count }})
+              </option>
+            {% endfor %}
+          </select>
+        </form>
+        <div class="owner-review-toolbar-actions">
+          <a class="owner-review-link-btn" href="{% url 'admin_app:owner_reports_review' %}">Reset Filter</a>
+          <a class="owner-review-link-btn primary" href="{% url 'admin_app:owner_reports_review' %}?{% if selected_accommodation_id %}accommodation_id={{ selected_accommodation_id }}&{% endif %}export=csv">Download CSV</a>
+        </div>
+      </div>
+
+      {% if accommodation_choices %}
+      <div class="owner-review-accommodation-list">
+        {% for option in accommodation_choices %}
+          <a
+            class="owner-review-accommodation-pill {% if selected_accommodation_id == option.accommodation_id|stringformat:'s' %}active{% endif %}"
+            href="{% url 'admin_app:owner_reports_review' %}?accommodation_id={{ option.accommodation_id }}"
+          >
+            {{ option.accommodation__company_name }}<br>
+            <small>{{ option.report_count }} report(s)</small>
+          </a>
+        {% endfor %}
+      </div>
+      {% endif %}
+
+      <p class="owner-review-hint">
+        Mark Reviewed for accepted reports. Return for Revision requires a clear reason so owners can update and resubmit.
+      </p>
+
       {% for row in report_rows %}
         <article class="owner-review-item">
           <div class="owner-review-meta">
@@ -282,7 +422,7 @@
             <div><strong>Check-outs:</strong> {{ row.guests_checked_out }}</div>
             <div><strong>Rooms Used:</strong> {{ row.rooms_used }}</div>
             <div><strong>Room-level:</strong> {% if row.room_usage_rows.all %}Detailed{% else %}Total-only (legacy){% endif %}</div>
-            <div><strong>Updated:</strong> {{ row.updated_at|date:"M d, Y H:i" }}</div>
+            <div><strong>Updated:</strong> {{ row.updated_at|date:"M d, Y" }}</div>
           </div>
 
           <div class="owner-review-notes">
@@ -302,8 +442,13 @@
               <h4>Room Usage by Type</h4>
               <p>
                 {% if row.room_usage_rows.all %}
-                  {% for usage in row.room_usage_rows.all %}
-                    {{ usage.room_name_snapshot }}: {{ usage.check_ins }} check-ins, {{ usage.check_outs }} check-outs{% if not forloop.last %}&#10;{% endif %}
+                  {% regroup row.room_usage_rows.all by room_name_snapshot as usage_groups %}
+                  {% for group in usage_groups %}
+                    {{ group.grouper }} (Total rooms: {{ group.list.0.total_rooms_snapshot|default:1 }}){% if not forloop.last %}&#10;{% endif %}
+                    {% for usage in group.list %}
+                      &#10;- Room {{ usage.selected_room_identifier|default:"Not specified" }}: {{ usage.check_ins }} in / {{ usage.check_outs }} out
+                    {% endfor %}
+                    {% if not forloop.last %}&#10;{% endif %}
                   {% endfor %}
                 {% else %}
                   Older report format: room-level details were not submitted. Only total rooms used is available.
@@ -319,7 +464,8 @@
           <form class="owner-review-form" method="post">
             {% csrf_token %}
             <input type="hidden" name="report_id" value="{{ row.report_id }}">
-            <textarea name="review_notes" placeholder="Optional review notes or revision instructions."></textarea>
+            <input type="hidden" name="selected_accommodation_id" value="{{ selected_accommodation_id }}">
+            <textarea name="review_notes" placeholder="Review notes. Required when returning for revision."></textarea>
             <div class="owner-review-actions">
               <button class="owner-review-btn ok" type="submit" name="action" value="mark_reviewed">Mark Reviewed</button>
               <button class="owner-review-btn warn" type="submit" name="action" value="return_revision">Return for Revision</button>
@@ -334,14 +480,15 @@
       <div class="owner-review-pagination">
         <span>Page {{ report_rows.number }} of {{ report_rows.paginator.num_pages }}</span>
         {% if report_rows.has_previous %}
-        <a href="?page={{ report_rows.previous_page_number }}">Previous</a>
+        <a href="?{% if selected_accommodation_id %}accommodation_id={{ selected_accommodation_id }}&{% endif %}page={{ report_rows.previous_page_number }}">Previous</a>
         {% endif %}
         {% if report_rows.has_next %}
-        <a href="?page={{ report_rows.next_page_number }}">Next</a>
+        <a href="?{% if selected_accommodation_id %}accommodation_id={{ selected_accommodation_id }}&{% endif %}page={{ report_rows.next_page_number }}">Next</a>
         {% endif %}
       </div>
       {% endif %}
     </section>
+    </div>
   </main>
 </body>
 </html>

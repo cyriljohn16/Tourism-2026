@@ -420,6 +420,8 @@
                 <thead>
                     <tr>
                         <th>Room Name</th>
+                        <th>Room IDs / Numbers</th>
+                        <th>Total Rooms</th>
                         <th>Guest Range</th>
                         <th>Status</th>
                         <th>Actions</th>
@@ -429,6 +431,8 @@
                     {% for room in hotel_rooms %}
                         <tr data-room-id="{{ room.room_id }}">
                             <td class="room-summary">{{ room.room_name }}</td>
+                            <td class="room-identifiers">{{ room.room_identifiers|default:"Not specified" }}</td>
+                            <td class="room-total">{{ room.total_rooms|default:1 }}</td>
                             <td class="room-range">1 - {{ room.person_limit }} guests</td>
                             <td class="room-status">
                                 {% with room_status=room.status|default:'AVAILABLE' %}
@@ -473,6 +477,12 @@
                 <label for="roomType">Room Type:</label><br>
                 <input type="text" id="roomType" name="room_type" placeholder="e.g., Family, Deluxe Twin" required>
                 <br>
+                <label for="roomIdentifiers">Room IDs / Numbers (optional):</label><br>
+                <input type="text" id="roomIdentifiers" name="room_identifiers" placeholder="e.g., 101,102,103 or SS-001 to SS-031">
+                <br>
+                <label for="totalRooms">Total Rooms for this Type:</label><br>
+                <input type="number" id="totalRooms" name="total_rooms" min="1" value="1" required>
+                <br>
                 <label for="personLimit">Person Limit:</label><br>
                 <input type="number" id="personLimit" name="person_limit" placeholder="Max number of people allowed" min="1" value="1" required>
                 <br>
@@ -514,6 +524,12 @@
                 <br>
                 <label for="editRoomType">Room Type:</label><br>
                 <input type="text" id="editRoomType" name="room_type" required>
+                <br>
+                <label for="editRoomIdentifiers">Room IDs / Numbers (optional):</label><br>
+                <input type="text" id="editRoomIdentifiers" name="room_identifiers" placeholder="e.g., 101,102,103 or SS-001 to SS-031">
+                <br>
+                <label for="editTotalRooms">Total Rooms for this Type:</label><br>
+                <input type="number" id="editTotalRooms" name="total_rooms" min="1" required>
                 <br>
 
                 <label for="editPersonLimit">Capacity (pax):</label><br>
@@ -699,6 +715,8 @@
             var formEl = document.getElementById("addRoomForm");
             var roomName = $("#roomName").val();
             var roomType = String($("#roomType").val() || "").trim();
+            var roomIdentifiers = $("#roomIdentifiers").val();
+            var totalRooms = $("#totalRooms").val();
             var personLimit = $("#personLimit").val();
             var pricePerNight = $("#pricePerNight").val();
             var availabilityStatus = $("#addAvailabilityStatus").val();
@@ -717,6 +735,10 @@
                 showToast("Capacity must be at least 1.", "error");
                 return false;
             }
+            if (parseInt(totalRooms || "0", 10) < 1) {
+                showToast("Total rooms must be at least 1.", "error");
+                return false;
+            }
             if (parseFloat(pricePerNight || "0") <= 0) {
                 showToast("Price per night must be greater than 0.", "error");
                 return false;
@@ -729,6 +751,8 @@
             var payload = new FormData(formEl);
             payload.set("room_name", String(roomName || "").trim());
             payload.set("room_type", roomType);
+            payload.set("room_identifiers", String(roomIdentifiers || ""));
+            payload.set("total_rooms", String(totalRooms || "1"));
             payload.set("person_limit", String(personLimit || ""));
             payload.set("price_per_night", String(pricePerNight || ""));
             payload.set("availability_status", String(availabilityStatus || ""));
@@ -746,6 +770,8 @@
                         var room = response.room || {};
                         var roomId = room.room_id || room.id || "";
                         var roomNameText = room.room_name || room.name || room.room_type || "Unnamed Room";
+                        var roomIdentifiersText = room.room_identifiers || "Not specified";
+                        var totalRoomsText = room.total_rooms || 1;
                         var capacity = room.person_limit || room.capacity || 0;
                         var available = room.current_availability || room.availability || capacity;
 
@@ -761,6 +787,8 @@
                         var guestRange = "1 - " + capacity + " guest" + (parseInt(capacity, 10) > 1 ? "s" : "");
                         var newRoomHTML = "<tr data-room-id='" + roomId + "'>" +
                             "<td class='room-summary'>" + roomNameText + "</td>" +
+                            "<td class='room-identifiers'>" + roomIdentifiersText + "</td>" +
+                            "<td class='room-total'>" + totalRoomsText + "</td>" +
                             "<td class='room-range'>" + guestRange + "</td>" +
                             "<td class='room-status'><span class='status-pill " + statusClass + "'>" + statusText + "</span></td>" +
                             "<td><div class='room-actions'>" +
@@ -773,12 +801,14 @@
                             $("#roomsList").append(newRoomHTML);
                         } else {
                             $("#noRoomsMsg").remove();
-                            var emptyTable = "<div class='rooms-table-wrap'><table class='rooms-table'><thead><tr><th>Room Name</th><th>Guest Range</th><th>Status</th><th>Actions</th></tr></thead><tbody id='roomsList'>" + newRoomHTML + "</tbody></table></div>";
+                            var emptyTable = "<div class='rooms-table-wrap'><table class='rooms-table'><thead><tr><th>Room Name</th><th>Room IDs / Numbers</th><th>Total Rooms</th><th>Guest Range</th><th>Status</th><th>Actions</th></tr></thead><tbody id='roomsList'>" + newRoomHTML + "</tbody></table></div>";
                             $(".rooms-header").after(emptyTable);
                         }
                         addRoomModal.style.display = "none";
                         $("#roomName").val(""); // Clear input field
                         $("#roomType").val("");
+                        $("#roomIdentifiers").val("");
+                        $("#totalRooms").val("1");
                         $("#personLimit").val("1");
                         $("#pricePerNight").val("");
                         $("#addAvailabilityStatus").val("AVAILABLE");
@@ -818,6 +848,8 @@
                     $("#editRoomId").val(roomId);
                     $("#editRoomName").val(room.room_name || room.name || "");
                     $("#editRoomType").val(room.room_type || room.room_name || room.name || "");
+                    $("#editRoomIdentifiers").val(room.room_identifiers || "");
+                    $("#editTotalRooms").val(room.total_rooms || 1);
                     $("#editPersonLimit").val(room.person_limit || room.capacity || 0);
                     $("#editPricePerNight").val(room.price_per_night || "0.00");
                     $("#editAvailabilityStatus").val(String(room.availability_status || room.status || "AVAILABLE").toUpperCase());
@@ -848,6 +880,8 @@
             var roomId = $("#editRoomId").val();
             var roomName = String($("#editRoomName").val() || "").trim();
             var roomType = String($("#editRoomType").val() || "").trim();
+            var roomIdentifiers = $("#editRoomIdentifiers").val();
+            var totalRooms = $("#editTotalRooms").val();
             var capacity = $("#editPersonLimit").val();
             var price = $("#editPricePerNight").val();
             var status = $("#editAvailabilityStatus").val();
@@ -867,6 +901,10 @@
                 showToast("Capacity must be at least 1.", "error");
                 return false;
             }
+            if (parseInt(totalRooms || "0", 10) < 1) {
+                showToast("Total rooms must be at least 1.", "error");
+                return false;
+            }
             if (parseFloat(price || "0") <= 0) {
                 showToast("Price per night must be greater than 0.", "error");
                 return false;
@@ -880,6 +918,8 @@
             payload.set("room_id", String(roomId || ""));
             payload.set("room_name", roomName);
             payload.set("room_type", roomType);
+            payload.set("room_identifiers", String(roomIdentifiers || ""));
+            payload.set("total_rooms", String(totalRooms || "1"));
             payload.set("person_limit", String(capacity || ""));
             payload.set("price_per_night", String(price || ""));
             payload.set("availability_status", String(status || ""));
@@ -901,6 +941,8 @@
 
                     var updated = updateResp.room;
                     var updatedName = updated.room_name || updated.name || roomName;
+                    var updatedIdentifiers = updated.room_identifiers || "Not specified";
+                    var updatedTotalRooms = updated.total_rooms || totalRooms || 1;
                     var updatedCap = updated.person_limit || updated.capacity || capacity;
                     var updatedStatus = String(updated.availability_status || updated.status || "AVAILABLE").toUpperCase();
                     var statusClass = "status-available";
@@ -914,6 +956,8 @@
                     }
                     var $row = $("#roomsList tr[data-room-id='" + roomId + "']");
                     $row.find(".room-summary").text(updatedName);
+                    $row.find(".room-identifiers").text(updatedIdentifiers);
+                    $row.find(".room-total").text(updatedTotalRooms);
                     $row.find(".room-range").text("1 - " + updatedCap + " guest" + (parseInt(updatedCap, 10) > 1 ? "s" : ""));
                     $row.find(".room-status").html("<span class='status-pill " + statusClass + "'>" + statusText + "</span>");
                     $("#removeRoomImage").prop("checked", false);

@@ -108,3 +108,37 @@ body.admin-map-page :where(a, button, input, select, textarea):focus-visible {
     padding-right: 10px;
   }
 }
+
+@media (max-width: 768px) {
+  body.admin-dashboard-page,
+  body.employee-dashboard-page,
+  body.admin-map-page {
+    overflow-x: hidden;
+  }
+
+  body.admin-dashboard-page .content,
+  body.employee-dashboard-page .content {
+    min-width: 0;
+    overflow-x: hidden;
+  }
+
+  body.admin-dashboard-page .content :where(table),
+  body.employee-dashboard-page .content :where(table) {
+    display: block;
+    width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    white-space: nowrap;
+  }
+
+  body.admin-dashboard-page .content :where(form),
+  body.employee-dashboard-page .content :where(form) {
+    min-width: 0;
+  }
+
+  body.admin-dashboard-page .content :where(.btn, button, a.btn),
+  body.employee-dashboard-page .content :where(.btn, button, a.btn) {
+    max-width: 100%;
+    white-space: normal;
+  }
+}
