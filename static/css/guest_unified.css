@@ -13,6 +13,8 @@
   --guest-radius: 14px;
 }
 
+@import url("https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800&display=swap");
+
 * {
   box-sizing: border-box;
 }
@@ -24,6 +26,29 @@ body.guest-booking {
   font-family: "Poppins", "Segoe UI", Tahoma, Arial, sans-serif;
   color: var(--guest-ink);
   background: radial-gradient(circle at top right, #efe5da 0%, #f7f7fa 40%, #f4f6fa 100%);
+}
+
+body.guest-auth :where(
+  h1, h2, h3, h4, h5, h6,
+  p, span, a, li, label, small, strong, em,
+  button, input, select, textarea, th, td
+),
+body.guest-debug :where(
+  h1, h2, h3, h4, h5, h6,
+  p, span, a, li, label, small, strong, em,
+  button, input, select, textarea, th, td
+),
+body.guest-companion :where(
+  h1, h2, h3, h4, h5, h6,
+  p, span, a, li, label, small, strong, em,
+  button, input, select, textarea, th, td
+),
+body.guest-booking:not(.mainpage-page) :where(
+  h1, h2, h3, h4, h5, h6,
+  p, span, a, li, label, small, strong, em,
+  button, input, select, textarea, th, td
+) {
+  font-family: "Poppins", "Segoe UI", Tahoma, Arial, sans-serif;
 }
 
 /* Auth pages */
@@ -1833,6 +1858,41 @@ body.mainpage-page .city-map-btn.primary {
   }
 }
 
+/* Final mobile consistency pass for guest pages and chat */
+@media (max-width: 768px) {
+  body.mainpage-page .container,
+  body.mainpage-page .tour-packages-container,
+  body.mainpage-page .approved-stays-panel,
+  body.mainpage-page .tourism-places-panel,
+  body.mainpage-page .city-map-panel {
+    max-width: 100% !important;
+    min-width: 0;
+  }
+
+  .guest-chat-modal {
+    width: min(96vw, 430px);
+    left: auto;
+    right: 10px;
+  }
+
+  .guest-chat-actions,
+  .guest-chat-card-actions {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 480px) {
+  body.mainpage-page .navbar {
+    gap: 6px;
+  }
+
+  .guest-chat-modal {
+    right: 6px;
+    left: 6px;
+    width: auto;
+  }
+}
+
 /* 390px demo-readiness mobile polish: compact swipe rows and safer top controls. */
 @media (max-width: 768px) {
   body.mainpage-page .navbar > .login-btn {
@@ -1918,5 +1978,49 @@ body.mainpage-page .city-map-btn.primary {
 
   body.mainpage-page .approved-stays-featured-grid {
     grid-template-columns: 1fr !important;
+  }
+
+  body.mainpage-page .logo h1 {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  body.mainpage-page .nav-links {
+    width: 100%;
+    overflow-x: auto;
+    overflow-y: hidden;
+    white-space: nowrap;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: thin;
+  }
+
+  body.mainpage-page .nav-links a {
+    flex: 0 0 auto;
+  }
+}
+
+/* Fix large blank space in approved accommodations cards on mobile:
+   remove forced minimum card heights and let cards shrink to content. */
+@media (max-width: 768px) {
+  body.mainpage-page .approved-stay-card,
+  body.mainpage-page .approved-stay-featured-card {
+    min-height: 0 !important;
+    height: auto !important;
+  }
+
+  body.mainpage-page .approved-stay-card {
+    grid-template-rows: minmax(170px, auto) auto !important;
+  }
+
+  body.mainpage-page .approved-stay-image-wrap,
+  body.mainpage-page .approved-stay-featured-media {
+    min-height: 170px !important;
+    height: auto !important;
+  }
+
+  body.mainpage-page .approved-stay-body {
+    align-content: start;
+    grid-auto-rows: max-content;
   }
 }

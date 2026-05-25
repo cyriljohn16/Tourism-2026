@@ -26,6 +26,8 @@ from django.shortcuts import render, redirect
 from accom_app.models import Other_Estab
 from django.http import HttpResponse
 import json
+import csv
+import re
 
 from .forms import EstablishmentFormAdmin, TourismInformationForm
 from .models import Region, Country, Entry, HotelConfirmation, TourismInformation
@@ -57,7 +59,7 @@ from admin_app.mainpage_media import (
     get_admin_context as get_mainpage_media_admin_context,
 )
 from tour_app.models import Tour_Add, Tour_Schedule, Tour_Event
-from guest_app.models import Guest, Pending, AccommodationBooking
+from guest_app.models import Guest, Pending, AccommodationBooking, AccommodationReview
 from guest_app.booking_integrity import sync_room_current_availability
 from .models import TourAssignment
 from ai_chatbot.models import UsabilitySurveyResponse
@@ -1076,6 +1078,81 @@ def owner_report_submit(request):
         messages.error(request, "Please sign up as an accommodation owner first from the admin login page.")
         return redirect("admin_app:login")
 
+    def _parse_room_identifier_tokens(raw_text):
+        text = str(raw_text or "").strip()
+        if not text:
+            return []
+        chunks = re.split(r"[,;\n]+", text)
+        tokens = []
+        seen = set()
+        for raw in chunks:
+            token = str(raw or "").strip()
+            if not token:
+                continue
+            key = token.lower()
+            if key in seen:
+                continue
+            seen.add(key)
+            tokens.append(token[:80])
+        return tokens[:120]
+
+    def _build_room_usage_statistics_text(*, guests_in, guests_out, rooms_used_value, rows):
+        check_ins = max(int(guests_in or 0), 0)
+        check_outs = max(int(guests_out or 0), 0)
+        rooms_used_safe = max(int(rooms_used_value or 0), 0)
+        peak_room = ""
+        peak_score = -1
+        touched_rows = 0
+        room_totals = {}
+        for row in rows or []:
+            room_name = str(row.get("room_name_snapshot") or "").strip() or "Room"
+            row_in = max(int(row.get("check_ins") or 0), 0)
+            row_out = max(int(row.get("check_outs") or 0), 0)
+            score = row_in + row_out
+            if score > 0:
+                touched_rows += 1
+            room_totals[room_name] = int(room_totals.get(room_name, 0) or 0) + score
+        for room_name, score in room_totals.items():
+            if score > peak_score:
+                peak_score = score
+                peak_room = room_name
+
+        movement = check_ins + check_outs
+        balance_gap = abs(check_ins - check_outs)
+        if movement <= 0:
+            trend_text = "No room movement was reported for this period."
+        elif balance_gap <= max(2, int(movement * 0.1)):
+            trend_text = "Guest movement was balanced between check-ins and check-outs."
+        elif check_ins > check_outs:
+            trend_text = "Check-ins were higher than check-outs, indicating increasing occupancy."
+        else:
+            trend_text = "Check-outs were higher than check-ins, indicating turnover or reduced occupancy."
+
+        lines = [
+            f"Total guest movement: {movement} ({check_ins} check-ins, {check_outs} check-outs).",
+            f"Rooms used/occupied: {rooms_used_safe}.",
+            trend_text,
+        ]
+        if peak_room and peak_score > 0:
+            lines.append(f"Most active room type: {peak_room} ({peak_score} total movements).")
+        if touched_rows > 0:
+            lines.append(f"Room-level rows with activity: {touched_rows}.")
+        return " ".join(lines).strip()
+
+    def _build_nationality_breakdown_text(*, guests_in, guests_out):
+        check_ins = max(int(guests_in or 0), 0)
+        check_outs = max(int(guests_out or 0), 0)
+        if check_ins <= 0 and check_outs <= 0:
+            return (
+                "No guest movement was reported for this period. "
+                "If there were guest stays, please encode the verified nationality totals."
+            )
+        return (
+            f"Auto draft based on current totals: {check_ins} check-ins, {check_outs} check-outs. "
+            f"Please confirm and update with verified counts: Filipino {check_ins}, Foreign 0 "
+            "(e.g., JP 0, KR 0, US 0)."
+        )
+
     owner_accommodations_qs = Accomodation.objects.filter(
         owner=request.user,
         approval_status="accepted",
@@ -1084,7 +1161,17 @@ def owner_report_submit(request):
     owner_accommodations = list(owner_accommodations_qs)
     owner_accommodation_room_rows = []
     for accom in owner_accommodations:
-        room_rows = list(accom.rooms.all().order_by("room_name", "room_id"))
+        room_rows = []
+        for room in accom.rooms.all().order_by("room_name", "room_id"):
+            room_rows.append(
+                {
+                    "room_id": int(room.room_id),
+                    "room_name": str(room.room_name or "").strip() or f"Room {room.room_id}",
+                    "room_identifiers": str(getattr(room, "room_identifiers", "") or "").strip(),
+                    "total_rooms": int(getattr(room, "total_rooms", 1) or 1),
+                    "known_identifiers": _parse_room_identifier_tokens(getattr(room, "room_identifiers", "")),
+                }
+            )
         owner_accommodation_room_rows.append(
             {
                 "accom_id": accom.accom_id,
@@ -1098,7 +1185,7 @@ def owner_report_submit(request):
         status_raw = str(request.POST.get("status") or "submitted").strip().lower()
 
         try:
-            accommodation = owner_accommodations.get(accom_id=accom_id)
+            accommodation = owner_accommodations_qs.get(accom_id=accom_id)
         except Accomodation.DoesNotExist:
             messages.error(request, "Please select a valid accommodation listing.")
             return redirect("admin_app:owner_report_submit")
@@ -1116,53 +1203,98 @@ def owner_report_submit(request):
                 return 0
             return max(value, 0)
 
-        room_rows = list(
-            Room.objects.filter(accommodation=accommodation).order_by("room_name", "room_id")
-        )
-        has_room_inputs = any(
-            (
-                f"room_checkins_{room.room_id}" in request.POST
-                or f"room_checkouts_{room.room_id}" in request.POST
-                or f"room_guests_{room.room_id}" in request.POST
-            )
-            for room in room_rows
-        )
+        room_rows = list(Room.objects.filter(accommodation=accommodation).order_by("room_name", "room_id"))
+        room_map = {int(room.room_id): room for room in room_rows}
 
+        posted_room_ids = request.POST.getlist("room_usage_room_id")
+        posted_room_identifiers = request.POST.getlist("room_usage_identifier")
+        posted_checkins = request.POST.getlist("room_usage_checkins")
+        posted_checkouts = request.POST.getlist("room_usage_checkouts")
+        posted_manual_identifiers = request.POST.getlist("room_usage_identifier_manual")
+
+        row_count = max(
+            len(posted_room_ids),
+            len(posted_room_identifiers),
+            len(posted_checkins),
+            len(posted_checkouts),
+            len(posted_manual_identifiers),
+        )
+        has_room_inputs = row_count > 0
         room_usage_payload = []
-        for room in room_rows:
-            check_ins = _to_non_negative_int(request.POST.get(f"room_checkins_{room.room_id}"))
-            check_outs = _to_non_negative_int(request.POST.get(f"room_checkouts_{room.room_id}"))
-            guests_count = _to_non_negative_int(request.POST.get(f"room_guests_{room.room_id}"))
+        for idx in range(row_count):
+            room_id_raw = posted_room_ids[idx] if idx < len(posted_room_ids) else ""
+            try:
+                room_id = int(str(room_id_raw or "").strip())
+            except Exception:
+                continue
+            room = room_map.get(room_id)
+            if room is None:
+                continue
+            identifier_raw = posted_room_identifiers[idx] if idx < len(posted_room_identifiers) else ""
+            manual_identifier_raw = posted_manual_identifiers[idx] if idx < len(posted_manual_identifiers) else ""
+            selected_identifier = str(identifier_raw or "").strip()
+            if selected_identifier == "__manual__":
+                selected_identifier = str(manual_identifier_raw or "").strip()
+            if not selected_identifier:
+                selected_identifier = "Not specified"
+            check_ins = _to_non_negative_int(posted_checkins[idx] if idx < len(posted_checkins) else 0)
+            check_outs = _to_non_negative_int(posted_checkouts[idx] if idx < len(posted_checkouts) else 0)
             room_usage_payload.append(
                 {
                     "room": room,
                     "room_name_snapshot": str(room.room_name or "").strip(),
+                    "selected_room_identifier": selected_identifier[:120],
+                    "room_identifiers_snapshot": str(getattr(room, "room_identifiers", "") or "").strip(),
+                    "total_rooms_snapshot": max(1, int(getattr(room, "total_rooms", 1) or 1)),
                     "check_ins": check_ins,
                     "check_outs": check_outs,
-                    "guests_count": guests_count,
+                    "guests_count": 1 if (check_ins > 0 or check_outs > 0) else 0,
                 }
             )
 
-        if has_room_inputs:
+        if has_room_inputs and room_usage_payload:
             guests_checked_in = sum(int(row.get("check_ins") or 0) for row in room_usage_payload)
             guests_checked_out = sum(int(row.get("check_outs") or 0) for row in room_usage_payload)
-            rooms_used = sum(
-                1
-                for row in room_usage_payload
-                if int(row.get("check_ins") or 0) > 0 or int(row.get("check_outs") or 0) > 0
+            rooms_used = len(
+                {
+                    (int(row.get("room").room_id), str(row.get("selected_room_identifier") or "").strip().lower())
+                    for row in room_usage_payload
+                    if int(row.get("check_ins") or 0) > 0 or int(row.get("check_outs") or 0) > 0
+                }
             )
         else:
             guests_checked_in = _to_non_negative_int(request.POST.get("guests_checked_in"))
             guests_checked_out = _to_non_negative_int(request.POST.get("guests_checked_out"))
             rooms_used = _to_non_negative_int(request.POST.get("rooms_used"))
 
+        posted_room_usage_notes = str(request.POST.get("room_usage_notes") or "").strip()
+        auto_room_usage_notes = _build_room_usage_statistics_text(
+            guests_in=guests_checked_in,
+            guests_out=guests_checked_out,
+            rooms_used_value=rooms_used,
+            rows=room_usage_payload,
+        )
+        use_manual_notes = bool(posted_room_usage_notes) and str(
+            request.POST.get("room_usage_notes_manual") or ""
+        ).strip() == "1"
+
         defaults = {
             "owner": request.user,
             "guests_checked_in": guests_checked_in,
             "guests_checked_out": guests_checked_out,
             "rooms_used": rooms_used,
-            "room_usage_notes": str(request.POST.get("room_usage_notes") or "").strip(),
-            "nationality_breakdown": str(request.POST.get("nationality_breakdown") or "").strip(),
+            "room_usage_notes": posted_room_usage_notes if use_manual_notes else auto_room_usage_notes,
+            "nationality_breakdown": (
+                str(request.POST.get("nationality_breakdown") or "").strip()
+                if (
+                    str(request.POST.get("nationality_breakdown_manual") or "").strip() == "1"
+                    and str(request.POST.get("nationality_breakdown") or "").strip()
+                )
+                else _build_nationality_breakdown_text(
+                    guests_in=guests_checked_in,
+                    guests_out=guests_checked_out,
+                )
+            ),
             "additional_remarks": str(request.POST.get("additional_remarks") or "").strip(),
             "status": status_raw if status_raw in {"draft", "submitted"} else "submitted",
             "review_notes": "",
@@ -1189,6 +1321,9 @@ def owner_report_submit(request):
                             monthly_report=report,
                             room=row.get("room"),
                             room_name_snapshot=str(row.get("room_name_snapshot") or "").strip(),
+                            selected_room_identifier=str(row.get("selected_room_identifier") or "").strip(),
+                            room_identifiers_snapshot=str(row.get("room_identifiers_snapshot") or "").strip(),
+                            total_rooms_snapshot=max(1, int(row.get("total_rooms_snapshot") or 1)),
                             check_ins=int(row.get("check_ins") or 0),
                             check_outs=int(row.get("check_outs") or 0),
                             guests_count=int(row.get("guests_count") or 0),
@@ -1202,12 +1337,55 @@ def owner_report_submit(request):
             messages.success(request, "Monthly report updated successfully.")
         return redirect("admin_app:owner_report_submit")
 
+    selected_report_status = str(request.GET.get("report_status") or "").strip().lower()
+    selected_period = str(request.GET.get("report_period") or "").strip()
+    selected_room_level = str(request.GET.get("room_level") or "").strip().lower()
+
     report_rows_qs = OwnerMonthlyReport.objects.select_related("accommodation").prefetch_related(
         "room_usage_rows",
         "room_usage_rows__room",
     ).filter(
         owner=request.user
     ).order_by("-reporting_period", "-submitted_at")
+
+    period_choices_raw = (
+        OwnerMonthlyReport.objects.filter(owner=request.user)
+        .order_by("-reporting_period")
+        .values_list("reporting_period", flat=True)
+        .distinct()
+    )
+    period_choices = [value for value in period_choices_raw if value is not None]
+
+    if selected_report_status in {"submitted", "reviewed", "returned", "draft"}:
+        report_rows_qs = report_rows_qs.filter(status=selected_report_status)
+    else:
+        selected_report_status = ""
+
+    if selected_period:
+        try:
+            selected_period_date = dt.date.fromisoformat(f"{selected_period}-01")
+            report_rows_qs = report_rows_qs.filter(
+                reporting_period__year=selected_period_date.year,
+                reporting_period__month=selected_period_date.month,
+            )
+        except Exception:
+            selected_period = ""
+
+    if selected_room_level in {"detailed", "legacy"}:
+        if selected_room_level == "detailed":
+            report_rows_qs = report_rows_qs.filter(room_usage_rows__isnull=False).distinct()
+        else:
+            report_rows_qs = report_rows_qs.filter(room_usage_rows__isnull=True)
+    else:
+        selected_room_level = ""
+
+    owner_summary = report_rows_qs.aggregate(
+        total_reports=Count("report_id"),
+        total_checkins=Sum("guests_checked_in"),
+        total_checkouts=Sum("guests_checked_out"),
+        total_rooms_used=Sum("rooms_used"),
+    )
+
     report_paginator = Paginator(report_rows_qs, 12)
     report_page = request.GET.get("page")
     report_rows = report_paginator.get_page(report_page)
@@ -1219,6 +1397,11 @@ def owner_report_submit(request):
             "owner_accommodation_room_rows": owner_accommodation_room_rows,
             "report_rows": report_rows,
             "report_paginator": report_paginator,
+            "selected_report_status": selected_report_status,
+            "selected_period": selected_period,
+            "selected_room_level": selected_room_level,
+            "period_choices": period_choices,
+            "owner_summary": owner_summary,
         },
     )
 
@@ -1305,6 +1488,50 @@ def pending_accommodation(request):
         'declined_accommodations': declined_accommodations,
     }
     return render(request, 'pending_accommodation.html', context)
+
+
+@admin_required
+def accommodation_reviews_moderation(request):
+    selected_status = str(request.GET.get("status") or "pending").strip().lower()
+    if selected_status not in {"pending", "approved", "rejected", "all"}:
+        selected_status = "pending"
+
+    reviewer = None
+    employee_id = request.session.get("employee_id")
+    if employee_id:
+        reviewer = Employee.objects.filter(emp_id=employee_id).first()
+
+    if request.method == "POST":
+        review = get_object_or_404(
+            AccommodationReview.objects.select_related("accommodation", "guest"),
+            review_id=request.POST.get("review_id"),
+        )
+        action = str(request.POST.get("action") or "").strip().lower()
+        notes = str(request.POST.get("moderation_notes") or "").strip()
+        if action in {"approved", "rejected"}:
+            review.status = action
+            review.moderation_notes = notes
+            review.reviewed_at = timezone.now()
+            review.reviewed_by = reviewer
+            review.save(update_fields=["status", "moderation_notes", "reviewed_at", "reviewed_by", "updated_at"])
+            messages.success(request, f"Review for {review.accommodation.company_name} was marked {action}.")
+        else:
+            messages.error(request, "Invalid review moderation action.")
+        return redirect(f"{reverse('admin_app:accommodation_reviews_moderation')}?status={selected_status}")
+
+    reviews = AccommodationReview.objects.select_related("accommodation", "guest", "reviewed_by").order_by("-created_at")
+    if selected_status != "all":
+        reviews = reviews.filter(status=selected_status)
+
+    return render(
+        request,
+        "accommodation_reviews_moderation.html",
+        {
+            "reviews": reviews[:100],
+            "selected_status": selected_status,
+            "status_options": ["pending", "approved", "rejected", "all"],
+        },
+    )
 
 
 @admin_required
@@ -1395,6 +1622,18 @@ def accommodation_booking_update(request, booking_id):
 
 @admin_required
 def owner_reports_review(request):
+    selected_accommodation_id = str(request.GET.get("accommodation_id") or "").strip()
+    selected_accommodation_int = int(selected_accommodation_id) if selected_accommodation_id.isdigit() else None
+    selected_period = str(request.GET.get("report_period") or "").strip()
+
+    base_qs = OwnerMonthlyReport.objects.select_related("owner", "accommodation", "reviewed_by").prefetch_related(
+        "room_usage_rows",
+        "room_usage_rows__room",
+    ).order_by(
+        "-reporting_period",
+        "-submitted_at",
+    )
+
     if request.method == "POST":
         report_id = request.POST.get("report_id")
         action = str(request.POST.get("action") or "").strip().lower()
@@ -1403,30 +1642,167 @@ def owner_reports_review(request):
         employee_id = request.session.get("employee_id")
         if employee_id:
             reviewer = Employee.objects.filter(emp_id=employee_id).first()
+        note = str(request.POST.get("review_notes") or "").strip()
+        return_filter = str(request.POST.get("selected_accommodation_id") or "").strip()
+        redirect_url = reverse("admin_app:owner_reports_review")
+        if return_filter.isdigit():
+            redirect_url = f"{redirect_url}?accommodation_id={return_filter}"
 
         if action == "mark_reviewed":
             report.status = "reviewed"
-            report.review_notes = str(request.POST.get("review_notes") or "").strip()
+            report.review_notes = note
             report.reviewed_by = reviewer
             report.save(update_fields=["status", "review_notes", "reviewed_by", "updated_at"])
+            try:
+                create_notification(
+                    recipient_guest=report.owner,
+                    title="Monthly report reviewed",
+                    message=(
+                        f"Your monthly report for {report.accommodation.company_name} "
+                        f"({report.reporting_period.strftime('%b %Y')}) was marked as Reviewed."
+                    ),
+                    notification_type="approval",
+                    url=reverse("admin_app:owner_report_submit"),
+                    dedupe_key=f"owner-report-reviewed-{report.report_id}",
+                    related_object_id=str(report.report_id),
+                )
+            except Exception:
+                pass
             messages.success(request, "Report marked as reviewed.")
         elif action == "return_revision":
+            if not note:
+                messages.error(request, "Please provide a revision reason before returning this report.")
+                return redirect(redirect_url)
             report.status = "returned"
-            report.review_notes = str(request.POST.get("review_notes") or "").strip() or "Please revise and resubmit."
+            report.review_notes = note
             report.reviewed_by = reviewer
             report.save(update_fields=["status", "review_notes", "reviewed_by", "updated_at"])
+            try:
+                create_notification(
+                    recipient_guest=report.owner,
+                    title="Monthly report returned for revision",
+                    message=(
+                        f"Your report for {report.accommodation.company_name} "
+                        f"({report.reporting_period.strftime('%b %Y')}) was returned for revision. "
+                        f"Reason: {note}"
+                    ),
+                    notification_type="approval",
+                    url=reverse("admin_app:owner_report_submit"),
+                    dedupe_key=f"owner-report-returned-{report.report_id}",
+                    related_object_id=str(report.report_id),
+                )
+            except Exception:
+                pass
             messages.success(request, "Report returned for revision.")
         else:
             messages.error(request, "Invalid report review action.")
-        return redirect("admin_app:owner_reports_review")
+        return redirect(redirect_url)
 
-    rows_qs = OwnerMonthlyReport.objects.select_related("owner", "accommodation", "reviewed_by").prefetch_related(
-        "room_usage_rows",
-        "room_usage_rows__room",
-    ).order_by(
-        "-reporting_period",
-        "-submitted_at",
+    rows_qs = base_qs
+    if selected_accommodation_int is not None:
+        rows_qs = rows_qs.filter(accommodation_id=selected_accommodation_int)
+    if selected_period:
+        try:
+            selected_period_date = dt.date.fromisoformat(f"{selected_period}-01")
+            rows_qs = rows_qs.filter(
+                reporting_period__year=selected_period_date.year,
+                reporting_period__month=selected_period_date.month,
+            )
+        except Exception:
+            selected_period = ""
+
+    review_summary = rows_qs.aggregate(
+        total_reports=Count("report_id"),
+        total_checkins=Sum("guests_checked_in"),
+        total_checkouts=Sum("guests_checked_out"),
+        total_rooms_used=Sum("rooms_used"),
+        reviewed_reports=Count("report_id", filter=Q(status="reviewed")),
+        submitted_reports=Count("report_id", filter=Q(status="submitted")),
+        returned_reports=Count("report_id", filter=Q(status="returned")),
     )
+
+    period_choices_raw = (
+        base_qs.order_by("-reporting_period").values_list("reporting_period", flat=True).distinct()
+    )
+    period_choices = [value for value in period_choices_raw if value is not None]
+
+    if str(request.GET.get("export") or "").strip().lower() == "csv":
+        response = HttpResponse(content_type="text/csv")
+        response["Content-Disposition"] = 'attachment; filename="owner_monthly_reports.csv"'
+        writer = csv.writer(response)
+        writer.writerow([
+            "Owner",
+            "Accommodation",
+            "Reporting Period",
+            "Status",
+            "Guests Checked In",
+            "Guests Checked Out",
+            "Rooms Used",
+            "Room Type",
+            "Room ID / Number",
+            "Known Room IDs / Numbers",
+            "Total Rooms Under Type",
+            "Room Check-ins",
+            "Room Check-outs",
+            "Review Notes",
+            "Reviewed By",
+            "Submitted At",
+            "Updated At",
+        ])
+        for row in rows_qs:
+            reviewed_by_name = ""
+            if row.reviewed_by:
+                reviewed_by_name = f"{row.reviewed_by.first_name} {row.reviewed_by.last_name}".strip()
+            usage_rows = list(row.room_usage_rows.all())
+            if usage_rows:
+                for usage in usage_rows:
+                    writer.writerow([
+                        getattr(row.owner, "username", "") or getattr(row.owner, "email", ""),
+                        row.accommodation.company_name,
+                        row.reporting_period.strftime("%B %Y"),
+                        row.get_status_display(),
+                        row.guests_checked_in,
+                        row.guests_checked_out,
+                        row.rooms_used,
+                        usage.room_name_snapshot,
+                        str(getattr(usage, "selected_room_identifier", "") or "").strip() or "Not specified",
+                        str(getattr(usage, "room_identifiers_snapshot", "") or "").strip() or "Not specified",
+                        int(getattr(usage, "total_rooms_snapshot", 1) or 1),
+                        usage.check_ins,
+                        usage.check_outs,
+                        row.review_notes,
+                        reviewed_by_name,
+                        row.submitted_at.strftime("%Y-%m-%d") if row.submitted_at else "",
+                        row.updated_at.strftime("%Y-%m-%d") if row.updated_at else "",
+                    ])
+            else:
+                writer.writerow([
+                    getattr(row.owner, "username", "") or getattr(row.owner, "email", ""),
+                    row.accommodation.company_name,
+                    row.reporting_period.strftime("%B %Y"),
+                    row.get_status_display(),
+                    row.guests_checked_in,
+                    row.guests_checked_out,
+                    row.rooms_used,
+                    "",
+                    "",
+                    "",
+                    "",
+                    "",
+                    "",
+                    row.review_notes,
+                    reviewed_by_name,
+                    row.submitted_at.strftime("%Y-%m-%d") if row.submitted_at else "",
+                    row.updated_at.strftime("%Y-%m-%d") if row.updated_at else "",
+                ])
+        return response
+
+    accommodation_choices = list(
+        base_qs.values("accommodation_id", "accommodation__company_name")
+        .annotate(report_count=Count("report_id"))
+        .order_by("accommodation__company_name")
+    )
+
     review_paginator = Paginator(rows_qs, 20)
     review_page = request.GET.get("page")
     rows = review_paginator.get_page(review_page)
@@ -1436,6 +1812,11 @@ def owner_reports_review(request):
         {
             "report_rows": rows,
             "review_paginator": review_paginator,
+            "accommodation_choices": accommodation_choices,
+            "selected_accommodation_id": str(selected_accommodation_int or ""),
+            "selected_period": selected_period,
+            "period_choices": period_choices,
+            "review_summary": review_summary,
         },
     )
 
@@ -1582,8 +1963,9 @@ def employee_dashboard(request):
     # Assigned tours (used for personal task context)
     assignments = TourAssignment.objects.filter(employee=employee).select_related('schedule', 'schedule__tour')
 
-    # Dashboard metrics use overall system tour schedules to mirror admin-like visibility.
-    schedules_qs = Tour_Schedule.objects.select_related('tour').all()
+    # Dashboard metrics are scoped to the employee's assigned schedules.
+    assigned_schedule_ids = list(assignments.values_list('schedule__sched_id', flat=True))
+    schedules_qs = Tour_Schedule.objects.select_related('tour').filter(sched_id__in=assigned_schedule_ids)
     # Ensure stale schedule statuses are refreshed before counting.
     Tour_Schedule.get_tour_statistics()
 
@@ -1678,13 +2060,32 @@ def employee_dashboard(request):
     least_popular_tour = popular_tours[-1] if popular_tours else None
     fastest_growing_tour = popular_tours[0] if len(popular_tours) > 1 else None
 
+    # Forecasts: data-based month-over-month trend per tour.
     booking_forecasts = []
-    for item in popular_tours[:3]:
-        current = int(item.get("total_booked") or 0)
-        forecast = max(1, round(current * 1.1)) if current > 0 else 1
-        growth = round(((forecast - current) / current) * 100, 1) if current else 100.0
+    current_period_start = current_month_start
+    previous_period_start = previous_month_start
+    previous_period_end = previous_month_end
+    for item in popular_tours[:5]:
+        tour_name = item.get("tour__tour_name") or "Tour"
+        tour_rows = schedules_qs.filter(tour__tour_name=tour_name)
+        current = int(
+            tour_rows.filter(end_time__gte=current_period_start, end_time__lte=now).aggregate(
+                total=Sum('slots_booked')
+            ).get('total') or 0
+        )
+        previous = int(
+            tour_rows.filter(end_time__gte=previous_period_start, end_time__lte=previous_period_end).aggregate(
+                total=Sum('slots_booked')
+            ).get('total') or 0
+        )
+        if previous > 0:
+            growth = round(((current - previous) / previous) * 100, 1)
+            forecast = max(0, int(round(current * (1 + (growth / 100.0)))))
+        else:
+            growth = 100.0 if current > 0 else 0.0
+            forecast = current
         booking_forecasts.append({
-            "tour_name": item.get("tour__tour_name") or "Tour",
+            "tour_name": tour_name,
             "current": current,
             "forecast": forecast,
             "growth": growth,
@@ -1715,14 +2116,20 @@ def employee_dashboard(request):
     if not booking_recommendations:
         booking_recommendations.append("No recommendations available. Keep monitoring tour booking behavior.")
 
-    # Mini calendar payload for assigned tours
+    # Mini calendar payload: only upcoming/active schedules.
     color_map = {
         "active": "#34a853",
         "completed": "#4285f4",
         "cancelled": "#ea4335",
     }
+    actionable_schedules = (
+        schedules_qs
+        .filter(end_time__gte=now)
+        .exclude(status__iexact='cancelled')
+        .order_by('start_time')
+    )
     calendar_tours = []
-    for sched in schedules_qs.order_by('start_time'):
+    for sched in actionable_schedules:
         local_start = timezone.localtime(sched.start_time) if timezone.is_aware(sched.start_time) else sched.start_time
         local_end = timezone.localtime(sched.end_time) if timezone.is_aware(sched.end_time) else sched.end_time
         calendar_tours.append({
@@ -1732,12 +2139,22 @@ def employee_dashboard(request):
             "end": local_end.date().isoformat(),
             "startDateTime": local_start.isoformat(),
             "endDateTime": local_end.isoformat(),
+            "price": f"PHP {sched.price:.2f}",
+            "confirmedBookings": int(sched.slots_booked or 0),
+            "slotsAvailable": int(sched.slots_available or 0),
             "status": sched.status,
             "color": color_map.get(sched.status, "#fbbc05"),
+            "description": sched.tour.description or "",
         })
 
-    # Ongoing tours card area (system-wide active schedules)
+    # Ongoing tours card area (employee-assigned active schedules)
     ongoing_tours = schedules_qs.filter(status='active').order_by('start_time')[:10]
+    completed_history = (
+        schedules_qs
+        .filter(end_time__lt=now)
+        .exclude(status__iexact='cancelled')
+        .order_by('-end_time')[:20]
+    )
 
     context = {
         'employee': employee,
@@ -1763,6 +2180,7 @@ def employee_dashboard(request):
         'booking_insights': booking_insights,
         'booking_recommendations': booking_recommendations,
         'calendar_tours': calendar_tours,
+        'completed_history': completed_history,
         'ongoing_tours': ongoing_tours,
     }
 
@@ -1781,10 +2199,15 @@ def employee_assigned_tours(request):
     except Employee.DoesNotExist:
         return redirect('admin_app:login')
     
-    # Get assigned tours for this employee only
+    # Keep statuses fresh, then hide expired schedules from actionable assigned lists.
+    Tour_Schedule.get_tour_statistics()
+    now = timezone.now()
+
+    # Get assigned tours for this employee only (upcoming/ongoing)
     assignments = (
         TourAssignment.objects
-        .filter(employee=employee)
+        .filter(employee=employee, schedule__end_time__gte=now)
+        .exclude(schedule__status__iexact='cancelled')
         .select_related('schedule', 'schedule__tour')
         .order_by('schedule__start_time')
     )
@@ -1792,6 +2215,7 @@ def employee_assigned_tours(request):
     pending_requests = (
         Pending.objects.select_related("guest_id", "tour_id", "sched_id")
         .filter(sched_id_id__in=assigned_schedule_ids, status__iexact="pending")
+        .filter(sched_id__end_time__gte=now)
         .exclude(sched_id__status__iexact="cancelled")
         .order_by("sched_id__start_time", "-id")
     )
@@ -1819,8 +2243,15 @@ def employee_tour_calendar(request):
     except Employee.DoesNotExist:
         return redirect('admin_app:login')
     
-    # Get assigned tours for the calendar
-    assignments = TourAssignment.objects.filter(employee=employee).select_related('schedule', 'schedule__tour')
+    # Keep statuses fresh, then keep calendar focused on non-expired schedules.
+    Tour_Schedule.get_tour_statistics()
+    now = timezone.now()
+    assignments = (
+        TourAssignment.objects
+        .filter(employee=employee, schedule__end_time__gte=now)
+        .exclude(schedule__status__iexact='cancelled')
+        .select_related('schedule', 'schedule__tour')
+    )
     
     # Log the activity
     log_activity(request, employee, 'view_page', description='Viewed tour calendar')
@@ -2143,9 +2574,13 @@ def admin_dashboard(request):
     # Get all employees for the employee assignment dropdown
     employees = Employee.objects.all()
 
-    # Active tours list for assignment widget
+    # Keep schedule statuses synchronized before dashboard queries.
+    Tour_Schedule.get_tour_statistics()
+
+    # Active tours list for assignment widget (hide expired/cancelled tours)
     active_tours = Tour_Schedule.objects.filter(
-        end_time__gte=timezone.now()
+        status='active',
+        end_time__gte=timezone.now(),
     ).order_by('start_time')
 
     # Get tour assignments for active tours
@@ -2226,15 +2661,44 @@ def admin_dashboard(request):
         'total_revenue': _growth(float(yearly_stats['total_revenue']), float(prev_yearly['total_revenue'])),
     }
 
-    # Booking status visualization stats
-    schedules = Tour_Schedule.objects.select_related('tour').all().order_by('start_time')
+    def _stat_card_widths(stats, revenue_baseline=0):
+        total_tours = int(
+            (stats.get('completed_tours') or 0)
+            + (stats.get('active_tours') or 0)
+            + (stats.get('cancelled_tours') or 0)
+        )
+        total_tours = max(total_tours, 1)
+        completed_width = max(8, min(100, round(((stats.get('completed_tours') or 0) / total_tours) * 100)))
+        active_width = max(8, min(100, round(((stats.get('active_tours') or 0) / total_tours) * 100)))
+        cancelled_width = max(8, min(100, round(((stats.get('cancelled_tours') or 0) / total_tours) * 100)))
+        baseline = float(revenue_baseline or 0)
+        revenue_value = float(stats.get('total_revenue') or 0)
+        if baseline <= 0:
+            revenue_width = 8 if revenue_value > 0 else 0
+        else:
+            revenue_width = max(8, min(100, round((revenue_value / baseline) * 100))) if revenue_value > 0 else 0
+        return {
+            'completed': int(completed_width),
+            'active': int(active_width),
+            'cancelled': int(cancelled_width),
+            'revenue': int(revenue_width),
+        }
+
+    # Booking status visualization stats (active/upcoming only)
+    schedules = (
+        Tour_Schedule.objects.select_related('tour')
+        .filter(status='active', end_time__gte=timezone.now())
+        .order_by('start_time')
+    )
     tour_bookings = []
     full_tours = almost_full_tours = moderate_tours = low_tours = 0
     percentage_values = []
 
+    aggregated_by_tour = {}
     for sched in schedules:
-        if sched.slots_available and sched.slots_available > 0:
-            percentage = round((sched.slots_booked / sched.slots_available) * 100)
+        total_slots = int((sched.slots_booked or 0) + (sched.slots_available or 0))
+        if total_slots > 0:
+            percentage = round((int(sched.slots_booked or 0) / total_slots) * 100)
         else:
             percentage = 0
 
@@ -2254,22 +2718,79 @@ def admin_dashboard(request):
         percentage_values.append(percentage)
         # Simple projection for the next month based on current fill ratio.
         forecast_next_month = max(
-            sched.slots_booked,
+            int(sched.slots_booked or 0),
             min(
-                sched.slots_available,
-                round(sched.slots_booked + (sched.slots_available * 0.12))
+                total_slots,
+                round(int(sched.slots_booked or 0) + (total_slots * 0.12))
             ),
         )
+        if int(sched.slots_booked or 0) > 0:
+            monthly_growth_pct = round(((forecast_next_month - int(sched.slots_booked or 0)) / int(sched.slots_booked or 0)) * 100, 1)
+        else:
+            monthly_growth_pct = 0.0
+        yearly_growth_pct = round(monthly_growth_pct * 3, 1)
+        tour_key = (sched.tour_id, getattr(sched.tour, 'tour_name', ''))
+        row = aggregated_by_tour.get(tour_key)
+        if row is None:
+            aggregated_by_tour[tour_key] = {
+                'tour': sched.tour,
+                'schedule': sched,
+                'total_slots': total_slots,
+                'booked_slots': int(sched.slots_booked or 0),
+                'forecast_next_month': int(forecast_next_month or 0),
+                'yearly_growth_total': float(yearly_growth_pct or 0.0),
+                'count': 1,
+            }
+        else:
+            row['total_slots'] += total_slots
+            row['booked_slots'] += int(sched.slots_booked or 0)
+            row['forecast_next_month'] += int(forecast_next_month or 0)
+            row['yearly_growth_total'] += float(yearly_growth_pct or 0.0)
+            row['count'] += 1
+
+    # Rebuild normalized rows after aggregation
+    full_tours = almost_full_tours = moderate_tours = low_tours = 0
+    percentage_values = []
+    for row in aggregated_by_tour.values():
+        total_slots = int(row['total_slots'] or 0)
+        booked_slots = int(row['booked_slots'] or 0)
+        if total_slots > 0:
+            percentage = round((booked_slots / total_slots) * 100)
+        else:
+            percentage = 0
+
+        if percentage >= 100:
+            status = 'full'
+            full_tours += 1
+        elif percentage >= 75:
+            status = 'almost-full'
+            almost_full_tours += 1
+        elif percentage >= 40:
+            status = 'moderate'
+            moderate_tours += 1
+        else:
+            status = 'low'
+            low_tours += 1
+
+        percentage_values.append(percentage)
+
+        forecast_next_month = int(row['forecast_next_month'] or booked_slots)
+        if booked_slots > 0:
+            monthly_growth_pct = round(((forecast_next_month - booked_slots) / booked_slots) * 100, 1)
+        else:
+            monthly_growth_pct = 0.0
+        yearly_growth_pct = round((row['yearly_growth_total'] / max(1, row['count'])), 1)
+
         tour_bookings.append({
-            'tour': sched.tour,
-            'schedule': sched,
+            'tour': row['tour'],
+            'schedule': row['schedule'],
             'percentage': percentage,
             'status': status,
             'remaining': max(0, 100 - percentage),
-            'booked_slots': sched.slots_booked,
+            'booked_slots': booked_slots,
             'forecast_next_month': forecast_next_month,
-            'monthly_growth': 12.0 if sched.slots_booked > 0 else 0.0,
-            'yearly_growth': 9.0 if sched.slots_booked > 0 else 0.0,
+            'monthly_growth': monthly_growth_pct,
+            'yearly_growth': yearly_growth_pct,
         })
 
     # Keep rankings stable for "most/least popular" sections.
@@ -2312,9 +2833,105 @@ def admin_dashboard(request):
     # Survey summary for dashboard panel
     total_survey_responses = UsabilitySurveyResponse.objects.count()
 
+    # Tourist influx from owner monthly reports (turnover-critical monitoring source)
+    selected_influx_period = str(request.GET.get("influx_period") or "").strip()
+    default_month_anchor = now.date().replace(day=1)
+    month_anchor = default_month_anchor
+    if selected_influx_period:
+        try:
+            month_anchor = dt.date.fromisoformat(f"{selected_influx_period}-01")
+        except Exception:
+            selected_influx_period = ""
+            month_anchor = default_month_anchor
+    selected_influx_period = month_anchor.strftime("%Y-%m")
+    prev_month_anchor = (month_anchor - dt.timedelta(days=1)).replace(day=1)
+    influx_statuses = ["submitted", "reviewed", "returned"]
+
+    monthly_influx_qs = OwnerMonthlyReport.objects.filter(
+        reporting_period=month_anchor,
+        status__in=influx_statuses,
+    )
+    prev_month_influx_qs = OwnerMonthlyReport.objects.filter(
+        reporting_period=prev_month_anchor,
+        status__in=influx_statuses,
+    )
+    all_influx_qs = OwnerMonthlyReport.objects.filter(status__in=influx_statuses)
+
+    monthly_influx = monthly_influx_qs.aggregate(
+        report_count=Count("report_id"),
+        checkins=Sum("guests_checked_in"),
+        checkouts=Sum("guests_checked_out"),
+        rooms_used=Sum("rooms_used"),
+    )
+    prev_month_influx = prev_month_influx_qs.aggregate(
+        report_count=Count("report_id"),
+        checkins=Sum("guests_checked_in"),
+        checkouts=Sum("guests_checked_out"),
+        rooms_used=Sum("rooms_used"),
+    )
+    all_time_influx = all_influx_qs.aggregate(
+        report_count=Count("report_id"),
+        checkins=Sum("guests_checked_in"),
+        checkouts=Sum("guests_checked_out"),
+        rooms_used=Sum("rooms_used"),
+    )
+    influx_period_choices = [
+        period_value
+        for period_value in all_influx_qs.order_by("-reporting_period")
+        .values_list("reporting_period", flat=True)
+        .distinct()
+        if period_value is not None
+    ]
+
+    top_influx_accommodations = list(
+        monthly_influx_qs.values("accommodation__company_name")
+        .annotate(
+            total_checkins=Sum("guests_checked_in"),
+            total_checkouts=Sum("guests_checked_out"),
+        )
+        .order_by("-total_checkins", "-total_checkouts", "accommodation__company_name")[:5]
+    )
+
+    tourist_influx_summary = {
+        "month_label": month_anchor.strftime("%B %Y"),
+        "report_count": int(monthly_influx.get("report_count") or 0),
+        "checkins": int(monthly_influx.get("checkins") or 0),
+        "checkouts": int(monthly_influx.get("checkouts") or 0),
+        "rooms_used": int(monthly_influx.get("rooms_used") or 0),
+        "growth_checkins": _growth(
+            int(monthly_influx.get("checkins") or 0),
+            int(prev_month_influx.get("checkins") or 0),
+        ),
+        "growth_checkouts": _growth(
+            int(monthly_influx.get("checkouts") or 0),
+            int(prev_month_influx.get("checkouts") or 0),
+        ),
+        "growth_reports": _growth(
+            int(monthly_influx.get("report_count") or 0),
+            int(prev_month_influx.get("report_count") or 0),
+        ),
+        "all_time_reports": int(all_time_influx.get("report_count") or 0),
+        "all_time_checkins": int(all_time_influx.get("checkins") or 0),
+        "all_time_checkouts": int(all_time_influx.get("checkouts") or 0),
+        "top_accommodations": top_influx_accommodations,
+        "selected_period": selected_influx_period,
+        "period_choices": influx_period_choices,
+    }
+
+    revenue_baseline = max(
+        float(tour_stats.get('total_revenue') or 0),
+        float(weekly_stats.get('total_revenue') or 0),
+        float(monthly_stats.get('total_revenue') or 0),
+        float(yearly_stats.get('total_revenue') or 0),
+    )
+    all_time_card_widths = _stat_card_widths(tour_stats, revenue_baseline=revenue_baseline)
+    weekly_card_widths = _stat_card_widths(weekly_stats, revenue_baseline=revenue_baseline)
+    monthly_card_widths = _stat_card_widths(monthly_stats, revenue_baseline=revenue_baseline)
+    yearly_card_widths = _stat_card_widths(yearly_stats, revenue_baseline=revenue_baseline)
+
     # Add dashboard data to context
     context = {
-        'active_tours_count': Tour_Add.objects.count(),
+        'active_tours_count': active_tours.count(),
         'active_tours': active_tours,
         'pending_bookings': Pending.objects.filter(status='Pending').count(),
         'total_users': Guest.objects.count(),
@@ -2340,6 +2957,11 @@ def admin_dashboard(request):
         'yearly_average': yearly_average,
         'booking_insights': booking_insights,
         'booking_recommendations': booking_recommendations,
+        'tourist_influx_summary': tourist_influx_summary,
+        'all_time_card_widths': all_time_card_widths,
+        'weekly_card_widths': weekly_card_widths,
+        'monthly_card_widths': monthly_card_widths,
+        'yearly_card_widths': yearly_card_widths,
     }
     
     return render(request, 'admin_dashboard.html', context)
@@ -2380,7 +3002,7 @@ def accommodation_dashboard(request):
     context['available_rooms'] = available_rooms
     context['hotel_rooms'] = hotel_rooms
     
-    return render(request, 'accommodation_dashboard.html', context)
+    return render(request, 'admin_app/accommodation_dashboard.html', context)
 
 
 @accomodation_required
@@ -2947,37 +3569,32 @@ def ajax_delete_entry(request):
         return JsonResponse({'status': 'success'})
     return JsonResponse({'status': 'error', 'error': 'Invalid entry id'}, status=400)
 
-@csrf_exempt
+@require_POST
+@admin_required
 def ajax_mark_as_hotel(request):
-    if request.method == "POST":
-        entry_id = request.POST.get("entry_id")
-        status = request.POST.get("status")  # "yes" for marking as hotel; "no" for unmarking
-        try:
-            entry = Entry.objects.get(id=entry_id)
-            if status == "yes":
-                entry.is_hotel = True
-            else:
-                entry.is_hotel = False
-            entry.save()
-            return JsonResponse({"status": "success", "message": "Updated successfully."})
-        except Entry.DoesNotExist:
-            return JsonResponse({"status": "error", "message": "Entry not found."})
-    return JsonResponse({"status": "error", "message": "Invalid request."})
+    entry_id = request.POST.get("entry_id")
+    status = request.POST.get("status")  # "yes" for marking as hotel; "no" for unmarking
+    try:
+        entry = Entry.objects.get(id=entry_id)
+        entry.is_hotel = status == "yes"
+        entry.save()
+        return JsonResponse({"status": "success", "message": "Updated successfully."})
+    except Entry.DoesNotExist:
+        return JsonResponse({"status": "error", "message": "Entry not found."}, status=404)
 
-@csrf_exempt
+@require_POST
+@admin_required
 def ajax_mark_summary_as_hotel(request):
-    if request.method == "POST":
-        summary_id = request.POST.get("summary_id")
-        status = request.POST.get("status")  # "1" for highlighted, "0" for unhighlighted
-        try:
-            summary = Summary.objects.get(id=summary_id)
-            # Mimic the is_hotel logic from the Entry form
-            summary.hotel = "1" if status == "1" else "0"
-            summary.save()
-            return JsonResponse({"status": "success", "hotel": summary.hotel})
-        except Summary.DoesNotExist:
-            return JsonResponse({"status": "error", "message": "Summary not found"})
-    return JsonResponse({"status": "error", "message": "Invalid request"})
+    summary_id = request.POST.get("summary_id")
+    status = request.POST.get("status")  # "1" for highlighted, "0" for unhighlighted
+    try:
+        summary = Summary.objects.get(id=summary_id)
+        # Mimic the is_hotel logic from the Entry form
+        summary.hotel = "1" if status == "1" else "0"
+        summary.save()
+        return JsonResponse({"status": "success", "hotel": summary.hotel})
+    except Summary.DoesNotExist:
+        return JsonResponse({"status": "error", "message": "Summary not found"}, status=404)
 
 
 @admin_required
@@ -2985,9 +3602,14 @@ def tour_calendar(request):
     """
     View function for displaying the tour calendar interface.
     """
+    Tour_Schedule.get_tour_statistics()
+
     schedules = (
         Tour_Schedule.objects.select_related("tour")
-        .all()
+        .filter(
+            status="active",
+            end_time__gte=timezone.now(),
+        )
         .order_by("start_time")
     )
 
@@ -3020,10 +3642,20 @@ def tour_calendar(request):
     if calendar_tours:
         initial_calendar_date = calendar_tours[0]["start"]
 
+    completed_history = (
+        Tour_Schedule.objects.select_related("tour")
+        .filter(
+            status="completed",
+            end_time__lt=timezone.now(),
+        )
+        .order_by("-end_time")[:20]
+    )
+
     context = {
         'page_title': 'Tour Calendar',
         'calendar_tours': calendar_tours,
         'initial_calendar_date': initial_calendar_date,
+        'completed_history': completed_history,
     }
     
     return render(request, 'tour_calendar.html', context)

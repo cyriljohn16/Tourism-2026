@@ -1,4 +1,9 @@
 {% load static %}
+<button type="button" class="nav-mobile-toggle" id="navMobileToggle" aria-label="Open navigation menu">
+  <span class="icon">&#9776;</span>
+  <span>Menu</span>
+</button>
+<div class="nav-mobile-overlay" id="navMobileOverlay"></div>
 <div class="nav-sidebar">
   <div class="nav-logo">
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 140 50">
@@ -99,6 +104,51 @@
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {
+  const navRoot = document.querySelector('.navigation');
+  const mobileToggle = document.getElementById('navMobileToggle');
+  const mobileOverlay = document.getElementById('navMobileOverlay');
+
+  function closeMobileNav() {
+    if (!navRoot) return;
+    navRoot.classList.remove('mobile-open');
+    document.body.classList.remove('nav-mobile-open');
+    if (mobileToggle) mobileToggle.setAttribute('aria-expanded', 'false');
+  }
+
+  function openMobileNav() {
+    if (!navRoot) return;
+    navRoot.classList.add('mobile-open');
+    document.body.classList.add('nav-mobile-open');
+    if (mobileToggle) mobileToggle.setAttribute('aria-expanded', 'true');
+  }
+
+  if (mobileToggle && navRoot) {
+    mobileToggle.setAttribute('aria-expanded', 'false');
+    mobileToggle.addEventListener('click', function() {
+      if (navRoot.classList.contains('mobile-open')) {
+        closeMobileNav();
+      } else {
+        openMobileNav();
+      }
+    });
+  }
+
+  if (mobileOverlay) {
+    mobileOverlay.addEventListener('click', closeMobileNav);
+  }
+
+  document.addEventListener('keydown', function(ev) {
+    if (ev.key === 'Escape') closeMobileNav();
+  });
+
+  document.querySelectorAll('.nav-link, .nav-sublink, .logout-link').forEach(function(el) {
+    el.addEventListener('click', function() {
+      if (window.matchMedia('(max-width: 768px)').matches) {
+        closeMobileNav();
+      }
+    });
+  });
+
   const notifToggle = document.getElementById('navNotifToggle');
   const notifDropdown = document.getElementById('navNotifDropdown');
   const notifList = document.getElementById('navNotifList');

@@ -314,6 +314,15 @@ class Room(models.Model):
     room_id = models.AutoField(primary_key=True)
     accommodation = models.ForeignKey(Accomodation, on_delete=models.CASCADE, related_name='rooms')
     room_name = models.CharField(max_length=100)
+    room_identifiers = models.TextField(
+        blank=True,
+        default="",
+        help_text="Optional room IDs/numbers for this room type (e.g., 101,102 or SS-001 to SS-031).",
+    )
+    total_rooms = models.PositiveIntegerField(
+        default=1,
+        help_text="Total number of rooms available under this room type.",
+    )
     person_limit = models.IntegerField(default=0)
     current_availability = models.IntegerField(null=True, blank=True)
     price_per_night = models.DecimalField(max_digits=10, decimal_places=2, default=0)
@@ -479,6 +488,9 @@ class MonthlyReportRoomUsage(models.Model):
         related_name="monthly_report_usage_rows",
     )
     room_name_snapshot = models.CharField(max_length=120, default="")
+    selected_room_identifier = models.CharField(max_length=120, blank=True, default="")
+    room_identifiers_snapshot = models.TextField(blank=True, default="")
+    total_rooms_snapshot = models.PositiveIntegerField(default=1)
     check_ins = models.PositiveIntegerField(default=0)
     check_outs = models.PositiveIntegerField(default=0)
     guests_count = models.PositiveIntegerField(default=0)
@@ -487,7 +499,6 @@ class MonthlyReportRoomUsage(models.Model):
 
     class Meta:
         ordering = ["room_name_snapshot", "usage_id"]
-        unique_together = [("monthly_report", "room")]
 
     def __str__(self):
         report_period = self.monthly_report.reporting_period if self.monthly_report else None

@@ -30,6 +30,7 @@ from django.template.loader import render_to_string
 from django.utils.html import strip_tags
 from django.conf import settings
 from django.views.decorators.http import require_http_methods, require_POST
+from django.views.decorators.clickjacking import xframe_options_exempt
 from django.urls import reverse
 from .utils import translate, get_translations_json, set_language, get_current_language, LANGUAGE_SESSION_KEY
 from django.shortcuts import render, get_object_or_404, redirect
@@ -50,6 +51,7 @@ from admin_app.models import (
     Room as AdminRoom,
     InAppNotification,
     AccommodationCertification,
+    TourismInformation,
 )
 from admin_app.notification_service import (
     create_notification,
@@ -58,7 +60,7 @@ from admin_app.notification_service import (
     notify_assigned_employees_for_schedule,
     serialize_notification_rows,
 )
-from .models import AccommodationBooking
+from .models import AccommodationBooking, AccommodationReview
 from .models import Billing
 from .booking_integrity import (
     create_accommodation_booking_with_integrity,
@@ -174,19 +176,44 @@ def _resolve_treasurer_billing_url():
 def _resolve_accommodation_outbound_link(accommodation):
     if accommodation is None:
         return ""
-    booking_url = str(getattr(accommodation, "official_booking_url", "") or "").strip()
-    if booking_url:
-        return booking_url
-    contact_url = str(getattr(accommodation, "official_contact_url", "") or "").strip()
-    if contact_url:
-        return contact_url
-    email_value = str(getattr(accommodation, "email_address", "") or "").strip()
-    if email_value:
-        return f"mailto:{email_value}"
-    phone_value = str(getattr(accommodation, "phone_number", "") or "").strip()
-    if phone_value:
-        return f"tel:{phone_value}"
+    links = _resolve_accommodation_links(accommodation)
+    for key in ("facebook_url", "provider_url", "email_link", "phone_link"):
+        value = str(links.get(key) or "").strip()
+        if value:
+            return value
     return ""
+
+
+def _is_accommodation_facebook_url(url):
+    text = str(url or "").strip().lower()
+    return "facebook.com" in text or "fb.com" in text
+
+
+def _is_third_party_accommodation_booking_url(url):
+    text = str(url or "").strip().lower()
+    if not text:
+        return False
+    third_party_hosts = (
+        "booking.com",
+        "agoda.",
+        "traveloka.",
+        "expedia.",
+        "hotels.com",
+        "tripadvisor.",
+        "airbnb.",
+        "trivago.",
+        "kayak.",
+    )
+    return any(host in text for host in third_party_hosts)
+
+
+def _is_verified_accommodation_provider_url(url):
+    text = str(url or "").strip()
+    if not text:
+        return False
+    if _is_third_party_accommodation_booking_url(text):
+        return False
+    return text.lower().startswith(("http://", "https://"))
 
 
 def _resolve_accommodation_links(accommodation):
@@ -195,32 +222,30 @@ def _resolve_accommodation_links(accommodation):
     email_value = str(getattr(accommodation, "email_address", "") or "").strip() if accommodation else ""
     phone_value = str(getattr(accommodation, "phone_number", "") or "").strip() if accommodation else ""
 
-    def _is_facebook(url):
-        return "facebook.com" in str(url or "").strip().lower()
-
     facebook_url = ""
     for candidate in (booking_url, contact_url):
-        if candidate and _is_facebook(candidate):
+        if candidate and _is_accommodation_facebook_url(candidate):
             facebook_url = candidate
             break
 
-    official_url = ""
-    for candidate in (booking_url, contact_url):
-        if candidate and not _is_facebook(candidate):
-            official_url = candidate
+    provider_url = ""
+    # Prefer contact/provider channels over booking URLs. Third-party booking
+    # platforms are intentionally suppressed from guest-facing handoff.
+    for candidate in (contact_url, booking_url):
+        if candidate and not _is_accommodation_facebook_url(candidate) and _is_verified_accommodation_provider_url(candidate):
+            provider_url = candidate
             break
-    if not official_url:
-        official_url = _resolve_accommodation_outbound_link(accommodation)
-        if official_url and _is_facebook(official_url):
-            if not facebook_url:
-                facebook_url = official_url
-            official_url = ""
+
+    has_third_party_booking_url = _is_third_party_accommodation_booking_url(booking_url) or _is_third_party_accommodation_booking_url(contact_url)
 
     return {
-        "official_url": official_url,
+        "official_url": provider_url,
+        "provider_url": provider_url,
         "facebook_url": facebook_url,
         "phone_link": f"tel:{phone_value}" if phone_value else "",
         "email_link": f"mailto:{email_value}" if email_value else "",
+        "has_verified_provider_link": bool(facebook_url or provider_url or email_value or phone_value),
+        "suppressed_third_party_booking_url": has_third_party_booking_url,
     }
 
 
@@ -254,9 +279,14 @@ def _resolve_room_image_url(room, *, fallback_url=""):
 
 def _build_homepage_accommodation_cards(limit=6):
     cards = []
-    accommodations = (
-        _approved_accommodation_queryset()
-        .order_by("company_name")[: max(1, int(limit))]
+    max_items = max(1, int(limit))
+    accommodations = list(_approved_accommodation_queryset().order_by("company_name")[:max_items])
+    if len(accommodations) > 2:
+        # Rotate the featured stays daily so the mobile top-two cards are not permanently static.
+        rotation = timezone.localdate().toordinal() % len(accommodations)
+        accommodations = accommodations[rotation:] + accommodations[:rotation]
+    review_summaries = _get_accommodation_review_summaries(
+        [getattr(accom, "accom_id", None) for accom in accommodations]
     )
     for accom in accommodations:
         links = _resolve_accommodation_links(accom)
@@ -271,19 +301,27 @@ def _build_homepage_accommodation_cards(limit=6):
                 price_cue = f"From PHP {Decimal(str(room.price_per_night)):.0f} / night"
             except Exception:
                 price_cue = ""
+        rating_label = _format_accommodation_rating_label(
+            review_summaries.get(getattr(accom, "accom_id", None))
+        )
         cards.append(
             {
                 "accommodation": accom,
                 "image_url": _resolve_accommodation_image_url(accom),
-                "official_link": links.get("official_url") or links.get("facebook_url") or "",
-                "official_page_url": links.get("official_url") or "",
+                "official_link": links.get("facebook_url") or links.get("provider_url") or links.get("email_link") or links.get("phone_link") or "",
+                "official_page_url": links.get("provider_url") or "",
+                "provider_url": links.get("provider_url") or "",
+                "contact_channel_url": links.get("provider_url") or links.get("email_link") or links.get("phone_link") or "",
                 "facebook_url": links.get("facebook_url") or "",
+                "has_verified_provider_link": links.get("has_verified_provider_link", False),
+                "suppressed_third_party_booking_url": links.get("suppressed_third_party_booking_url", False),
                 "price_cue": price_cue,
                 "capacity_cue": (
                     f"Up to {int(getattr(room, 'person_limit', 0))} guests"
                     if room is not None and getattr(room, "person_limit", None) not in (None, "")
                     else ""
                 ),
+                "rating_label": rating_label,
                 "room_name": str(getattr(room, "room_name", "") or "").strip() if room else "",
             }
         )
@@ -304,6 +342,364 @@ def _accommodation_transaction_disabled_payload():
 def _approved_accommodation_queryset():
     base_qs = Accomodation.objects.all()
     return apply_approved_accommodation_scope(base_qs, accommodation_path="")
+
+
+def _get_accommodation_review_summaries(accommodation_ids):
+    ids = [value for value in accommodation_ids if value not in (None, "")]
+    if not ids:
+        return {}
+    rows = (
+        AccommodationReview.objects.filter(
+            accommodation_id__in=ids,
+            status="approved",
+        )
+        .values("accommodation_id")
+        .annotate(average=models.Avg("rating"), count=models.Count("review_id"))
+    )
+    return {
+        row["accommodation_id"]: {
+            "average": row.get("average"),
+            "count": int(row.get("count") or 0),
+        }
+        for row in rows
+    }
+
+
+def _format_accommodation_rating_label(summary):
+    count = int((summary or {}).get("count") or 0)
+    if count <= 0:
+        return "Not yet rated"
+    average = summary.get("average") or 0
+    try:
+        average_label = f"{float(average):.1f}"
+    except Exception:
+        average_label = "0.0"
+    suffix = "review" if count == 1 else "reviews"
+    return f"★ {average_label} / 5.0 ({count} {suffix})"
+
+
+def _homepage_tourist_map_url():
+    images_dir = settings.BASE_DIR / "static" / "images"
+    candidates = (
+        ("bayawan_tourist_map_official.png", "/static/images/bayawan_tourist_map_official.png"),
+        ("bayawan_map.jpg", "/static/images/bayawan_map.jpg"),
+        ("bayawan_map.png", "/static/images/bayawan_map.png"),
+    )
+    for filename, url in candidates:
+        try:
+            if (images_dir / filename).exists():
+                return url
+        except Exception:
+            continue
+    return "/static/images/bayawan_map.jpg"
+
+
+def _tourism_map_category_label(category):
+    key = str(category or "").strip().lower()
+    return {
+        "restaurant": "Dining Places",
+        "hotel": "Approved Stays",
+        "landmark": "Tourist Spots / Landmarks",
+        "public": "Public Tourism Facilities",
+        "shopping": "Shopping / Local Products",
+        "custom": "Other Tourism Places",
+    }.get(key, "Other Tourism Places")
+
+
+def _normalize_tourism_place_name(value):
+    text = str(value or "").strip().lower()
+    return "".join(ch for ch in text if ch.isalnum())
+
+
+def _tourism_category_metadata():
+    return [
+        {"key": "landmark", "label": "Tourist Spots / Landmarks", "description": "Published destinations, landmarks, and attraction markers.", "map_query": "tourist spots"},
+        {"key": "restaurant", "label": "Dining Places", "description": "Mapped restaurants, cafes, and food-related stops.", "map_query": "dining places"},
+        {"key": "public", "label": "Public Facilities", "description": "Tourism-related public places and visitor services.", "map_query": "public facilities"},
+        {"key": "shopping", "label": "Shopping / Local Products", "description": "Markets, shops, souvenirs, and local product stops.", "map_query": "shopping local products"},
+        {"key": "hotel", "label": "Approved Stays", "description": "Tourism Office-approved accommodations promoted for visitor planning.", "map_query": "approved stays"},
+        {"key": "custom", "label": "Other Tourism Places", "description": "Additional mapped places approved for public viewing.", "map_query": "tourism places"},
+    ]
+
+
+def _tourism_map_category_summary():
+    try:
+        rows = (
+            MapBookmark.objects.filter(user__isnull=True)
+            .values("category")
+            .annotate(total=models.Count("id"))
+        )
+        counts = {str(row.get("category") or "custom").strip().lower(): int(row.get("total") or 0) for row in rows}
+    except Exception:
+        counts = {}
+
+    summary = []
+    for meta in _tourism_category_metadata():
+        key = meta["key"]
+        total = counts.get(key, 0)
+        if key == "landmark":
+            try:
+                total += TourismInformation.objects.published().count()
+            except Exception:
+                pass
+        if total:
+            summary.append(
+                {
+                    "label": meta["label"],
+                    "count": total,
+                    "description": meta["description"],
+                    "map_query": meta["label"],
+                }
+            )
+
+    if not summary:
+        summary = [
+            {"label": "Tourist Spots / Landmarks", "count": 0, "description": "Tourism place records will appear here soon.", "map_query": "tourist spots"},
+            {"label": "Dining Places", "count": 0, "description": "Dining records will appear here soon.", "map_query": "dining places"},
+            {"label": "Approved Stays", "count": 0, "description": "Approved stay markers will appear here soon.", "map_query": "approved stays"},
+            {"label": "Public Facilities", "count": 0, "description": "Public facility records will appear here soon.", "map_query": "public facilities"},
+        ]
+    return summary[:6]
+
+
+def _external_direction_url(lat, lng):
+    try:
+        lat_value = float(lat)
+        lng_value = float(lng)
+    except (TypeError, ValueError):
+        return ""
+    return f"https://www.google.com/maps/search/?api=1&query={lat_value},{lng_value}"
+
+
+def _build_homepage_tourism_place_cards(limit=8):
+    cards = []
+
+    try:
+        tourism_rows = TourismInformation.objects.published().order_by("spot_name")[:limit]
+    except Exception:
+        tourism_rows = []
+
+    for info in tourism_rows:
+        image_url = ""
+        image_field = getattr(info, "image", None)
+        if image_field:
+            try:
+                image_url = image_field.url
+            except Exception:
+                image_url = ""
+        name = str(getattr(info, "spot_name", "") or "").strip()
+        cards.append(
+            {
+                "name": name,
+                "category": "Tourism Information",
+                "badge": "Tourism Office Published",
+                "description": str(getattr(info, "description", "") or "").strip(),
+                "location": str(getattr(info, "location", "") or "").strip(),
+                "image_url": image_url,
+                "map_query": name,
+                "directions_url": "",
+            }
+        )
+        if len(cards) >= limit:
+            return cards
+
+    remaining = max(0, int(limit or 8) - len(cards))
+    if remaining <= 0:
+        return cards
+
+    try:
+        marker_rows = MapBookmark.objects.filter(user__isnull=True).order_by("category", "name")[: remaining + 8]
+    except Exception:
+        marker_rows = []
+
+    seen_names = {str(card.get("name") or "").strip().lower() for card in cards if card.get("name")}
+    for marker in marker_rows:
+        name = str(getattr(marker, "name", "") or "").strip()
+        if not name or name.lower() in seen_names:
+            continue
+        image_url = ""
+        image_field = getattr(marker, "primary_image", None)
+        if image_field:
+            try:
+                image_url = image_field.url
+            except Exception:
+                image_url = ""
+        cards.append(
+            {
+                "name": name,
+                "category": _tourism_map_category_label(getattr(marker, "category", "")),
+                "badge": "Tourism Office Mapped",
+                "description": str(getattr(marker, "details", "") or "").strip(),
+                "location": "",
+                "image_url": image_url,
+                "map_query": name,
+                "directions_url": _external_direction_url(
+                    getattr(marker, "latitude", None),
+                    getattr(marker, "longitude", None),
+                ),
+            }
+        )
+        seen_names.add(name.lower())
+        if len(cards) >= limit:
+            break
+    return cards
+
+
+def _build_homepage_tourism_place_groups(limit_per_group=6):
+    groups = []
+    group_lookup = {}
+    for meta in _tourism_category_metadata():
+        group = {
+            "key": meta["key"],
+            "label": meta["label"],
+            "description": meta["description"],
+            "map_query": meta["map_query"],
+            "places": [],
+            "count": 0,
+        }
+        groups.append(group)
+        group_lookup[meta["key"]] = group
+
+    seen_names_by_group = {group["key"]: set() for group in groups}
+
+    try:
+        tourism_rows = TourismInformation.objects.published().order_by("spot_name")
+    except Exception:
+        tourism_rows = []
+
+    for info in tourism_rows:
+        name = str(getattr(info, "spot_name", "") or "").strip()
+        normalized_name = _normalize_tourism_place_name(name)
+        if not name or normalized_name in seen_names_by_group["landmark"]:
+            continue
+        image_url = ""
+        image_field = getattr(info, "image", None)
+        if image_field:
+            try:
+                image_url = image_field.url
+            except Exception:
+                image_url = ""
+        group_lookup["landmark"]["places"].append(
+            {
+                "name": name,
+                "category": group_lookup["landmark"]["label"],
+                "badge": "Tourism Office Published",
+                "description": str(getattr(info, "description", "") or "").strip(),
+                "location": str(getattr(info, "location", "") or "").strip(),
+                "image_url": image_url,
+                "map_query": name,
+                "directions_url": "",
+                "has_map_marker": False,
+            }
+        )
+        seen_names_by_group["landmark"].add(normalized_name)
+
+    try:
+        marker_rows = list(MapBookmark.objects.filter(user__isnull=True).order_by("category", "name"))
+    except Exception:
+        marker_rows = []
+
+    marker_lookup = {}
+    for marker in marker_rows:
+        marker_name = str(getattr(marker, "name", "") or "").strip()
+        if not marker_name:
+            continue
+        normalized_marker_name = _normalize_tourism_place_name(marker_name)
+        if normalized_marker_name and normalized_marker_name not in marker_lookup:
+            marker_lookup[normalized_marker_name] = marker
+
+    try:
+        approved_stays = list(_approved_accommodation_queryset().order_by("company_name"))
+    except Exception:
+        approved_stays = []
+
+    for accom in approved_stays:
+        name = str(getattr(accom, "company_name", "") or "").strip()
+        normalized_name = _normalize_tourism_place_name(name)
+        if not name or normalized_name in seen_names_by_group["hotel"]:
+            continue
+        matched_marker = marker_lookup.get(normalized_name)
+        links = _resolve_accommodation_links(accom)
+        facebook_url = str(links.get("facebook_url") or "").strip()
+        provider_url = str(links.get("provider_url") or "").strip()
+        contact_url = facebook_url or provider_url or str(links.get("email_link") or "").strip() or str(links.get("phone_link") or "").strip()
+        contact_label = ""
+        if facebook_url:
+            contact_label = "Open Official Facebook Page"
+        elif contact_url:
+            contact_label = "Contact Accommodation Provider"
+        group_lookup["hotel"]["places"].append(
+            {
+                "name": name,
+                "category": group_lookup["hotel"]["label"],
+                "badge": "Tourism Office Approved",
+                "description": (
+                    str(getattr(accom, "description", "") or "").strip()
+                    or "Preview-only accommodation information. Final arrangements continue through the establishment's verified provider channel."
+                ),
+                "location": str(getattr(accom, "location", "") or "").strip(),
+                "image_url": _resolve_accommodation_image_url(accom),
+                "map_query": name,
+                "directions_url": (
+                    _external_direction_url(
+                        getattr(matched_marker, "latitude", None),
+                        getattr(matched_marker, "longitude", None),
+                    )
+                    if matched_marker is not None
+                    else ""
+                ),
+                "has_map_marker": matched_marker is not None,
+                "detail_url": reverse("accommodation_detail_page", kwargs={"accom_id": getattr(accom, "accom_id", None)}),
+                "contact_url": contact_url,
+                "contact_label": contact_label,
+            }
+        )
+        seen_names_by_group["hotel"].add(normalized_name)
+
+    for marker in marker_rows:
+        name = str(getattr(marker, "name", "") or "").strip()
+        if not name:
+            continue
+        raw_category = str(getattr(marker, "category", "") or "custom").strip().lower() or "custom"
+        key = raw_category if raw_category in group_lookup else "custom"
+        normalized_name = _normalize_tourism_place_name(name)
+        if key == "hotel":
+            # Approved Stays are sourced from accepted accommodations; hotel
+            # markers only enrich matching stays with map/direction data.
+            continue
+        if normalized_name in seen_names_by_group[key]:
+            continue
+        image_url = ""
+        image_field = getattr(marker, "primary_image", None)
+        if image_field:
+            try:
+                image_url = image_field.url
+            except Exception:
+                image_url = ""
+        group_lookup[key]["places"].append(
+            {
+                "name": name,
+                "category": _tourism_map_category_label(raw_category),
+                "badge": "Tourism Office Mapped",
+                "description": str(getattr(marker, "details", "") or "").strip(),
+                "location": "Bayawan City",
+                "image_url": image_url,
+                "map_query": name,
+                "directions_url": _external_direction_url(
+                    getattr(marker, "latitude", None),
+                    getattr(marker, "longitude", None),
+                ),
+                "has_map_marker": True,
+            }
+        )
+        seen_names_by_group[key].add(normalized_name)
+
+    safe_limit = max(1, int(limit_per_group or 6))
+    for group in groups:
+        group["count"] = len(group["places"])
+        if group["key"] != "hotel":
+            group["places"] = group["places"][:safe_limit]
+    return groups
 
 
 @ensure_csrf_cookie
@@ -361,14 +757,24 @@ def main_page(request):
     # Get the current language preference
     current_language = get_current_language(request)
     
-    # Get all tours
-    tours = Tour_Add.objects.filter(publication_status="published")
+    # Get only published tours with non-expired schedules for guest-facing discovery.
+    now = timezone.now()
+    active_tour_ids = Tour_Schedule.objects.filter(end_time__gte=now).exclude(
+        status='cancelled'
+    ).values_list('tour_id', flat=True).distinct()
+    tours = Tour_Add.objects.filter(
+        publication_status="published",
+        tour_id__in=active_tour_ids,
+    )
     
     # For each tour, translate translatable fields and calculate min/max duration
     translated_tours = []
     for tour in tours:
         # Calculate min and max duration days for each tour's schedules
-        schedules = Tour_Schedule.objects.filter(tour_id=tour.tour_id)
+        schedules = Tour_Schedule.objects.filter(
+            tour_id=tour.tour_id,
+            end_time__gte=now,
+        ).exclude(status='cancelled')
         min_duration = None
         max_duration = None
         
@@ -543,6 +949,18 @@ def main_page(request):
 
     mainpage_assets = get_mainpage_public_assets()
     approved_accommodation_cards = _build_homepage_accommodation_cards(limit=6)
+    official_tourist_map_url = _homepage_tourist_map_url()
+    tourism_place_cards = _build_homepage_tourism_place_cards(limit=8)
+    tourism_place_groups = _build_homepage_tourism_place_groups(limit_per_group=6)
+    tourism_category_summary = [
+        {
+            "label": group["label"],
+            "count": group["count"],
+            "description": group["description"],
+            "map_query": group["map_query"],
+        }
+        for group in tourism_place_groups
+    ]
 
     context = {
         'tours': tours,  # Keep the original queryset for Django template usage
@@ -562,6 +980,10 @@ def main_page(request):
         'active_logo_url': mainpage_assets.get('active_logo_url') or '',
         'hero_backgrounds': mainpage_assets.get('hero_urls') or [],
         'approved_accommodation_cards': approved_accommodation_cards,
+        'official_tourist_map_url': official_tourist_map_url,
+        'tourism_place_cards': tourism_place_cards,
+        'tourism_place_groups': tourism_place_groups,
+        'tourism_category_summary': tourism_category_summary,
     }
     
     return render(request, 'mainpage.html', context)
@@ -881,36 +1303,16 @@ def guest_notifications(request):
                 "type": "tour",
                 "status": notif_status,
                 "created_at": updated_at,
-                "link": reverse("main-page") + "#user-bookings",
+                "link": reverse("main-page") + "#myBookings",
             }
         )
 
-    # Tour booking updates (legacy pending module) for Accepted/Declined visibility
-    pending_updates = (
-        Pending.objects.filter(guest_id=guest_user)
-        .select_related("tour_id", "sched_id")
-        .order_by("-id")[:20]
-    )
-    for pending in pending_updates:
-        pending_status = str(pending.status or "").strip().lower()
-        if pending_status not in {"accepted", "declined", "cancelled"}:
-            continue
-        created_at = pending.cancellation_date or pending.sched_id.start_time or now
-        message = (
-            f"{pending.tour_id.tour_name} ({pending.sched_id.sched_id}) | "
-            f"Guests: {pending.total_guests} | Status: {str(pending.status).title()}."
-        )
-        notifications.append(
-            {
-                "id": f"pending-{pending.id}-{pending_status}",
-                "title": f"Tour booking {pending_status}",
-                "message": message,
-                "type": "tour",
-                "status": pending_status,
-                "created_at": created_at,
-                "link": reverse("main-page") + "#user-bookings",
-            }
-        )
+    # NOTE:
+    # Legacy Pending status notifications are persisted via InAppNotification
+    # at status-update time (tour_app StatusUpdateView). We intentionally avoid
+    # regenerating synthetic accepted/declined/cancelled notices here because
+    # they can incorrectly use schedule start_time as "notification time" and
+    # produce misleading dates in the guest dropdown.
 
     # New published tours with upcoming schedules
     new_tour_schedules = (
@@ -1266,12 +1668,20 @@ def login_view(request):
                     return redirect(owner_login_url)
 
                 auth_login(request, user)
+                requested_next = str(request.POST.get("next") or request.GET.get("next") or "").strip()
+                redirect_url = ""
+                if requested_next and url_has_allowed_host_and_scheme(
+                    requested_next,
+                    allowed_hosts={request.get_host()},
+                ):
+                    redirect_url = requested_next
                 # For AJAX requests, return JSON response
                 if is_ajax:
                     return JsonResponse({
                         'success': True,
                         'first_name': user.first_name,
-                        'message': 'Login successful'
+                        'message': 'Login successful',
+                        'redirect_url': redirect_url,
                     })
                 return redirect(request.GET.get('next', 'main-page'))
             else:
@@ -1317,7 +1727,14 @@ def logout_view(request):
 
 def tour_schedule_detail(request, sched_id):
     # Fetch the schedule details
-    schedule = get_object_or_404(Tour_Schedule, id=sched_id)
+    schedule = get_object_or_404(
+        Tour_Schedule,
+        sched_id=sched_id,
+        tour__publication_status="published",
+        end_time__gte=timezone.now(),
+    )
+    if str(getattr(schedule, "status", "")).strip().lower() == "cancelled":
+        return redirect('main-page')
 
     context = {
         'schedule': schedule,
@@ -1331,7 +1748,8 @@ def get_tour_schedules(request, tour_id):
     tour_schedules = Tour_Schedule.objects.filter(
         tour_id=tour_id,
         tour__publication_status="published",
-    )
+        end_time__gte=timezone.now(),
+    ).exclude(status__iexact='cancelled')
     schedules = []
 
     for schedule in tour_schedules:
@@ -1409,7 +1827,7 @@ def book_tour(request):
             title="Tour booking submitted",
             message=f"Your booking request for {tour.tour_name} is pending staff review.",
             notification_type="booking",
-            url=reverse("main-page") + "#user-bookings",
+            url=reverse("main-page") + "#myBookings",
             dedupe_key=f"tour-pending-{pending_booking.id}",
             related_object_id=str(pending_booking.id),
         )
@@ -1510,7 +1928,6 @@ The Tour Team'''
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=400)
 
-@login_required
 def guest_book(request, tour_id):
     """View for displaying tour booking page with language support"""
     # Get current language
@@ -1521,7 +1938,10 @@ def guest_book(request, tour_id):
 
     # Retrieve all schedules associated with this tour.
     # Assuming your Tour_Schedule model's foreign key to Tour_Add is named "tour_id".
-    schedules = Tour_Schedule.objects.filter(tour_id=tour)
+    schedules = Tour_Schedule.objects.filter(
+        tour_id=tour,
+        end_time__gte=timezone.now(),
+    ).exclude(status__iexact='cancelled')
     
     # Prepare translated tour data
     tour_data = {
@@ -1562,22 +1982,28 @@ def guest_book(request, tour_id):
         'current_language': current_language,
         'translations_json': json.dumps(translations),
         'tour_data': tour_data,
+        'booking_requires_login': not bool(getattr(request.user, "is_authenticated", False)),
         'recaptcha_site_key': str(getattr(settings, 'RECAPTCHA_SITE_KEY', '') or '').strip(),
         'recaptcha_required': _is_recaptcha_required(),
     }
     
     return render(request, 'guest_book.html', context)
 
+@xframe_options_exempt
 def map_view(request):
     """View for displaying the interactive Bayawan City map with language support"""
     # Get current language
     current_language = get_current_language(request)
-    
-    # Get bookmarks for the current user
+
+    # Guest visibility policy:
+    # - Anonymous users: public/system markers only (user=None)
+    # - Authenticated users: public/system markers + their own markers
     if request.user.is_authenticated:
-        bookmarks = MapBookmark.objects.filter(user=request.user)
+        bookmarks = MapBookmark.objects.filter(
+            models.Q(user__isnull=True) | models.Q(user=request.user)
+        )
     else:
-        bookmarks = MapBookmark.objects.filter(user=None)
+        bookmarks = MapBookmark.objects.filter(user__isnull=True)
     
     # Translate bookmarks
     translated_bookmarks = []
@@ -1627,10 +2053,12 @@ def bookmark_list(request):
     current_language = get_current_language(request)
     
     if request.user.is_authenticated:
-        bookmarks = MapBookmark.objects.filter(user=request.user)
+        bookmarks = MapBookmark.objects.filter(
+            models.Q(user__isnull=True) | models.Q(user=request.user)
+        )
     else:
-        # For anonymous users, get bookmarks with no user
-        bookmarks = MapBookmark.objects.filter(user=None)
+        # For anonymous users, get public/system bookmarks only
+        bookmarks = MapBookmark.objects.filter(user__isnull=True)
     
     data = []
     for bookmark in bookmarks:
@@ -2196,7 +2624,7 @@ def cancel_booking(request):
                     title="Tour booking cancelled",
                     message=f"Your booking for {booking.tour_id.tour_name} was cancelled.",
                     notification_type="booking",
-                    url=reverse("main-page") + "#user-bookings",
+                    url=reverse("main-page") + "#myBookings",
                     dedupe_key=f"tour-cancelled-{booking.id}",
                     related_object_id=str(booking.id),
                 )
@@ -2219,7 +2647,7 @@ def cancel_booking(request):
                     title="Tour booking cancelled",
                     message=f"Your booking for {booking.tour.tour_name} was cancelled.",
                     notification_type="booking",
-                    url=reverse("main-page") + "#user-bookings",
+                    url=reverse("main-page") + "#myBookings",
                     dedupe_key=f"tourbooking-cancelled-{booking.booking_id}",
                     related_object_id=str(booking.booking_id),
                 )
@@ -4029,10 +4457,11 @@ def debug_guest_model(request):
 # Add to urls.py: path('debug/guest_model/', views.debug_guest_model, name='debug_guest_model'),
 
 
-@login_required
-@guest_tourist_required
 def accommodation_page(request):
-    accommodations = _approved_accommodation_queryset().order_by("company_name")
+    accommodations = list(_approved_accommodation_queryset().order_by("company_name"))
+    review_summaries = _get_accommodation_review_summaries(
+        [getattr(accom, "accom_id", None) for accom in accommodations]
+    )
     listing_rows = []
     for accom in accommodations:
         links = _resolve_accommodation_links(accom)
@@ -4041,15 +4470,9 @@ def accommodation_page(request):
             .order_by("price_per_night", "room_id")
             .first()
         )
-        rating_value = (
-            getattr(accom, "rating", None)
-            or getattr(accom, "star_rating", None)
-            or getattr(accom, "average_rating", None)
+        rating_label = _format_accommodation_rating_label(
+            review_summaries.get(getattr(accom, "accom_id", None))
         )
-        if rating_value in (None, ""):
-            rating_label = "Not yet rated"
-        else:
-            rating_label = str(rating_value)
         listing_rows.append(
             {
                 "accommodation": accom,
@@ -4057,9 +4480,13 @@ def accommodation_page(request):
                 "price_per_night": getattr(room, "price_per_night", None) if room else None,
                 "person_limit": getattr(room, "person_limit", None) if room else None,
                 "rating_label": rating_label,
-                "official_link": links.get("official_url") or links.get("facebook_url") or "",
-                "official_page_url": links.get("official_url") or "",
+                "official_link": links.get("facebook_url") or links.get("provider_url") or links.get("email_link") or links.get("phone_link") or "",
+                "official_page_url": links.get("provider_url") or "",
+                "provider_url": links.get("provider_url") or "",
+                "contact_channel_url": links.get("provider_url") or links.get("email_link") or links.get("phone_link") or "",
                 "facebook_url": links.get("facebook_url") or "",
+                "has_verified_provider_link": links.get("has_verified_provider_link", False),
+                "suppressed_third_party_booking_url": links.get("suppressed_third_party_booking_url", False),
                 "image_url": _resolve_accommodation_image_url(accom),
                 "phone_link": links.get("phone_link") or "",
                 "email_link": links.get("email_link") or "",
@@ -4071,11 +4498,33 @@ def accommodation_page(request):
     })
 
 
-@login_required
-@guest_tourist_required
 def accommodation_detail_page(request, accom_id):
     accommodation = get_object_or_404(_approved_accommodation_queryset(), accom_id=accom_id)
     links = _resolve_accommodation_links(accommodation)
+    review_summary = _get_accommodation_review_summaries([accommodation.accom_id]).get(accommodation.accom_id)
+    approved_reviews = (
+        AccommodationReview.objects.select_related("guest")
+        .filter(accommodation=accommodation, status="approved")
+        .order_by("-created_at")[:20]
+    )
+    review_rows = []
+    for review in approved_reviews:
+        guest = getattr(review, "guest", None)
+        display_name = str(getattr(guest, "first_name", "") or "").strip() or "Verified Guest"
+        review_rows.append(
+            {
+                "rating": review.rating,
+                "comment": str(review.comment or "").strip(),
+                "display_name": display_name,
+                "created_at": review.created_at,
+            }
+        )
+    user_review = None
+    if request.user.is_authenticated:
+        user_review = AccommodationReview.objects.filter(
+            accommodation=accommodation,
+            guest=request.user,
+        ).first()
 
     image_url = _resolve_accommodation_image_url(accommodation)
     gallery_images = []
@@ -4144,13 +4593,56 @@ def accommodation_detail_page(request, accom_id):
     context = {
         "accommodation": accommodation,
         "gallery_images": gallery_images,
-        "official_page_url": links.get("official_url") or "",
+        "official_page_url": links.get("provider_url") or "",
+        "provider_url": links.get("provider_url") or "",
+        "contact_channel_url": links.get("provider_url") or links.get("email_link") or links.get("phone_link") or "",
         "facebook_url": links.get("facebook_url") or "",
+        "has_verified_provider_link": links.get("has_verified_provider_link", False),
+        "suppressed_third_party_booking_url": links.get("suppressed_third_party_booking_url", False),
         "room_rows": room_rows,
         "amenities": amenities[:20],
         "lowest_rate": lowest_rate,
+        "rating_label": _format_accommodation_rating_label(review_summary),
+        "review_rows": review_rows,
+        "user_review": user_review,
+        "recaptcha_site_key": str(getattr(settings, 'RECAPTCHA_SITE_KEY', '') or '').strip(),
+        "recaptcha_required": _is_recaptcha_required(),
     }
     return render(request, "accommodation_detail.html", context)
+
+
+@login_required
+@require_POST
+def submit_accommodation_review(request, accom_id):
+    accommodation = get_object_or_404(_approved_accommodation_queryset(), accom_id=accom_id)
+    try:
+        rating = int(str(request.POST.get("rating") or "").strip())
+    except (TypeError, ValueError):
+        rating = 0
+    comment = str(request.POST.get("comment") or "").strip()[:1500]
+
+    if rating < 1 or rating > 5:
+        messages.error(request, "Please choose a rating from 1 to 5 stars.")
+        return redirect("accommodation_detail_page", accom_id=accommodation.accom_id)
+
+    defaults = {
+        "rating": rating,
+        "comment": comment,
+        "status": "pending",
+        "moderation_notes": "",
+        "reviewed_at": None,
+        "reviewed_by": None,
+    }
+    try:
+        AccommodationReview.objects.update_or_create(
+            accommodation=accommodation,
+            guest=request.user,
+            defaults=defaults,
+        )
+        messages.success(request, "Thank you. Your review has been submitted for review.")
+    except IntegrityError:
+        messages.info(request, "You already submitted a review for this accommodation.")
+    return redirect("accommodation_detail_page", accom_id=accommodation.accom_id)
 
 
 @login_required
@@ -4176,6 +4668,13 @@ def my_accommodation_bookings(request):
             "accommodation_transactions_disabled": True,
         },
     )
+
+
+@login_required
+@guest_tourist_required
+def my_tour_bookings(request):
+    # Guest tour bookings are surfaced in the main page booking section.
+    return redirect(f"{reverse('main-page')}#myBookings")
 
 
 @login_required
@@ -4297,3 +4796,54 @@ def payment_webhook_callback(request):
         },
         status=410,
     )
+
+
+@require_http_methods(["GET"])
+def guest_service_worker(request):
+    """
+    Serve the guest PWA service worker from /guest_app/ so its scope stays on
+    public guest pages and avoids broad caching of admin or private areas.
+    """
+    sw_path = settings.BASE_DIR / "static" / "pwa" / "guest-service-worker.js"
+    try:
+        content = sw_path.read_text(encoding="utf-8")
+    except OSError:
+        content = (
+            'self.addEventListener("fetch", function () {'
+            '  /* service worker file unavailable */'
+            '});'
+        )
+    response = HttpResponse(content, content_type="application/javascript")
+    response["Service-Worker-Allowed"] = "/guest_app/"
+    response["Cache-Control"] = "no-cache"
+    return response
+
+
+@require_http_methods(["GET"])
+def guest_manifest(request):
+    manifest_path = settings.BASE_DIR / "static" / "pwa" / "manifest.webmanifest"
+    try:
+        content = manifest_path.read_text(encoding="utf-8")
+    except OSError:
+        content = json.dumps(
+            {
+                "name": "Ibayaw Tour",
+                "short_name": "Ibayaw",
+                "start_url": "/guest_app/main-page/",
+                "scope": "/guest_app/",
+                "display": "standalone",
+                "theme_color": "#12335e",
+                "background_color": "#ffffff",
+            }
+        )
+    return HttpResponse(content, content_type="application/manifest+json")
+
+
+@require_http_methods(["GET"])
+def guest_offline(request):
+    offline_path = settings.BASE_DIR / "static" / "pwa" / "offline.html"
+    try:
+        content = offline_path.read_text(encoding="utf-8")
+    except OSError:
+        content = "<h1>You are offline</h1><p>Please reconnect to use Ibayaw Tour.</p>"
+    return HttpResponse(content, content_type="text/html")

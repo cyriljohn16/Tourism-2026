@@ -1,0 +1,314 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Accommodation Dashboard</title>
+  <link rel="stylesheet" href="{% static 'css/navigation.css' %}">
+  <style>
+    body {
+      font-family: "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      margin: 0;
+      background: #f4f7fc;
+      color: #1f2937;
+    }
+
+    .page-shell {
+      display: grid;
+      gap: 14px;
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+
+    .hero-card,
+    .panel-card {
+      background: #fff;
+      border: 1px solid #e4e8ef;
+      border-radius: 12px;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+      padding: 16px;
+    }
+
+    .hero-card h1 {
+      margin: 0;
+      color: #6b4423;
+      font-size: clamp(1.35rem, 2vw, 1.9rem);
+      line-height: 1.25;
+      font-weight: 800;
+      text-align: center;
+    }
+
+    .hero-meta {
+      margin-top: 8px;
+      color: #5f6470;
+      font-size: 0.94rem;
+      line-height: 1.5;
+      text-align: center;
+    }
+
+    .scope-note {
+      margin-top: 10px;
+      padding: 10px 12px;
+      border: 1px solid #e5d9cc;
+      border-radius: 10px;
+      background: #fff8f1;
+      color: #704a2c;
+      font-size: 0.88rem;
+      line-height: 1.45;
+      text-align: center;
+    }
+
+    .quick-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    .quick-card {
+      border: 1px solid #e4e8ef;
+      border-radius: 10px;
+      background: #fff;
+      padding: 13px;
+      display: grid;
+      gap: 10px;
+    }
+
+    .quick-card h2 {
+      margin: 0;
+      font-size: 1rem;
+      color: #1f2937;
+      font-weight: 800;
+    }
+
+    .quick-card p {
+      margin: 0;
+      color: #6b7280;
+      font-size: 0.86rem;
+      line-height: 1.45;
+    }
+
+    .quick-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      text-decoration: none;
+      border-radius: 999px;
+      border: 1px solid #875a34;
+      background: #875a34;
+      color: #fff !important;
+      padding: 8px 12px;
+      font-size: 0.82rem;
+      font-weight: 700;
+      width: fit-content;
+      transition: background-color 0.2s ease, border-color 0.2s ease;
+    }
+
+    .quick-btn:hover {
+      background: #6d4827;
+      border-color: #6d4827;
+    }
+
+    .section-title {
+      margin: 0 0 8px;
+      font-size: 1.15rem;
+      color: #6b4423;
+      font-weight: 800;
+    }
+
+    .section-muted {
+      margin: 0 0 12px;
+      color: #6b7280;
+      font-size: 0.89rem;
+      line-height: 1.45;
+    }
+
+    .table-wrap {
+      width: 100%;
+      overflow-x: auto;
+      border: 1px solid #e4e8ef;
+      border-radius: 10px;
+      background: #fff;
+    }
+
+    .room-table {
+      width: 100%;
+      min-width: 740px;
+      border-collapse: collapse;
+      table-layout: auto;
+    }
+
+    .room-table th,
+    .room-table td {
+      padding: 10px 9px;
+      border-bottom: 1px solid #edf1f7;
+      text-align: left;
+      vertical-align: top;
+      font-size: 0.88rem;
+      overflow-wrap: break-word;
+    }
+
+    .room-table th {
+      background: #f9fafc;
+      color: #374151;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+
+    .room-table tbody tr:last-child td {
+      border-bottom: none;
+    }
+
+    .status-pill {
+      display: inline-block;
+      border-radius: 999px;
+      padding: 4px 9px;
+      font-size: 0.74rem;
+      font-weight: 800;
+      border: 1px solid #e4e8ef;
+      background: #f8fafc;
+      color: #334155;
+      text-transform: capitalize;
+    }
+
+    .status-available {
+      background: #dcfce7;
+      border-color: #bbf7d0;
+      color: #166534;
+    }
+
+    .status-occupied {
+      background: #fee2e2;
+      border-color: #fecaca;
+      color: #991b1b;
+    }
+
+    .status-maintenance {
+      background: #fef3c7;
+      border-color: #fde68a;
+      color: #92400e;
+    }
+
+    .empty-state {
+      border: 1px dashed #d8dee8;
+      border-radius: 10px;
+      padding: 16px;
+      text-align: center;
+      color: #6b7280;
+      font-size: 0.9rem;
+      background: #fbfcff;
+    }
+
+    @media (max-width: 1100px) {
+      .quick-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+    }
+
+    @media (max-width: 768px) {
+      .content {
+        margin-left: 0;
+        padding: 14px;
+      }
+
+      .quick-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .hero-card,
+      .panel-card {
+        padding: 14px;
+      }
+
+      .quick-btn {
+        width: 100%;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="navigation">
+    {% include "components/owner_navigation.html" %}
+  </div>
+
+  <main class="content">
+    <div class="page-shell">
+      <section class="hero-card">
+        <h1>{{ company_name|default:"Accommodation" }} Dashboard</h1>
+        <p class="hero-meta">
+          <strong>Location:</strong> {{ company_location|default:"Bayawan City" }}<br>
+          Use this page to manage accommodation details, room inventory, and monthly tourism reporting.
+        </p>
+      </section>
+
+      <section class="panel-card">
+        <div class="quick-grid">
+          <article class="quick-card">
+            <h2>Accommodation Profile</h2>
+            <p>Update business details, description, and official links shown to guests.</p>
+            <a href="{% url 'admin_app:owner_hub' %}" class="quick-btn">Open Owner Hub</a>
+          </article>
+          <article class="quick-card">
+            <h2>Room Management</h2>
+            <p>Manage room types, capacity, availability, and room images for guest display.</p>
+            <a href="{% url 'accom_app:register_room' %}" class="quick-btn">Manage Rooms</a>
+          </article>
+          <article class="quick-card">
+            <h2>Monthly Reports</h2>
+            <p>Submit room-level check-ins/check-outs and nationality data for Tourism Office reports.</p>
+            <a href="{% url 'admin_app:owner_report_submit' %}" class="quick-btn">Submit Report</a>
+          </article>
+          <article class="quick-card">
+            <h2>Reports & Analytics</h2>
+            <p>Review submitted report history and analytics summaries for your accommodation.</p>
+            <a href="{% url 'accom_app:owner_reports_analytics' %}" class="quick-btn">View Analytics</a>
+          </article>
+        </div>
+      </section>
+
+      <section class="panel-card">
+        <h2 class="section-title">Available Rooms / Availability</h2>
+        <p class="section-muted">
+          Snapshot of room inventory linked to this accommodation. For edits, use <strong>Manage Rooms</strong>.
+        </p>
+        {% if hotel_rooms %}
+          <div class="table-wrap">
+            <table class="room-table">
+              <thead>
+                <tr>
+                  <th>Room Type / Name</th>
+                  <th>Capacity</th>
+                  <th>Rate / Night</th>
+                  <th>Status</th>
+                  <th>Current Availability</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for room in hotel_rooms %}
+                  <tr>
+                    <td>{{ room.room_name|default:"-" }}</td>
+                    <td>{{ room.person_limit|default:0 }}</td>
+                    <td>PHP {{ room.price_per_night|default:"0.00" }}</td>
+                    <td>
+                      {% with status_value=room.status|default:"AVAILABLE"|lower %}
+                        <span class="status-pill {% if status_value == 'available' %}status-available{% elif status_value == 'occupied' %}status-occupied{% else %}status-maintenance{% endif %}">
+                          {{ room.status|default:"AVAILABLE" }}
+                        </span>
+                      {% endwith %}
+                    </td>
+                    <td>{{ room.current_availability|default:0 }}</td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        {% else %}
+          <div class="empty-state">
+            No rooms found yet for this accommodation. Use <strong>Manage Rooms</strong> to add room records.
+          </div>
+        {% endif %}
+      </section>
+    </div>
+  </main>
+</body>
+</html>

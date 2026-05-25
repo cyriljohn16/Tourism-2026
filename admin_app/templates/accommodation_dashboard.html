@@ -211,17 +211,25 @@
         padding: 14px;
       }
 
+      .page-shell {
+        gap: 12px;
+      }
+
       .quick-grid {
         grid-template-columns: 1fr;
       }
 
       .hero-card,
       .panel-card {
-        padding: 14px;
+        padding: 12px;
       }
 
       .quick-btn {
         width: 100%;
+      }
+
+      .room-table {
+        min-width: 660px;
       }
     }
   </style>
@@ -239,10 +247,6 @@
           <strong>Location:</strong> {{ company_location|default:"Bayawan City" }}<br>
           Use this page to manage accommodation details, room inventory, and monthly tourism reporting.
         </p>
-        <div class="scope-note">
-          Final defense scope note: accommodation booking in the guest side remains preview-only and external handoff.
-          Owners do not process accommodation booking approvals, billing, or payments from this dashboard.
-        </div>
       </section>
 
       <section class="panel-card">

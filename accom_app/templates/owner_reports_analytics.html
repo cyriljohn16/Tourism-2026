@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Hotel Reports & Analytics</title>
+  <title>Owner Reports & Analytics</title>
   <link rel="stylesheet" href="{% static 'css/navigation.css' %}">
   <style>
     :root {
@@ -33,9 +33,9 @@
       max-width: 1240px;
       margin: 0 auto;
       background: var(--panel);
-      border: 1px solid var(--line);
-      border-radius: 12px;
-      box-shadow: 0 8px 20px rgba(15, 23, 42, 0.08);
+      border: 1px solid #e3e9f3;
+      border-radius: 14px;
+      box-shadow: 0 8px 24px rgba(15, 23, 42, 0.06);
       padding: 14px;
     }
     .filters {
@@ -87,10 +87,11 @@
     }
     .card {
       border: 1px solid var(--line);
-      border-radius: 10px;
+      border-radius: 12px;
       background: #fff;
       padding: 12px;
       position: relative;
+      box-shadow: 0 4px 12px rgba(15, 23, 42, 0.04);
     }
     .card::after {
       content: "";
@@ -126,15 +127,33 @@
     }
     .section {
       margin-top: 12px;
-      border: 1px solid var(--line);
-      border-radius: 10px;
+      border: 1px solid #e6ecf5;
+      border-radius: 12px;
       background: #fff;
       padding: 12px;
     }
+    .section-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-bottom: 8px;
+    }
     .section h3 {
       margin: 0 0 10px;
-      font-size: 1.12rem;
-      color: #6b4423;
+      font-size: 1.08rem;
+      color: #1f2937;
+    }
+    .section-meta {
+      font-size: 0.76rem;
+      color: #64748b;
+      font-weight: 600;
+      background: #f8fafc;
+      border: 1px solid #e5e7eb;
+      border-radius: 999px;
+      padding: 3px 9px;
+      line-height: 1.25;
     }
     .trend-head {
       display: flex;
@@ -217,6 +236,13 @@
       color: #475569;
       font-size: 0.75rem;
       margin-top: 2px;
+    }
+    .bar-values span {
+      background: #f8fafc;
+      border: 1px solid #e8edf5;
+      border-radius: 6px;
+      padding: 3px 6px;
+      text-align: center;
     }
     .trend-legend {
       display: inline-flex;
@@ -456,8 +482,11 @@
         </div>
 
         <section class="section">
-          <div class="trend-head">
+          <div class="section-head">
             <h3>Monthly Occupancy Trend</h3>
+            <span class="section-meta">{{ selected_trend_window }}-month window</span>
+          </div>
+          <div class="trend-head">
             <div class="mini-tabs">
               <a class="mini-tab {% if selected_trend_window == '6' %}active{% endif %}" href="?month={{ selected_month }}&year={{ selected_year }}&trend_window=6&trend_metric={{ selected_trend_metric }}">6 Months</a>
               <a class="mini-tab {% if selected_trend_window == '12' %}active{% endif %}" href="?month={{ selected_month }}&year={{ selected_year }}&trend_window=12&trend_metric={{ selected_trend_metric }}">1 Year</a>
@@ -523,7 +552,10 @@
         <section class="section">
           <div class="split">
             <div>
-              <h3>Guest Nationality Breakdown</h3>
+              <div class="section-head">
+                <h3>Guest Nationality Breakdown</h3>
+                <span class="section-meta">{{ first_day|date:"F Y" }}</span>
+              </div>
               <div class="pie-wrap">
                 <div class="pie">
                   <div class="pie-center">{{ nationality_total }}<br>Guests</div>
@@ -531,7 +563,10 @@
               </div>
             </div>
             <div>
-              <h3>Nationality Table</h3>
+              <div class="section-head">
+                <h3>Nationality Table</h3>
+                <span class="section-meta">Selected period</span>
+              </div>
               <table>
                 <thead>
                   <tr>
@@ -557,7 +592,10 @@
         </section>
 
         <section class="section">
-          <h3>Daily Room Occupancy</h3>
+          <div class="section-head">
+            <h3>Daily Room Occupancy - {{ first_day|date:"F Y" }}</h3>
+            <span class="section-meta">Daily occupied rooms</span>
+          </div>
           <div class="daily-legend"><span class="dot rooms"></span>Rooms Occupied</div>
           <div class="daily-chart">
             <div class="daily-layout">
@@ -578,7 +616,7 @@
                 </div>
               </div>
             </div>
-            <div class="daily-x-title">Day of Month</div>
+            <div class="daily-x-title">Day of {{ first_day|date:"F" }}</div>
           </div>
           {% if not total_checkins %}
             <div class="empty-note">No confirmed accommodation bookings in the selected period yet.</div>

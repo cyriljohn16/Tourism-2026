@@ -2,6 +2,8 @@ from django.contrib.auth.models import AbstractUser, UserManager
 from django.contrib.auth.hashers import make_password
 import random
 import string
+from django.conf import settings
+from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 from django.utils import timezone
 from django.http import JsonResponse
@@ -306,6 +308,63 @@ class AccommodationBooking(models.Model):
 
     def get_balance_due(self):
         return self.total_amount - self.amount_paid
+
+
+class AccommodationReview(models.Model):
+    """Guest-submitted accommodation rating, hidden publicly until moderated."""
+    REVIEW_STATUS_CHOICES = [
+        ("pending", "Pending"),
+        ("approved", "Approved"),
+        ("rejected", "Rejected"),
+    ]
+
+    review_id = models.AutoField(primary_key=True)
+    accommodation = models.ForeignKey(
+        "admin_app.Accomodation",
+        on_delete=models.CASCADE,
+        related_name="guest_reviews",
+    )
+    guest = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="accommodation_reviews",
+    )
+    rating = models.PositiveSmallIntegerField(
+        validators=[MinValueValidator(1), MaxValueValidator(5)]
+    )
+    comment = models.TextField(blank=True, default="")
+    status = models.CharField(
+        max_length=20,
+        choices=REVIEW_STATUS_CHOICES,
+        default="pending",
+        db_index=True,
+    )
+    moderation_notes = models.TextField(blank=True, default="")
+    reviewed_at = models.DateTimeField(null=True, blank=True)
+    reviewed_by = models.ForeignKey(
+        "admin_app.Employee",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="moderated_accommodation_reviews",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["accommodation", "guest"],
+                name="unique_guest_accommodation_review",
+            )
+        ]
+        indexes = [
+            models.Index(fields=["status", "accommodation"]),
+        ]
+
+    def __str__(self):
+        return f"{self.accommodation} - {self.rating}/5 by {self.guest}"
 
 
 class Billing(models.Model):

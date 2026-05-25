@@ -1,7 +1,9 @@
 /* Ibayaw Unified Navigation + Workspace Design System */
 
+@import url("https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800&display=swap");
+
 :root {
-  --font-sans: "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-sans: "Poppins", "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   --brand-50: #f8f3ee;
   --brand-100: #f2e6d8;
   --brand-200: #e6c8a6;
@@ -63,6 +65,14 @@ body {
   overflow-x: hidden;
 }
 
+body :where(
+  h1, h2, h3, h4, h5, h6,
+  p, span, a, li, label, small, strong, em,
+  button, input, select, textarea, th, td
+) {
+  font-family: var(--font-sans);
+}
+
 img,
 svg {
   max-width: 100%;
@@ -100,6 +110,12 @@ a:hover {
   flex-direction: column;
   padding: var(--space-5) var(--space-3) var(--space-4);
   gap: var(--space-3);
+}
+
+/* Mobile nav controls are hidden by default (desktop/tablet). */
+.nav-mobile-toggle,
+.nav-mobile-overlay {
+  display: none;
 }
 
 .content {
@@ -640,26 +656,133 @@ a:hover {
 }
 
 @media (max-width: 768px) {
+  .dashboard-container {
+    display: block !important;
+  }
+
+  .nav-mobile-toggle {
+    position: fixed;
+    top: calc(10px + env(safe-area-inset-top, 0px));
+    left: 10px;
+    z-index: 1410;
+    min-height: 42px;
+    border-radius: 12px;
+    padding: 8px 12px;
+    border: 1px solid #e2c6a8;
+    background: linear-gradient(180deg, #fff9f2 0%, #f9ecdc 100%);
+    color: #6d4827;
+    font-weight: 800;
+    font-size: 0.86rem;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    box-shadow: 0 8px 22px rgba(58, 39, 18, 0.22);
+    cursor: pointer;
+  }
+
+  .nav-mobile-toggle .icon {
+    font-size: 1rem;
+    line-height: 1;
+  }
+
+  .nav-mobile-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.38);
+    backdrop-filter: blur(1px);
+    z-index: 1402;
+    display: none;
+  }
+
+  body.nav-mobile-open .nav-mobile-overlay {
+    display: block;
+  }
+
   .navigation,
   body.desktop-view .navigation,
   body.mobile-view .navigation {
-    position: relative;
-    inset: auto;
-    width: 100%;
-    height: auto;
-    border-right: 0;
-    border-bottom: 1px solid var(--ink-200);
+    position: fixed !important;
+    inset: 0 !important;
+    width: 100vw !important;
+    height: 100dvh !important;
+    transform: none;
+    transition: none;
+    border-right: 0 !important;
+    border-bottom: 0 !important;
+    background: transparent;
+    box-shadow: none;
+    overflow: visible;
+    pointer-events: none;
+    z-index: 1400 !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+
+  .navigation.mobile-open,
+  body.desktop-view .navigation.mobile-open,
+  body.mobile-view .navigation.mobile-open {
+    pointer-events: auto;
+  }
+
+  .nav-mobile-toggle {
+    pointer-events: auto;
+  }
+
+  .navigation .nav-sidebar {
+    position: absolute;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    width: min(92vw, 340px);
+    transform: translateX(-102%);
+    transition: transform 0.24s ease;
+    pointer-events: auto;
+    border-right: 1px solid #eadfce;
+    background: linear-gradient(180deg, #f8f0e7 0%, #f9f5ef 55%, #f6f4f2 100%);
+    box-shadow: 2px 0 20px rgba(58, 39, 18, 0.16);
+    overflow-y: auto;
+    min-height: 100dvh;
+    z-index: 1405;
+  }
+
+  .navigation.mobile-open .nav-sidebar {
+    transform: translateX(0);
+  }
+
+  .navigation:not(.mobile-open) .nav-sidebar {
+    pointer-events: none;
   }
 
   .content,
   body.desktop-view .content,
   body.mobile-view .content {
-    margin-left: 0;
-    padding: var(--space-4);
+    margin-left: 0 !important;
+    width: 100% !important;
+    padding: calc(80px + env(safe-area-inset-top, 0px)) var(--space-4) var(--space-4) !important;
   }
 
   .nav-sidebar {
-    min-height: auto;
+    min-height: 100%;
+    padding-bottom: calc(18px + env(safe-area-inset-bottom, 0px));
+  }
+
+  .nav-mobile-overlay {
+    pointer-events: none;
+  }
+
+  body.nav-mobile-open .nav-mobile-overlay {
+    pointer-events: auto;
+  }
+
+  body.nav-mobile-open {
+    overflow: hidden;
+  }
+
+  body.nav-mobile-open .staff-chat-fab,
+  body.nav-mobile-open .guest-chat-fab {
+    opacity: 0;
+    pointer-events: none;
+    transform: translateY(8px);
   }
 
   .content :where(table) {

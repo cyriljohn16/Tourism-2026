@@ -1569,6 +1569,10 @@ def _is_contextual_direction_followup(message):
         "directions there",
         "how far is that",
         "how far is that from",
+        "how far from there",
+        "from there",
+        "route there",
+        "there please",
     )
     return any(marker in text for marker in followup_markers)
 
@@ -1861,6 +1865,17 @@ def _resolve_reporting_accommodation_name(message, params, available_names):
     if hint_match:
         raw_name = " ".join(str(hint_match.group(1) or "").split()).strip(" .,!?")
         if raw_name:
+            generic_period_hints = {
+                "this month",
+                "that month",
+                "the month",
+                "this year",
+                "that year",
+                "this period",
+                "the selected period",
+            }
+            if raw_name.strip().lower() in generic_period_hints:
+                raw_name = ""
             if re.fullmatch(
                 r"(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|"
                 r"sep(?:tember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\s+20\d{2}",
@@ -1875,13 +1890,20 @@ def _resolve_reporting_accommodation_name(message, params, available_names):
 
 
 def _build_reporting_summary_payload(message, params, *, actor_role=""):
+    params = params if isinstance(params, dict) else {}
     lower_message = _normalize_chat_text(message)
     requested_latest = _contains_any_phrase(lower_message, ("latest monthly report", "latest report"))
     requested_this_month = _contains_any_phrase(lower_message, ("this month", "monthly summary this month"))
+    requested_context_month = _contains_any_phrase(
+        lower_message,
+        ("that month", "the same month", "same month", "that period", "same period"),
+    )
 
     base_qs = OwnerMonthlyReport.objects.select_related("accommodation").exclude(status="draft")
     if not base_qs.exists():
         return {
+            "title": "Tourism Report Summary",
+            "response_type": "reporting_summary",
             "reply": "No report data is available yet for this period.",
             "quick_replies": ["Show latest monthly report", "Show tourist influx this month"],
         }
@@ -1892,6 +1914,13 @@ def _build_reporting_summary_payload(message, params, *, actor_role=""):
     if report_period is None and requested_this_month:
         today = timezone.localdate()
         report_period = datetime(today.year, today.month, 1).date()
+    if report_period is None and requested_context_month:
+        prior_iso = str(params.get("last_reporting_period_iso") or "").strip()
+        try:
+            if prior_iso:
+                report_period = datetime.fromisoformat(prior_iso).date()
+        except Exception:
+            report_period = None
     accommodation_name = _resolve_reporting_accommodation_name(message, params, available_names)
 
     qs = base_qs
@@ -1918,6 +1947,8 @@ def _build_reporting_summary_payload(message, params, *, actor_role=""):
         else:
             no_data_text = f"No report data is available yet for {period_text}."
         return {
+            "title": "Tourism Report Summary",
+            "response_type": "reporting_summary",
             "reply": no_data_text,
             "quick_replies": ["Show latest monthly report", "Show tourist influx this month", "Show accommodation reports"],
         }
@@ -2024,10 +2055,19 @@ def _build_reporting_summary_payload(message, params, *, actor_role=""):
     lines.append("Source: submitted owner reports.")
 
     return {
+        "title": "Tourism Report Summary",
+        "response_type": "reporting_summary",
         "reply": "\n".join(lines),
+        "reporting_period_iso": (
+            report_period.isoformat()
+            if report_period is not None
+            else (sample.reporting_period.isoformat() if sample and getattr(sample, "reporting_period", None) else "")
+        ),
+        "reporting_accommodation": str(accommodation_name or ""),
         "quick_replies": [
             "Show tourist influx this month",
             "Show monthly report for April 2026",
+            "What is the tourist influx for May 2026?",
             "Show accommodation reports",
             "Show reports by accommodation",
             "Open reports page",
@@ -2945,6 +2985,16 @@ def _ensure_accommodation_preview_heading(payload):
     return payload
 
 
+def _is_structured_chat_payload(payload):
+    if not isinstance(payload, dict):
+        return False
+    for key in ("recommendations", "recommendation_trace", "cards", "map_points", "room_cards", "tour_cards"):
+        value = payload.get(key)
+        if isinstance(value, list) and value:
+            return True
+    return False
+
+
 def _chat_json_response(request, start_time, payload, status=200, error_message=""):
     response_payload = payload if isinstance(payload, dict) else payload
     try:
@@ -3000,6 +3050,15 @@ def _chat_json_response(request, start_time, payload, status=200, error_message=
                 or context.get("response_nlg_source")
                 or ""
             ).strip()
+            # Keep deterministic intent routing for safety, while allowing
+            # conversational LLM polish on plain-text replies.
+            if (
+                context_nlg_source.lower() == "deterministic"
+                and _env_flag("CHATBOT_NLG_POLISH_TEXT_ONLY", True)
+                and not _is_structured_chat_payload(response_payload)
+            ):
+                context_nlg_source = ""
+                response_payload.pop("response_nlg_source", None)
             # Performance-only guard: deterministic accommodation slot-filling filters
             # like "suba under 1500" do not need external NLG rewriting.
             fast_accommodation_filter_turn = bool(
@@ -3505,6 +3564,8 @@ def _is_stay_planning_request(message):
     planning_markers = (
         "plan my bayawan trip",
         "plan my bayawan stay",
+        "help me with my bayawan stay",
+        "help me with my stay",
         "plan my stay",
         "plan a stay",
         "plan my trip",
@@ -3527,6 +3588,22 @@ def _is_stay_planning_request(message):
         "suggest a hotel and tourist spots",
     )
     if any(marker in text for marker in planning_markers):
+        return True
+    if bool(
+        re.fullmatch(
+            r"\s*(?:php\s*)?[0-9][0-9,]*(?:\.[0-9]+)?k?\s*(?:php|peso|pesos)?\s*",
+            text,
+            flags=re.IGNORECASE,
+        )
+    ):
+        return True
+    if bool(
+        re.fullmatch(
+            r"\s*budget\s*[0-9][0-9,]*(?:\.[0-9]+)?k?\s*(?:php|peso|pesos)?\s*",
+            text,
+            flags=re.IGNORECASE,
+        )
+    ):
         return True
     # Natural planning phrasing: number appears before budget (e.g., "10k budget").
     if bool(re.search(r"\b[0-9][0-9,]*(?:\.[0-9]+)?k?\s*budget\b", text, flags=re.IGNORECASE)):
@@ -3848,7 +3925,7 @@ def _build_budget_stay_plan_payload(params, message):
             "",
             "Budget plan:",
             f"- Stay: {'~PHP ' + format(int(nightly_budget), ',') + '/night' if accommodation_needed else 'not included'}",
-            f"- Tours: ~PHP {int(activity_budget_total):,} total",
+            f"- Tours/activities: ~PHP {int(activity_budget_total):,} total",
             f"- Food and transport: ~PHP {int(flex_budget_total):,} buffer",
         ]
     )
@@ -3886,14 +3963,31 @@ def _build_budget_stay_plan_payload(params, message):
     else:
         lines.append("- I don't have exact matches yet, but here are the closest options.")
 
+    lines.append("")
+    lines.append("Suggested flow:")
+    lines.append("1. Pick one accommodation and tap Preview Cost.")
+    lines.append("2. Choose your room, dates, and guest count to get an estimate.")
+    lines.append("3. Select 1-2 tours that fit your schedule and budget.")
+    lines.append("4. Use Open City Map for route and distance planning.")
+    lines.append("5. Finalize accommodation through the provider's official page/contact.")
+
+    if duration_days >= 2:
+        lines.append("")
+        lines.append("Sample itinerary:")
+        lines.append("Day 1: Check in, city-center spots, and nearby dining.")
+        if tour_rows:
+            lines.append("Day 2: Join one recommended tour and keep a food/transport buffer.")
+        else:
+            lines.append("Day 2: Focus on tourism places and map-guided local exploration.")
+
     lines.extend(
         [
             "",
             _pick_response_variant(
                 [
-                    "Want me to adjust this plan or show booking links?",
-                    "I can refine this plan further if you want.",
-                    "Need me to tweak this or pull official booking links?",
+                    "I can refine this by budget, trip length, or travel style.",
+                    "Want me to tune this plan for your dates or priorities?",
+                    "Need a cheaper or family-focused version of this plan?",
                 ],
                 seed_text=f"{message}|plan-next-v2",
             ),
@@ -3901,10 +3995,12 @@ def _build_budget_stay_plan_payload(params, message):
     )
 
     quick_replies = [
-        "adjust to budget version",
+        "make it cheaper",
         "make it family-friendly",
+        "2-day itinerary version",
         "show available tours",
-        "show accommodation recommendations",
+        "show rooms for top accommodation",
+        "open city map",
     ]
 
     payload = {
@@ -5239,6 +5335,8 @@ def _build_broad_accommodation_discovery_response(params=None, *, limit=5):
         return {
             "fulfillmentText": f"I couldn't find verified approved accommodations{location_part} right now.",
             "quick_replies": ["show approved accommodations in bayawan"],
+            "response_type": "accommodation_recommendations",
+            "heading": "Accommodation Recommendations",
             "needs_clarification": True,
         }
 
@@ -5293,6 +5391,8 @@ def _build_broad_accommodation_discovery_response(params=None, *, limit=5):
         "fulfillmentText": "\n".join(lines),
         "recommendation_trace": trace,
         "quick_replies": quick,
+        "response_type": "accommodation_recommendations",
+        "heading": "Accommodation Recommendations",
     }
 
 
@@ -7803,6 +7903,8 @@ def _build_multilingual_accommodations_payload(language_code):
 
 
 def _build_multilingual_directions_payload(request, message, classification, client_location):
+    state = _load_chat_state(request) if request is not None else {}
+    state = state if isinstance(state, dict) else {}
     marker = _lookup_mapbookmark_place(request, message)
     language_code = str((classification or {}).get("language") or _detect_simple_user_language(message)).lower()
     if marker is not None:
@@ -7829,13 +7931,33 @@ def _build_multilingual_directions_payload(request, message, classification, cli
         if dir_link:
             payload["billing_link"] = dir_link
             payload["billing_link_label"] = f"Get Directions to {marker_name}"
+        next_state = dict(state)
+        next_state["last_direction_target"] = {
+            "name": marker_name,
+            "kind": "map_place",
+            "location": marker_details or "Bayawan City",
+        }
+        _save_chat_state(request, next_state)
         return payload
     text = str((classification or {}).get("translated_query_en") or message or "").strip()
-    guidance = _build_travel_guidance_payload(text, {}, client_location, request=request)
+    guidance_params = {}
+    remembered = state.get("last_direction_target") if isinstance(state.get("last_direction_target"), dict) else {}
+    remembered_name = str((remembered or {}).get("name") or "").strip()
+    remembered_kind = str((remembered or {}).get("kind") or "map_place").strip().lower() or "map_place"
+    remembered_location = str((remembered or {}).get("location") or "Bayawan City").strip() or "Bayawan City"
+    if remembered_name:
+        guidance_params = {
+            "forced_destination_name": remembered_name,
+            "forced_destination_kind": remembered_kind,
+            "forced_destination_location": remembered_location,
+        }
+    guidance = _build_travel_guidance_payload(text, guidance_params, client_location, request=request)
     reply = str(guidance.get("reply") or "").strip() or "Which Bayawan place would you like directions to?"
     return {
         "fulfillmentText": _prepend_language_hint(reply, language_code, "directions"),
         "quick_replies": _sanitize_quick_replies(guidance.get("quick_replies") if isinstance(guidance.get("quick_replies"), list) else ["Open City Map", "Choose Destination"], limit=4),
+        "response_type": "directions",
+        "heading": "Directions / Map Guidance",
         **({"billing_link": str(guidance.get("link")), "billing_link_label": str(guidance.get("link_label") or "Open Map")} if guidance.get("link") else {}),
     }
 
@@ -8242,7 +8364,37 @@ def _travel_request_needs_destination(message, destination):
 
 
 def _build_travel_guidance_payload(message, params, client_location, request=None):
-    destination = _resolve_destination_for_travel(message, params)
+    params = params if isinstance(params, dict) else {}
+    forced_name = str(params.get("forced_destination_name") or "").strip()
+    forced_kind = str(params.get("forced_destination_kind") or "map_place").strip().lower() or "map_place"
+    forced_location = str(params.get("forced_destination_location") or "Bayawan City").strip() or "Bayawan City"
+    if forced_name:
+        destination = {
+            "kind": forced_kind,
+            "name": forced_name,
+            "location": forced_location,
+            "lat": None,
+            "lng": None,
+            "anchor": forced_name,
+            "link": "",
+            "link_label": "",
+        }
+    else:
+        destination = _resolve_destination_for_travel(message, params)
+    map_target_name = str((params or {}).get("map_target_name") or "").strip()
+    if (not str(destination.get("name") or "").strip()) and map_target_name and request is not None:
+        marker = _lookup_mapbookmark_place(request, map_target_name)
+        if marker is not None:
+            destination = {
+                "kind": "map_place",
+                "name": str(getattr(marker, "name", "") or "").strip(),
+                "location": str(getattr(marker, "details", "") or "Bayawan City").strip() or "Bayawan City",
+                "lat": _safe_float(getattr(marker, "latitude", None)),
+                "lng": _safe_float(getattr(marker, "longitude", None)),
+                "anchor": str(getattr(marker, "name", "") or "").strip(),
+                "link": "",
+                "link_label": "",
+            }
     if (not str(destination.get("name") or "").strip()) and request is not None:
         marker = _lookup_mapbookmark_place(request, message)
         if marker is not None:
@@ -8277,6 +8429,9 @@ def _build_travel_guidance_payload(message, params, client_location, request=Non
                 "quick_replies": quick_replies,
                 "link": "",
                 "link_label": "",
+                "destination_name": "",
+                "destination_kind": "",
+                "destination_location": "",
             }
         if origin_hint.get("type") == "domestic_far" and "manila" in str(origin_hint.get("value") or "").lower():
             return {
@@ -8287,6 +8442,9 @@ def _build_travel_guidance_payload(message, params, client_location, request=Non
                 "quick_replies": quick_replies,
                 "link": "",
                 "link_label": "",
+                "destination_name": "",
+                "destination_kind": "",
+                "destination_location": "",
             }
         if origin_hint.get("type") == "domestic_far" and "bayawan" in normalized_message:
             origin_name = str(origin_hint.get("value") or "your location").strip() or "your location"
@@ -8299,6 +8457,9 @@ def _build_travel_guidance_payload(message, params, client_location, request=Non
                 "quick_replies": quick_replies,
                 "link": "",
                 "link_label": "",
+                "destination_name": "",
+                "destination_kind": "",
+                "destination_location": "",
             }
         return {
             "reply": (
@@ -8308,6 +8469,9 @@ def _build_travel_guidance_payload(message, params, client_location, request=Non
             "quick_replies": quick_replies,
             "link": "",
             "link_label": "",
+            "destination_name": "",
+            "destination_kind": "",
+            "destination_location": "",
         }
     lines.append(
         _pick_response_variant(
@@ -8388,6 +8552,9 @@ def _build_travel_guidance_payload(message, params, client_location, request=Non
         "quick_replies": quick_replies,
         "link": action_link,
         "link_label": action_label or "Open Map",
+        "destination_name": destination_name,
+        "destination_kind": str(destination.get("kind") or "").strip().lower(),
+        "destination_location": destination_location,
     }
 
 
@@ -8528,12 +8695,12 @@ def _deterministic_intent_route(*, actor=None, message=""):
             and not _looks_like_tour_request(text)
         ):
             return "get_accommodation_recommendation"
-        if re.search(r"\b(hotel|inn|accommodation|stay|place to stay|kapuy-an|kapuyan|matuluyan)\b", text):
-            return "get_accommodation_recommendation"
         if _is_stay_planning_request(text):
             return "plan_bayawan_stay"
         if re.search(r"\bbudget\b\s*[0-9][0-9,]*(?:\.[0-9]+)?k?\b", text):
             return "plan_bayawan_stay"
+        if re.search(r"\b(hotel|inn|accommodation|stay|place to stay|kapuy-an|kapuyan|matuluyan)\b", text):
+            return "get_accommodation_recommendation"
 
     if role == "owner":
         if _contains_any_phrase(
@@ -10388,6 +10555,8 @@ def _build_role_help_payload(actor):
                 "Open reports and analytics",
                 "Open Owner Hub",
             ],
+            "response_type": "role_help",
+            "heading": "Owner Assistant Help",
         }
     if role == "admin":
         snapshot_block = f"{snapshot}\n" if snapshot else ""
@@ -10408,6 +10577,8 @@ def _build_role_help_payload(actor):
                 "How to activate or deactivate listings?",
                 "Open accommodation links",
             ],
+            "response_type": "role_help",
+            "heading": "Admin Assistant Help",
         }
     if role == "employee":
         snapshot_block = f"{snapshot}\n" if snapshot else ""
@@ -10427,6 +10598,8 @@ def _build_role_help_payload(actor):
                 "Open map",
                 "Open profile",
             ],
+            "response_type": "role_help",
+            "heading": "Employee Assistant Help",
         }
     return {
         "fulfillmentText": (
@@ -10434,7 +10607,6 @@ def _build_role_help_payload(actor):
             "Try this: suggest a hotel in Bayawan for 2 guests under 2000, or ask how far a place is from your location."
         ),
         "quick_replies": [
-            "Recommend a hotel in Bayawan for 2 guests under 2000",
             "How far is Bayawan City Plaza from me?",
             "Choose Destination",
             "How to search hotels and inns?",
@@ -10444,10 +10616,12 @@ def _build_role_help_payload(actor):
             "Remember my preferences",
             "Forget my preferences",
         ],
+        "response_type": "role_help",
+        "heading": "Tourism Assistance",
     }
 
 
-def _build_out_of_scope_payload(actor, message=""):
+def _build_out_of_scope_payload(actor, message="", fallback_text="", quick_replies=None):
     role = str(actor.get("role") or "").strip().lower()
     seed = str(message or "")
     if role == "owner":
@@ -10502,21 +10676,26 @@ def _build_out_of_scope_payload(actor, message=""):
             ),
             "quick_replies": ["Plan my Bayawan trip", "Show available tours", "Find approved stays", "Get directions"],
         }
-    return {
-        "fulfillmentText": _pick_response_variant(
-            [
-                "I'm mainly designed to help with Bayawan tourism services, such as tours, approved accommodations, directions, trip planning, and booking previews.",
-                "I can best help with Bayawan tourism tasks: tours, approved accommodations, directions, trip planning, and booking previews.",
-                "I can guide Bayawan tourism requests like tours, approved stays, directions, trip planning, and booking previews.",
-            ],
-            seed_text=f"{seed}|guest-oos",
-        ),
-        "quick_replies": [
-            "Plan my Bayawan trip",
-            "Show available tours",
-            "Find approved stays",
-            "Get directions",
+    guest_default_text = _pick_response_variant(
+        [
+            "I'm mainly designed to help with Bayawan tourism services, such as tours, approved accommodations, directions, trip planning, and booking previews.",
+            "I can best help with Bayawan tourism tasks: tours, approved accommodations, directions, trip planning, and booking previews.",
+            "I can guide Bayawan tourism requests like tours, approved stays, directions, trip planning, and booking previews.",
         ],
+        seed_text=f"{seed}|guest-oos",
+    )
+    return {
+        "fulfillmentText": str(fallback_text or guest_default_text).strip(),
+        "quick_replies": (
+            quick_replies
+            if isinstance(quick_replies, list) and quick_replies
+            else [
+                "Plan my Bayawan trip",
+                "Show available tours",
+                "Find approved stays",
+                "Get directions",
+            ]
+        ),
     }
 
 
@@ -10762,6 +10941,52 @@ def _build_guest_tour_faq_payload(request, user, message):
             "Please log in to check your own booking status."
         ),
         "quick_replies": ["Show my tour bookings", "Show available tours", "Help"],
+        "response_type": "tour_booking_status",
+        "heading": "Tour Booking Status",
+    }
+
+
+def _build_staff_tour_faq_payload(actor_role, message):
+    text = _normalize_chat_text(message)
+    role = str(actor_role or "").strip().lower()
+    if "pay" in text or "payment" in text:
+        return {
+            "fulfillmentText": (
+                "Tour payment handoff is only used after a tour booking is approved. "
+                "Please verify the booking status first, then guide guests to the official Treasurer/payment page if configured."
+            ),
+            "quick_replies": (
+                ["Show tourist influx this month", "Open reports page", "Help"]
+                if role == "admin"
+                else ["Show assigned tours", "Show tourist influx this month", "Help"]
+            ),
+            "response_type": "tour_payment_information",
+            "heading": "Tour Payment Information",
+        }
+    if "pending" in text or "approved" in text or "declined" in text or "status" in text:
+        return {
+            "fulfillmentText": (
+                "Tour booking status guide: pending means waiting for review, accepted means approved, and declined means not approved. "
+                "Payment handoff is only after accepted/approved status when configured."
+            ),
+            "quick_replies": (
+                ["Show tourist influx this month", "Open reports page", "Help"]
+                if role == "admin"
+                else ["Show assigned tours", "Show tourist influx this month", "Help"]
+            ),
+            "response_type": "tour_booking_status",
+            "heading": "Tour Booking Status",
+        }
+    return {
+        "fulfillmentText": (
+            "Tour booking workflow uses pending, accepted, declined, and cancelled status updates. "
+            "Staff can monitor these through the internal tour management pages."
+        ),
+        "quick_replies": (
+            ["Show tourist influx this month", "Open reports page", "Help"]
+            if role == "admin"
+            else ["Show assigned tours", "Show tourist influx this month", "Help"]
+        ),
         "response_type": "tour_booking_status",
         "heading": "Tour Booking Status",
     }
@@ -13578,6 +13803,7 @@ def _build_tour_schedule_listing_payload(request, message, params):
     qs = (
         Tour_Schedule.objects.select_related("tour")
         .filter(tour__publication_status="published")
+        .filter(end_time__gte=now)
         .exclude(status="cancelled")
         .order_by("start_time")
     )
@@ -13630,6 +13856,7 @@ def _build_tour_schedule_listing_payload(request, message, params):
             nearby_qs = (
                 Tour_Schedule.objects.select_related("tour")
                 .filter(tour__publication_status="published")
+                .filter(end_time__gte=now)
                 .exclude(status="cancelled")
             )
             if resolved_tour is not None:
@@ -13706,6 +13933,7 @@ def _resolve_schedule_for_tour_booking(*, tour_name_hint="", sched_id="", date_h
             .filter(
                 sched_id__iexact=normalized_sched_id,
                 tour__publication_status="published",
+                end_time__gte=timezone.now(),
             )
             .exclude(status="cancelled")
             .first()
@@ -13716,6 +13944,7 @@ def _resolve_schedule_for_tour_booking(*, tour_name_hint="", sched_id="", date_h
     qs = (
         Tour_Schedule.objects.select_related("tour")
         .filter(tour__publication_status="published")
+        .filter(end_time__gte=timezone.now())
         .exclude(status="cancelled")
         .annotate(assigned_count=Count("employee_assignments", distinct=True))
     )
@@ -13745,12 +13974,10 @@ def _resolve_schedule_for_tour_booking(*, tour_name_hint="", sched_id="", date_h
         )
         return None, nearby
     schedule = (
-        qs.filter(end_time__gte=timezone.now(), assigned_count__gt=0)
+        qs.filter(assigned_count__gt=0)
         .order_by("start_time")
         .first()
     )
-    if schedule is None:
-        schedule = qs.filter(end_time__gte=timezone.now()).order_by("-assigned_count", "start_time").first()
     if schedule is None:
         schedule = qs.order_by("-assigned_count", "start_time").first()
     return schedule, []
@@ -13907,26 +14134,17 @@ def _build_guest_tour_booking_link_payload(
             }
 
     if not resolved_sched_id and tour_name_hint:
+        now = timezone.now()
         upcoming_named_qs = (
             Tour_Schedule.objects.select_related("tour")
             .filter(
                 tour__publication_status="published",
                 tour__tour_name__icontains=tour_name_hint,
-                end_time__gte=timezone.now(),
+                end_time__gte=now,
             )
             .exclude(status="cancelled")
             .order_by("start_time")
         )
-        if not upcoming_named_qs.exists():
-            upcoming_named_qs = (
-                Tour_Schedule.objects.select_related("tour")
-                .filter(
-                    tour__publication_status="published",
-                    tour__tour_name__icontains=tour_name_hint,
-                )
-                .exclude(status="cancelled")
-                .order_by("start_time")
-            )
         if upcoming_named_qs.exists():
             resolved_sched_id = str(upcoming_named_qs.first().sched_id)
 
@@ -13945,7 +14163,9 @@ def _build_guest_tour_booking_link_payload(
                     start_time__gte=day_start,
                     start_time__lt=day_end,
                     tour__publication_status="published",
+                    end_time__gte=timezone.now(),
                 )
+                .exclude(status="cancelled")
                 .order_by("start_time")
             )
             if date_qs.count() == 1:
@@ -13969,7 +14189,9 @@ def _build_guest_tour_booking_link_payload(
                         start_time__gte=day_start - timedelta(days=3),
                         start_time__lt=day_end + timedelta(days=3),
                         tour__publication_status="published",
+                        end_time__gte=timezone.now(),
                     )
+                    .exclude(status="cancelled")
                     .order_by("start_time")
                 )
                 if nearby_qs.exists():
@@ -14008,7 +14230,9 @@ def _build_guest_tour_booking_link_payload(
         .filter(
             sched_id__iexact=resolved_sched_id,
             tour__publication_status="published",
+            end_time__gte=timezone.now(),
         )
+        .exclude(status="cancelled")
         .first()
     )
     if schedule is None:
@@ -14047,11 +14271,15 @@ def _build_link_payload(request, *, text, route_name, label):
     link = reverse(route_name)
     if hasattr(request, "build_absolute_uri"):
         link = request.build_absolute_uri(link)
+    probe = f"{str(text or '').lower()} {str(label or '').lower()} {str(route_name or '').lower()}"
+    is_map_navigation = any(token in probe for token in (" map", "map ", "direction", "location"))
     return {
         "fulfillmentText": text,
         "billing_link": link,
         "billing_link_label": label,
         "open_in_new_tab": True,
+        "response_type": "directions" if is_map_navigation else "navigation_guidance",
+        **({"title": "System Navigation"} if not is_map_navigation else {}),
     }
 
 
@@ -15347,9 +15575,11 @@ def ai_chat(request):
 
     if actor.get("role") == "admin" and _is_reporting_summary_request(message):
         request._chatbot_log_context["resolved_intent"] = "reporting_summary"
+        early_state = _load_chat_state(request)
+        early_state_params = early_state.get("params") if isinstance(early_state.get("params"), dict) else {}
         reporting_payload = _build_reporting_summary_payload(
             message,
-            {},
+            early_state_params,
             actor_role="admin",
         )
         response_payload = {
@@ -15358,6 +15588,8 @@ def ai_chat(request):
                 reporting_payload.get("quick_replies") if isinstance(reporting_payload.get("quick_replies"), list) else [],
                 limit=5,
             ),
+            "response_type": "reporting_summary",
+            "heading": "Tourism Report Summary",
         }
         try:
             reports_url = reverse("admin_app:owner_reports_review")
@@ -15367,6 +15599,21 @@ def ai_chat(request):
             response_payload["billing_link_label"] = "Open reports page"
         except Exception:
             pass
+        period_iso = str(reporting_payload.get("reporting_period_iso") or "").strip()
+        accom_hint = str(reporting_payload.get("reporting_accommodation") or "").strip()
+        next_params = dict(early_state_params)
+        if period_iso:
+            next_params["last_reporting_period_iso"] = period_iso
+        if accom_hint:
+            next_params["last_reporting_accommodation"] = accom_hint
+        _save_chat_state(
+            request,
+            {
+                "pending_intent": "reporting_summary",
+                "params": next_params,
+                "missing_slot": "",
+            },
+        )
         return _chat_json_response(request, start_time, response_payload)
 
     if _is_help_or_greeting_command(message):
@@ -15404,6 +15651,13 @@ def ai_chat(request):
             start_time,
             _build_guest_tour_faq_payload(request, user, message),
         )
+    if actor.get("role") in {"owner", "employee", "admin"} and _is_guest_tour_faq_query(message):
+        request._chatbot_log_context["resolved_intent"] = "staff_tour_booking_faq"
+        return _chat_json_response(
+            request,
+            start_time,
+            _build_staff_tour_faq_payload(actor.get("role"), message),
+        )
 
     cebuano_tourism_intent = _cebuano_basic_tourism_intent(raw_message)
     if actor.get("role") == "guest" and cebuano_tourism_intent:
@@ -15420,18 +15674,21 @@ def ai_chat(request):
 
     if actor.get("role") == "owner" and _is_owner_manage_links_command(message):
         request._chatbot_log_context["resolved_intent"] = "owner_listing_visibility"
+        payload = _build_link_payload(
+            request,
+            text=(
+                "You can update your accommodation links and images from Owner Hub.\n"
+                "Please update these fields there: official website, Facebook page, external booking page, and accommodation images."
+            ),
+            route_name="admin_app:owner_hub",
+            label="Open Owner Hub",
+        )
+        payload["response_type"] = "owner_guidance"
+        payload["title"] = "Owner Hub Guidance"
         return _chat_json_response(
             request,
             start_time,
-            _build_link_payload(
-                request,
-                text=(
-                    "You can update your accommodation links and images from Owner Hub.\n"
-                    "Please update these fields there: official website, Facebook page, external booking page, and accommodation images."
-                ),
-                route_name="admin_app:owner_hub",
-                label="Open Owner Hub",
-            ),
+            payload,
         )
 
     if actor.get("role") == "owner":
@@ -16644,6 +16901,47 @@ def ai_chat(request):
             },
         )
 
+    if actor.get("role") == "guest":
+        place_detail_match = re.search(
+            r"\b(?:tell me about|information about|info about|details about)\s+([a-z0-9\s\-'&]+)\b",
+            str(message or ""),
+            flags=re.IGNORECASE,
+        )
+        if place_detail_match:
+            place_query = " ".join(str(place_detail_match.group(1) or "").split()).strip(" .,!?:;")
+            marker = _lookup_mapbookmark_place(request, place_query)
+            if marker is not None:
+                marker_name = str(getattr(marker, "name", "") or "").strip()
+                marker_category = str(getattr(marker, "category", "") or "").strip()
+                marker_details = str(getattr(marker, "details", "") or "").strip()
+                payload = {
+                    "fulfillmentText": (
+                        f"{marker_name} ({marker_category})"
+                        + (f"\n{marker_details}" if marker_details else "")
+                    ),
+                    "quick_replies": ["Open City Map", "Get directions", "Tourist spots", "Dining places"],
+                    "response_type": "dining" if str(marker_category).strip().lower() == "restaurant" else "tourism_places",
+                    "heading": "Dining Places" if str(marker_category).strip().lower() == "restaurant" else "Tourism Places",
+                    "recommendation_trace": [_mapbookmark_card_trace(request, marker, 1, client_location=client_location)],
+                }
+                direction_link = _build_map_direction_link(
+                    dest_lat=getattr(marker, "latitude", None),
+                    dest_lng=getattr(marker, "longitude", None),
+                    client_location=client_location,
+                )
+                if direction_link:
+                    payload["billing_link"] = direction_link
+                    payload["billing_link_label"] = f"Get Directions to {marker_name}"
+                current_state = _load_chat_state(request)
+                next_state = dict(current_state) if isinstance(current_state, dict) else {}
+                next_state["last_direction_target"] = {
+                    "name": marker_name,
+                    "kind": "map_place",
+                    "location": marker_details or "Bayawan City",
+                }
+                _save_chat_state(request, next_state)
+                return _chat_json_response(request, start_time, payload)
+
     if actor.get("role") == "guest" and _is_map_contents_query(message):
         rows, category = _list_mapbookmarks_for_query(request, message, limit=6)
         tourism_names = []
@@ -16711,6 +17009,8 @@ def ai_chat(request):
                 {
                     "fulfillmentText": "I couldn't find that mapped place yet. Please try another place name, or open the city map.",
                     "quick_replies": ["Open map", "Tourist spots", "Dining places", "Approved accommodations"],
+                    "response_type": "directions",
+                    "heading": "Directions / Map Guidance",
                 },
             )
         marker_name = str(getattr(marker, "name", "") or "").strip()
@@ -16736,6 +17036,14 @@ def ai_chat(request):
         if dir_link:
             payload["billing_link"] = dir_link
             payload["billing_link_label"] = f"Get Directions to {marker_name}"
+        current_state = _load_chat_state(request)
+        next_state = dict(current_state) if isinstance(current_state, dict) else {}
+        next_state["last_direction_target"] = {
+            "name": marker_name,
+            "kind": "map_place",
+            "location": marker_details or "Bayawan City",
+        }
+        _save_chat_state(request, next_state)
         return _chat_json_response(request, start_time, payload)
 
     if actor.get("role") == "guest" and _is_guest_map_command(message):
@@ -17211,6 +17519,15 @@ def ai_chat(request):
     chat_state_params = chat_state.get("params") if isinstance(chat_state.get("params"), dict) else {}
     chat_state_pending = str(chat_state.get("pending_intent") or "").strip().lower()
     chat_state_missing = str(chat_state.get("missing_slot") or "").strip().lower()
+    planning_context_active = bool(
+        actor.get("role") == "guest"
+        and chat_state_pending == "plan_bayawan_stay"
+    )
+    planning_budget_followup_expected = bool(
+        actor.get("role") == "guest"
+        and chat_state_pending == "plan_bayawan_stay"
+        and chat_state_missing in {"total_budget", "duration_days", "party_type"}
+    )
     chat_state_provenance = (
         request._chatbot_log_context.get("provenance")
         if isinstance(request._chatbot_log_context.get("provenance"), dict)
@@ -17223,6 +17540,39 @@ def ai_chat(request):
             if isinstance(chat_state.get("pending_tour_booking"), dict)
             else {}
         )
+
+    if actor.get("role") == "guest" and _is_contextual_direction_followup(message):
+        remembered = (
+            chat_state.get("last_direction_target")
+            if isinstance(chat_state.get("last_direction_target"), dict)
+            else {}
+        )
+        remembered_name = str((remembered or {}).get("name") or "").strip()
+        if remembered_name:
+            request._chatbot_log_context["resolved_intent"] = "travel_guidance"
+            guidance = _build_travel_guidance_payload(
+                remembered_name,
+                {
+                    "forced_destination_name": remembered_name,
+                    "forced_destination_kind": str((remembered or {}).get("kind") or "map_place").strip().lower() or "map_place",
+                    "forced_destination_location": str((remembered or {}).get("location") or "Bayawan City").strip() or "Bayawan City",
+                    "map_target_name": remembered_name,
+                },
+                client_location,
+                request=request,
+            )
+            guidance_reply = str(guidance.get("reply") or "").strip() or "I can guide you with directions."
+            response_payload = {
+                "fulfillmentText": guidance_reply,
+                "response_type": "directions",
+                "heading": "Directions / Map Guidance",
+            }
+            if isinstance(guidance.get("quick_replies"), list):
+                response_payload["quick_replies"] = _sanitize_quick_replies(guidance.get("quick_replies"), limit=4)
+            if guidance.get("link"):
+                response_payload["billing_link"] = str(guidance.get("link"))
+                response_payload["billing_link_label"] = str(guidance.get("link_label") or "Open Map")
+            return _chat_json_response(request, start_time, response_payload)
 
     if actor.get("role") == "guest" and (
         _is_tour_schedule_request(message) or _is_tour_schedule_request(raw_message)
@@ -17301,10 +17651,10 @@ def ai_chat(request):
         and isinstance(chat_state.get("pending_booking", {}).get("params"), dict)
         and bool(chat_state.get("pending_booking", {}).get("params"))
     )
-    if actor.get("role") == "guest" and not has_pending_accommodation_preview and not (
+    if actor.get("role") == "guest" and not has_pending_accommodation_preview and not planning_context_active and not (
         _is_accommodation_preview_command(message)
         or _is_accommodation_how_to_book_request(message)
-    ):
+    ) and not _is_stay_planning_request(message):
         deterministic_for_multilingual = _deterministic_intent_route(actor=actor, message=message)
         local_multilingual = _multilingual_keyword_intent(raw_message)
         multilingual_classification = local_multilingual or ({} if deterministic_for_multilingual else _classify_multilingual_tourism_intent(raw_message))
@@ -17337,6 +17687,7 @@ def ai_chat(request):
     if (
         actor.get("role") == "guest"
         and _is_likely_gibberish_query(message)
+        and not planning_context_active
         and not isinstance(chat_state.get("pending_tour_booking"), dict)
     ):
         role_clarifier = _role_aware_clarification_payload(actor)
@@ -17366,6 +17717,7 @@ def ai_chat(request):
     if (
         actor.get("role") == "guest"
         and _is_out_of_scope_message(message)
+        and not planning_context_active
         and not _has_strict_intent_signal(actor=actor, message=message)
     ):
         request._chatbot_log_context["resolved_intent"] = "out_of_scope"
@@ -17404,6 +17756,87 @@ def ai_chat(request):
             _save_chat_state(request, chat_state)
         return _chat_json_response(request, start_time, response)
 
+    if actor.get("role") == "guest" and _is_stay_planning_request(message):
+        request._chatbot_log_context["resolved_intent"] = "plan_bayawan_stay"
+        parsed_plan = _extract_params_with_confidence(message)
+        parsed_plan_params = parsed_plan.get("params") if isinstance(parsed_plan.get("params"), dict) else {}
+        merged_plan_params = dict(chat_state_params) if isinstance(chat_state_params, dict) else {}
+        merged_plan_params.update(parsed_plan_params)
+        if _to_int(merged_plan_params.get("total_budget"), default=0) <= 0:
+            compact_match = re.search(
+                r"\b(?:php\s*)?([0-9][0-9,]*(?:\.[0-9]+)?k?)\s*(?:php|peso|pesos)?\b",
+                str(message or ""),
+                flags=re.IGNORECASE,
+            )
+            if compact_match:
+                parse_compact = globals().get("_parse_compact_number")
+                inferred_total = (
+                    parse_compact(compact_match.group(1))
+                    if callable(parse_compact)
+                    else _to_int(compact_match.group(1), default=0)
+                )
+                if inferred_total and inferred_total > 0:
+                    merged_plan_params["total_budget"] = int(inferred_total)
+        planning_payload = _build_budget_stay_plan_payload(merged_plan_params, message)
+        if planning_payload.get("needs_clarification"):
+            next_params = (
+                planning_payload.get("params")
+                if isinstance(planning_payload.get("params"), dict)
+                else merged_plan_params
+            )
+            missing_slot = str(planning_payload.get("missing_slot") or "").strip() or "total_budget"
+            _save_chat_state(
+                request,
+                {
+                    "pending_intent": "plan_bayawan_stay",
+                    "params": next_params,
+                    "missing_slot": missing_slot,
+                },
+            )
+            return _chat_json_response(
+                request,
+                start_time,
+                {
+                    "fulfillmentText": str(planning_payload.get("question") or "").strip(),
+                    "quick_replies": _slot_quick_replies(missing_slot),
+                    "response_type": "trip_planning",
+                    "heading": "Trip Planning",
+                    "needs_clarification": True,
+                    "missing_slot": missing_slot,
+                },
+            )
+
+        _save_chat_state(
+            request,
+            {
+                "pending_intent": "plan_bayawan_stay",
+                "params": (
+                    planning_payload.get("params")
+                    if isinstance(planning_payload.get("params"), dict)
+                    else merged_plan_params
+                ),
+                "missing_slot": "",
+                "last_plan_signature": str(planning_payload.get("plan_signature") or "").strip(),
+            },
+        )
+        response_payload = {
+            "fulfillmentText": str(planning_payload.get("reply") or "").strip(),
+            "response_type": "trip_planning",
+            "heading": "Trip Planning",
+            "quick_replies": _sanitize_quick_replies(
+                planning_payload.get("quick_replies")
+                if isinstance(planning_payload.get("quick_replies"), list)
+                else [],
+                limit=5,
+            ),
+        }
+        if planning_payload.get("billing_link"):
+            response_payload["billing_link"] = str(planning_payload.get("billing_link"))
+            response_payload["billing_link_label"] = str(
+                planning_payload.get("billing_link_label") or "Open Official Link"
+            )
+        return _chat_json_response(request, start_time, response_payload)
+
     # Phase A: hard directions override before any continuation/slot-filling branches.
     if actor.get("role") == "guest" and _is_travel_guidance_request(message):
         combo_parse = _extract_params_with_confidence(message)
@@ -17432,6 +17865,7 @@ def ai_chat(request):
 
         request._chatbot_log_context["resolved_intent"] = "travel_guidance"
         travel_params = {}
+        guidance_message = message
         if _is_contextual_direction_followup(message):
             explicit_destination = _resolve_destination_for_travel(message, {})
             explicit_name = str(explicit_destination.get("name") or "").strip()
@@ -17471,11 +17905,31 @@ def ai_chat(request):
                     if str(chat_state_params.get("location") or "").strip():
                         travel_params["location"] = str(chat_state_params.get("location") or "").strip()
                         request._chatbot_log_context["provenance"]["context_reply_used"] = True
+                if not travel_params and isinstance(chat_state.get("last_direction_target"), dict):
+                    remembered = chat_state.get("last_direction_target") or {}
+                    remembered_name = str(remembered.get("name") or "").strip()
+                    remembered_kind = str(remembered.get("kind") or "").strip().lower()
+                    remembered_location = str(remembered.get("location") or "").strip()
+                    if remembered_name and remembered_kind in {"accommodation", "tourist_spot", "place", "map_place"}:
+                        if remembered_kind == "accommodation":
+                            travel_params["accom_name"] = remembered_name
+                        else:
+                            travel_params["tourism_query"] = remembered_name
+                            travel_params["map_target_name"] = remembered_name
+                        travel_params["forced_destination_name"] = remembered_name
+                        travel_params["forced_destination_kind"] = remembered_kind or "map_place"
+                        if remembered_location:
+                            travel_params["forced_destination_location"] = remembered_location
+                        guidance_message = remembered_name
+                        if remembered_location:
+                            travel_params["location"] = remembered_location
+                        request._chatbot_log_context["provenance"]["context_reply_used"] = True
+                        request._chatbot_log_context["provenance"]["last_selected_entity"] = remembered_name[:120]
             if not travel_params and isinstance(chat_state_params, dict):
                 if str(chat_state_params.get("location") or "").strip():
                     travel_params["location"] = str(chat_state_params.get("location") or "").strip()
                     request._chatbot_log_context["provenance"]["context_reply_used"] = True
-        guidance = _build_travel_guidance_payload(message, travel_params, client_location, request=request)
+        guidance = _build_travel_guidance_payload(guidance_message, travel_params, client_location, request=request)
         guidance_reply = str(guidance.get("reply") or "").strip() or "I can guide you with directions. Please share your destination."
         guidance_response = {"fulfillmentText": guidance_reply}
         if isinstance(guidance.get("quick_replies"), list):
@@ -17483,6 +17937,15 @@ def ai_chat(request):
         if guidance.get("link"):
             guidance_response["billing_link"] = str(guidance.get("link"))
             guidance_response["billing_link_label"] = str(guidance.get("link_label") or "Open Map")
+        remembered_target_name = str(guidance.get("destination_name") or "").strip()
+        if remembered_target_name:
+            next_state = dict(chat_state)
+            next_state["last_direction_target"] = {
+                "name": remembered_target_name,
+                "kind": str(guidance.get("destination_kind") or "place").strip().lower(),
+                "location": str(guidance.get("destination_location") or "").strip(),
+            }
+            _save_chat_state(request, next_state)
         return _chat_json_response(request, start_time, guidance_response)
 
     pending_tour_booking = (
@@ -18699,6 +19162,8 @@ def ai_chat(request):
             or _looks_like_slot_update(params)
             or state_missing_slot in ("total_budget", "duration_days", "party_type")
             or bool(re.fullmatch(r"\s*(\d+)\s*(day|days)?\s*", str(message or "").strip().lower()))
+            or bool(re.search(r"\b(solo|couple|family|group)\b", str(message or "").strip().lower()))
+            or bool(re.search(r"\b(?:php\s*)?[0-9][0-9,]*(?:\.[0-9]+)?k?\s*(?:php|peso|pesos)?\b", str(message or "").strip().lower()))
         )
     )
     if continuing_planning_flow:
@@ -19377,26 +19842,75 @@ def ai_chat(request):
             )
     elif intent in ("reporting_summary",):
         _clear_chat_state(request)
-        reporting_payload = _build_reporting_summary_payload(
-            message,
-            params,
-            actor_role=str(actor.get("role") or ""),
-        )
-        reply = str(reporting_payload.get("reply") or "").strip()
-        if isinstance(reporting_payload.get("quick_replies"), list):
-            billing_actions["quick_replies"] = _sanitize_quick_replies(
-                reporting_payload.get("quick_replies"),
-                limit=5,
+        actor_role = str(actor.get("role") or "").strip().lower()
+        if actor_role not in {"admin", "employee", "owner"}:
+            fallback_payload = _build_out_of_scope_payload(
+                actor,
+                message=message,
+                fallback_text=(
+                    "Tourist influx and owner monthly report analytics are available for authorized staff roles only. "
+                    "I can still help you with tours, approved accommodations, directions, and trip planning."
+                ),
+                quick_replies=[
+                    "Show available tours",
+                    "Find approved stays",
+                    "Open City Map",
+                    "Help",
+                ],
             )
-        if str(actor.get("role") or "").strip().lower() == "admin":
-            try:
-                reports_url = reverse("admin_app:owner_reports_review")
-                if hasattr(request, "build_absolute_uri"):
-                    reports_url = request.build_absolute_uri(reports_url)
-                billing_actions["billing_link"] = reports_url
-                billing_actions["billing_link_label"] = "Open reports page"
-            except Exception:
-                pass
+            reply = str(fallback_payload.get("fulfillmentText") or "").strip()
+            out_of_scope_quick_replies = _sanitize_quick_replies(
+                fallback_payload.get("quick_replies") if isinstance(fallback_payload.get("quick_replies"), list) else [],
+                limit=4,
+            )
+        else:
+            report_context_params = dict(params) if isinstance(params, dict) else {}
+            if isinstance(chat_state_params, dict):
+                if str(chat_state_params.get("last_reporting_period_iso") or "").strip():
+                    report_context_params.setdefault(
+                        "last_reporting_period_iso",
+                        str(chat_state_params.get("last_reporting_period_iso") or "").strip(),
+                    )
+                if str(chat_state_params.get("last_reporting_accommodation") or "").strip():
+                    report_context_params.setdefault(
+                        "last_reporting_accommodation",
+                        str(chat_state_params.get("last_reporting_accommodation") or "").strip(),
+                    )
+            reporting_payload = _build_reporting_summary_payload(
+                message,
+                report_context_params,
+                actor_role=actor_role,
+            )
+            reply = str(reporting_payload.get("reply") or "").strip()
+            reporting_state_params = dict(chat_state_params) if isinstance(chat_state_params, dict) else {}
+            period_iso = str(reporting_payload.get("reporting_period_iso") or "").strip()
+            accom_hint = str(reporting_payload.get("reporting_accommodation") or "").strip()
+            if period_iso:
+                reporting_state_params["last_reporting_period_iso"] = period_iso
+            if accom_hint:
+                reporting_state_params["last_reporting_accommodation"] = accom_hint
+            _save_chat_state(
+                request,
+                {
+                    "pending_intent": "reporting_summary",
+                    "params": reporting_state_params,
+                    "missing_slot": "",
+                },
+            )
+            if isinstance(reporting_payload.get("quick_replies"), list):
+                billing_actions["quick_replies"] = _sanitize_quick_replies(
+                    reporting_payload.get("quick_replies"),
+                    limit=5,
+                )
+            if actor_role == "admin":
+                try:
+                    reports_url = reverse("admin_app:owner_reports_review")
+                    if hasattr(request, "build_absolute_uri"):
+                        reports_url = request.build_absolute_uri(reports_url)
+                    billing_actions["billing_link"] = reports_url
+                    billing_actions["billing_link_label"] = "Open reports page"
+                except Exception:
+                    pass
     elif intent in ("travel_guidance",):
         _clear_chat_state(request)
         guidance = _build_travel_guidance_payload(message, params, client_location, request=request)
@@ -19441,6 +19955,8 @@ def ai_chat(request):
                     {
                         "fulfillmentText": str(planning_payload.get("question") or "").strip(),
                         "quick_replies": _slot_quick_replies(missing_slot),
+                        "response_type": "trip_planning",
+                        "heading": "Trip Planning",
                         "needs_clarification": True,
                         "missing_slot": missing_slot,
                     },
@@ -19489,6 +20005,8 @@ def ai_chat(request):
                             else [],
                             limit=4,
                         ),
+                        "response_type": "trip_planning",
+                        "heading": "Trip Planning",
                     },
                 )
 
@@ -20197,6 +20715,23 @@ def ai_chat(request):
         response["recommendation_trace"] = logged_recommended_items
         response.setdefault("response_type", "tour_recommendations")
         response.setdefault("heading", "Tour Package Recommendations")
+    if intent in ("plan_bayawan_stay",):
+        response.setdefault("response_type", "trip_planning")
+        response.setdefault("heading", "Trip Planning")
+    elif intent in ("travel_guidance",):
+        response.setdefault("response_type", "directions")
+        response.setdefault("heading", "Directions / Map Guidance")
+    elif intent in ("get_tourism_information",):
+        inferred_text = str(response.get("fulfillmentText") or "").lower()
+        if _is_dining_query(message) or any(token in inferred_text for token in ("dining", "restaurant", "food", "eat")):
+            response.setdefault("response_type", "dining")
+            response.setdefault("heading", "Dining Places")
+        else:
+            response.setdefault("response_type", "tourism_places")
+            response.setdefault("heading", "Tourism Places")
+    elif intent in ("reporting_summary",):
+        response.setdefault("response_type", "reporting_summary")
+        response.setdefault("heading", "Tourism Report Summary")
         rec_sched_ids = []
         for row in logged_recommended_items:
             if not isinstance(row, dict):
@@ -20765,6 +21300,24 @@ def text_cnn_predict(request):
 
     prediction, err = _predict_accommodation_class_from_text(message)
     if err:
+        if str(err).strip().lower() in {
+            "accommodation_text_cnn_unavailable",
+            "disabled_by_environment",
+        }:
+            model_path, artifact_source = _resolve_accommodation_text_cnn_model_path()
+            return JsonResponse(
+                {
+                    "status": "unavailable",
+                    "error": str(err),
+                    "message": (
+                        "Accommodation text CNN is not ready yet. "
+                        "The chatbot will continue using safe fallback intent routing."
+                    ),
+                    "model_path": str(model_path),
+                    "artifact_source": str(artifact_source or ""),
+                },
+                status=200,
+            )
         return JsonResponse({"error": err}, status=500)
     return JsonResponse(prediction)
 

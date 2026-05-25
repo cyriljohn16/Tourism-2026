@@ -413,6 +413,78 @@
       border-radius: 0;
     }
 
+    .history-section {
+      margin-top: 18px;
+      border-top: 1px solid #ece3d7;
+      padding-top: 14px;
+    }
+
+    .history-title {
+      margin: 0 0 10px;
+      font-size: clamp(18px, 1.5vw, 24px);
+      color: #2b2218;
+      font-weight: 700;
+    }
+
+    .history-list {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 10px;
+    }
+
+    .history-item {
+      border: 1px solid #e8dfd4;
+      border-radius: 10px;
+      background: #fff;
+      padding: 10px 12px;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 8px 12px;
+      align-items: center;
+    }
+
+    .history-main {
+      min-width: 0;
+    }
+
+    .history-tour-name {
+      margin: 0;
+      font-size: 0.98rem;
+      font-weight: 700;
+      color: #1f2937;
+      word-break: break-word;
+    }
+
+    .history-meta {
+      margin: 3px 0 0;
+      font-size: 0.84rem;
+      color: #4b5563;
+      line-height: 1.4;
+      word-break: break-word;
+    }
+
+    .history-status {
+      justify-self: end;
+      border-radius: 999px;
+      padding: 4px 10px;
+      font-size: 0.74rem;
+      font-weight: 700;
+      background: #e8eef8;
+      color: #1d4a8b;
+      text-transform: capitalize;
+      white-space: nowrap;
+    }
+
+    @media (max-width: 768px) {
+      .history-item {
+        grid-template-columns: 1fr;
+      }
+
+      .history-status {
+        justify-self: start;
+      }
+    }
+
     @media (max-width: 1200px) {
       .calendar-layout {
         grid-template-columns: 1fr;
@@ -480,6 +552,27 @@
                 <div class="no-tours">Select a date to view your assigned tours.</div>
               </div>
             </div>
+          </div>
+        </div>
+
+        <div class="history-section">
+          <h3 class="history-title">Completed Tours History</h3>
+          <div class="history-list">
+            {% for schedule in completed_history %}
+              <div class="history-item">
+                <div class="history-main">
+                  <p class="history-tour-name">{{ schedule.tour.tour_name }}</p>
+                  <p class="history-meta">
+                    {{ schedule.sched_id }} •
+                    {{ schedule.start_time|date:"M d, Y g:i A" }} to {{ schedule.end_time|date:"M d, Y g:i A" }} •
+                    {{ schedule.slots_booked|default:0 }} booked
+                  </p>
+                </div>
+                <span class="history-status">{{ schedule.status }}</span>
+              </div>
+            {% empty %}
+              <div class="no-tours">No completed tour history yet.</div>
+            {% endfor %}
           </div>
         </div>
       </div>

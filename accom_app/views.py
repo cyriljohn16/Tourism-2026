@@ -162,6 +162,8 @@ def _room_field_payload(request):
     person_limit_raw = request.POST.get("person_limit", request.POST.get("capacity", 0))
     price_raw = request.POST.get("price_per_night", request.POST.get("price", "0"))
     current_availability_raw = request.POST.get("current_availability")
+    room_identifiers = str(request.POST.get("room_identifiers") or "").strip()
+    total_rooms_raw = request.POST.get("total_rooms")
 
     person_limit = _parse_positive_int(person_limit_raw, field_label="Capacity", minimum=1)
     price_per_night = _parse_price(price_raw)
@@ -180,9 +182,20 @@ def _room_field_payload(request):
         if current_availability > person_limit:
             raise ValueError("Current availability cannot exceed room capacity.")
 
+    if total_rooms_raw in (None, ""):
+        total_rooms = 1
+    else:
+        total_rooms = _parse_positive_int(
+            total_rooms_raw,
+            field_label="Total rooms",
+            minimum=1,
+        )
+
     return {
         "room_name": room_name,
         "room_type": room_type_value,
+        "room_identifiers": room_identifiers[:500],
+        "total_rooms": total_rooms,
         "person_limit": person_limit,
         "price_per_night": price_per_night,
         "status": status_value,
@@ -231,6 +244,8 @@ def _serialize_room(room):
         "name": room.room_name,
         "room_name": room.room_name,
         "room_type": room_type,
+        "room_identifiers": str(getattr(room, "room_identifiers", "") or "").strip(),
+        "total_rooms": int(getattr(room, "total_rooms", 1) or 1),
         "capacity": int(room.person_limit or 0),
         "person_limit": int(room.person_limit or 0),
         "price_per_night": f"{Decimal(str(room.price_per_night or 0)):.2f}",
@@ -532,6 +547,8 @@ def add_room_ajax(request):
         new_room = AdminRoom.objects.create(
             accommodation=accom,
             room_name=payload["room_name"],
+            room_identifiers=payload["room_identifiers"],
+            total_rooms=payload["total_rooms"],
             person_limit=payload["person_limit"],
             current_availability=payload["current_availability"],
             price_per_night=payload["price_per_night"],
@@ -619,6 +636,8 @@ def update_room_ajax(request):
                 )
 
             room.room_name = payload["room_name"]
+            room.room_identifiers = payload["room_identifiers"]
+            room.total_rooms = payload["total_rooms"]
             room.person_limit = payload["person_limit"]
             room.price_per_night = payload["price_per_night"]
             room.status = payload["status"]
@@ -633,6 +652,8 @@ def update_room_ajax(request):
             room.current_availability = desired_availability
             room.save(update_fields=[
                 "room_name",
+                "room_identifiers",
+                "total_rooms",
                 "person_limit",
                 "price_per_night",
                 "status",

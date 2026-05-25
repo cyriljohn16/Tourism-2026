@@ -13,7 +13,14 @@ from django.contrib.auth.models import Group
 from django.test import Client, TestCase, SimpleTestCase, override_settings
 from django.utils import timezone
 
-from admin_app.models import Accomodation, Employee, Room, TourismInformation, TourAssignment
+from admin_app.models import (
+    Accomodation,
+    Employee,
+    OwnerMonthlyReport,
+    Room,
+    TourismInformation,
+    TourAssignment,
+)
 from accom_app.models import AuthoritativeRoomDetails
 from guest_app.models import AccommodationBooking, Billing, Guest, TourBooking, Pending
 from ai_chatbot.views import (
@@ -4722,6 +4729,44 @@ class RoleIntentCoverageExpansionTests(TestCase):
             price_per_night=Decimal("1800.00"),
             status="UNAVAILABLE",
         )
+        self.report_period = timezone.localdate().replace(day=1)
+        OwnerMonthlyReport.objects.create(
+            owner=self.owner_user,
+            accommodation=self.owner_accommodation,
+            reporting_period=self.report_period,
+            guests_checked_in=24,
+            guests_checked_out=22,
+            rooms_used=8,
+            room_usage_notes="Coverage notes",
+            nationality_breakdown="Filipino 20, Foreign 4 (JP 2, KR 1, US 1)",
+            status="submitted",
+        )
+        self.employee_record = Employee.objects.create(
+            first_name="Coverage",
+            last_name="Employee",
+            username="coverage_employee_record",
+            age=29,
+            phone_number="09170015551",
+            email="coverage_employee_record@example.com",
+            sex="F",
+            role="Tourism Employee",
+            status="accepted",
+        )
+        self.employee_record.set_password("secure-pass-123")
+        self.employee_record.save()
+        self.admin_record = Employee.objects.create(
+            first_name="Coverage",
+            last_name="Admin",
+            username="coverage_admin_record",
+            age=31,
+            phone_number="09170015552",
+            email="coverage_admin_record@example.com",
+            sex="M",
+            role="Admin",
+            status="accepted",
+        )
+        self.admin_record.set_password("secure-pass-123")
+        self.admin_record.save()
 
     def _post_message(self, message):
         return self.client.post(
@@ -4729,6 +4774,14 @@ class RoleIntentCoverageExpansionTests(TestCase):
             data=json.dumps({"message": message}),
             content_type="application/json",
         )
+
+    def _set_employee_session(self, *, is_admin=False):
+        self.client.logout()
+        session = self.client.session
+        session["user_type"] = "employee"
+        session["employee_id"] = self.admin_record.emp_id if is_admin else self.employee_record.emp_id
+        session["is_admin"] = bool(is_admin)
+        session.save()
 
     def test_guest_search_help_query_returns_system_guidance(self):
         self.client.force_login(self.guest_user)
@@ -4765,3 +4818,81 @@ class RoleIntentCoverageExpansionTests(TestCase):
         text = str(body.get("fulfillmentText", "")).lower()
         self.assertIn("activation/deactivation guidance", text)
         self.assertIn("billing_link", body)
+
+    def test_guest_reporting_summary_prompt_is_scope_guarded(self):
+        self.client.force_login(self.guest_user)
+        response = self._post_message("what is the tourist influx this month?")
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        text = str(body.get("fulfillmentText", "")).lower()
+        self.assertIn("authorized staff roles only", text)
+        quick_replies = body.get("quick_replies") if isinstance(body.get("quick_replies"), list) else []
+        self.assertTrue(any("tour" in str(item).lower() for item in quick_replies))
+
+    def test_owner_reporting_summary_prompt_returns_data_summary(self):
+        self.client.force_login(self.owner_user)
+        response = self._post_message("show tourist influx this month")
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        text = str(body.get("fulfillmentText", "")).lower()
+        self.assertIn("tourism report summary", text)
+        self.assertIn("check-ins", text)
+
+    def test_employee_reporting_summary_prompt_returns_data_summary(self):
+        self._set_employee_session(is_admin=False)
+        response = self._post_message("show monthly report for this month")
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        text = str(body.get("fulfillmentText", "")).lower()
+        self.assertIn("tourism report summary", text)
+        self.assertIn("by accommodation", text)
+
+    def test_admin_reporting_summary_prompt_returns_data_and_reports_link(self):
+        self._set_employee_session(is_admin=True)
+        response = self._post_message("what is the tourist influx for this month?")
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        text = str(body.get("fulfillmentText", "")).lower()
+        self.assertIn("tourism report summary", text)
+        self.assertEqual(str(body.get("billing_link_label") or "").strip().lower(), "open reports page")
+
+    def test_guest_reporting_prompt_does_not_expose_reports_page_link(self):
+        self.client.force_login(self.guest_user)
+        response = self._post_message("show latest monthly report")
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertNotEqual(str(body.get("billing_link_label") or "").strip().lower(), "open reports page")
+
+    def test_guest_payment_prompt_does_not_show_treasurer_payment_handoff(self):
+        self.client.force_login(self.guest_user)
+        response = self._post_message("where do i pay for the tour?")
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertNotEqual(str(body.get("billing_link_label") or "").strip().lower(), "proceed to treasurer billing")
+
+    def test_owner_help_prompt_stays_in_owner_scope(self):
+        self.client.force_login(self.owner_user)
+        response = self._post_message("help")
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        replies = [str(item).strip().lower() for item in (body.get("quick_replies") or [])]
+        self.assertIn("submit monthly report", replies)
+        self.assertNotIn("plan my bayawan trip", replies)
+
+    def test_employee_help_prompt_stays_in_employee_scope(self):
+        self._set_employee_session(is_admin=False)
+        response = self._post_message("help")
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        replies = [str(item).strip().lower() for item in (body.get("quick_replies") or [])]
+        self.assertIn("open assigned tours", replies)
+        self.assertNotIn("plan my bayawan trip", replies)
+
+    def test_admin_help_prompt_stays_in_admin_scope(self):
+        self._set_employee_session(is_admin=True)
+        response = self._post_message("help")
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        replies = [str(item).strip().lower() for item in (body.get("quick_replies") or [])]
+        self.assertIn("show pending accommodations", replies)
+        self.assertNotIn("plan my bayawan trip", replies)

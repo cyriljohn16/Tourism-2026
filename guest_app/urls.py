@@ -6,6 +6,9 @@ from django.conf import settings
 urlpatterns = [
     path('guest_book/<str:tour_id>/', views.guest_book, name='guest_book'),
     path('main-page/', views.main_page, name='main-page'),
+    path('service-worker.js', views.guest_service_worker, name='guest_service_worker'),
+    path('manifest.webmanifest', views.guest_manifest, name='guest_manifest'),
+    path('offline/', views.guest_offline, name='guest_offline'),
     path('register/', views.register, name='register'),
     path('login/', views.login_view, name='login'),
     path('logout/', views.logout_view, name='logout'),
@@ -59,8 +62,10 @@ urlpatterns = [
     # Accommodation discovery (transactions are disabled; official outbound links only)
     path('accommodations/', views.accommodation_page, name='accommodation_page'),
     path('accommodation/<int:accom_id>/', views.accommodation_detail_page, name='accommodation_detail_page'),
+    path('accommodation/<int:accom_id>/reviews/submit/', views.submit_accommodation_review, name='submit_accommodation_review'),
     path('accommodations/official-links/', views.my_accommodation_bookings, name='accommodation_official_links'),
     path('accommodations/my-bookings/', views.my_accommodation_bookings, name='my_accommodation_bookings'),
+    path('tour-bookings/', views.my_tour_bookings, name='my_tour_bookings'),
     path('accommodations/my-bookings/<int:booking_id>/cancel/', views.cancel_my_accommodation_booking, name='cancel_my_accommodation_booking'),
     path('accommodations/recommend/', views.accommodation_recommend, name='accommodation_recommend'),
     # Deprecated accommodation transaction endpoints kept for safe compatibility.

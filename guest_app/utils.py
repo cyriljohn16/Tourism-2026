@@ -18,10 +18,10 @@ TRANSLATIONS = {
 SYSTEM_TRANSLATIONS = {
     # Navigation and basic UI
     'ibayaw_tour': {
-        'en': 'Ibayaw Tour',
-        'tl': 'Ibayaw Tour',
-        'ceb': 'Ibayaw Tour',
-        'es': 'Tour Ibayaw'
+        'en': 'Experience Bayawan',
+        'tl': 'Experience Bayawan',
+        'ceb': 'Experience Bayawan',
+        'es': 'Experience Bayawan'
     },
     'nav_tour_packs': {
         'en': 'Tour Packages',

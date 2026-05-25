@@ -13,11 +13,11 @@ from django.contrib.auth.hashers import make_password
 
 def connect_db():
     return MySQLdb.connect(
-        host='127.0.0.1',
-        port=3307,
-        user='root',
-        passwd='september242023',
-        db='project_db'
+        host=os.getenv("LOCAL_DB_HOST", "127.0.0.1"),
+        port=int(os.getenv("LOCAL_DB_PORT", "3307")),
+        user=os.getenv("LOCAL_DB_USER", "root"),
+        passwd=os.getenv("LOCAL_DB_PASSWORD", os.getenv("MYSQL_PASSWORD", "")),
+        db=os.getenv("LOCAL_DB_NAME", "project_db"),
     )
 
 def show_employees():

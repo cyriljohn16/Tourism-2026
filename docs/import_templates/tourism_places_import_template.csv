@@ -1,0 +1,2 @@
+name,category,short_description,full_description,location,address,barangay,latitude,longitude,map_x,map_y,image_path,source,is_published,is_featured,official_note
+Sample tourism place - replace or remove this row,tourist_spot,Short public description,Longer Tourism Office-verified description,General location,Street or sitio,Barangay name,,,,,static/images/example-tourism-place.jpg,Tourism Office verification sheet,false,false,Use only verified published records for public import

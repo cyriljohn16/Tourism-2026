@@ -121,6 +121,7 @@
     white-space: pre-wrap;
     overflow-wrap: anywhere;
     font-size: 0.86rem;
+    box-shadow: 0 3px 10px rgba(15, 43, 79, 0.08);
   }
 
   .guest-chat-msg.user {
@@ -200,6 +201,12 @@
     border: 1px solid #d8e2f3;
     color: #1f2f45;
     border-bottom-left-radius: 8px;
+    width: min(100%, 520px);
+  }
+
+  .guest-chat-msg.bot.formal-response {
+    padding: 11px 13px;
+    line-height: 1.5;
   }
 
   .guest-chat-msg-heading {
@@ -214,11 +221,37 @@
     white-space: pre-wrap;
   }
 
+  .guest-chat-msg.bot .guest-chat-msg-body {
+    white-space: normal;
+  }
+
+  .guest-chat-msg.bot .guest-chat-msg-paragraph {
+    margin: 0 0 8px;
+    color: #1f2f45;
+    line-height: 1.5;
+  }
+
+  .guest-chat-msg.bot .guest-chat-msg-paragraph:last-child {
+    margin-bottom: 0;
+  }
+
+  .guest-chat-msg.bot .guest-chat-msg-list {
+    margin: 0 0 8px 16px;
+    padding: 0;
+    color: #1f2f45;
+    line-height: 1.45;
+  }
+
+  .guest-chat-msg.bot .guest-chat-msg-list:last-child {
+    margin-bottom: 0;
+  }
+
   .guest-chat-actions {
     display: flex;
     flex-wrap: wrap;
     gap: 6px;
     margin-top: 6px;
+    padding-left: 2px;
   }
 
   .guest-chat-cards {
@@ -241,6 +274,12 @@
     overflow: hidden;
     background: #fff;
     box-shadow: 0 8px 18px rgba(12, 43, 83, 0.1);
+    transition: transform 0.14s ease, box-shadow 0.14s ease;
+  }
+
+  .guest-chat-card:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 10px 22px rgba(12, 43, 83, 0.14);
   }
 
   .guest-chat-card-image {
@@ -322,6 +361,7 @@
     font-size: 0.74rem;
     font-weight: 700;
     cursor: pointer;
+    transition: background-color 0.14s ease, color 0.14s ease, border-color 0.14s ease, transform 0.14s ease;
   }
 
   .guest-chat-card-btn.primary {
@@ -340,6 +380,22 @@
     font-size: 0.76rem;
     font-weight: 700;
     cursor: pointer;
+    transition: background-color 0.14s ease, color 0.14s ease, border-color 0.14s ease, transform 0.14s ease;
+  }
+
+  .guest-chat-action-btn:hover,
+  .guest-chat-card-btn:hover,
+  .guest-chat-pending-btn:hover {
+    transform: translateY(-1px);
+    border-color: #9bb7dc;
+    background: #f4f8ff;
+  }
+
+  .guest-chat-action-btn:focus-visible,
+  .guest-chat-card-btn:focus-visible,
+  .guest-chat-pending-btn:focus-visible {
+    outline: 2px solid #2d6bd4;
+    outline-offset: 1px;
   }
 
   .guest-chat-input-row {
@@ -720,7 +776,7 @@
       const options = opts || {};
       messagesEl.innerHTML = '';
       appendMessage(defaultWelcomeMessage, 'bot', { persist: options.persist !== false });
-      appendQuickReplies(randomStarterButtons(4), { persist: options.persist !== false });
+      appendQuickReplies(['Help'], { persist: options.persist !== false, shuffle: false });
       messagesEl.scrollTop = messagesEl.scrollHeight;
     }
 
@@ -779,11 +835,59 @@
       const options = opts || {};
       const msg = document.createElement('div');
       msg.className = `guest-chat-msg ${kind === 'user' ? 'user' : 'bot'}`;
-      msg.textContent = String(text || '');
+      if (kind === 'user') {
+        msg.textContent = String(text || '');
+      } else {
+        msg.classList.add('formal-response');
+        appendFormattedBotText(msg, String(text || ''));
+      }
       messagesEl.appendChild(msg);
       messagesEl.scrollTop = messagesEl.scrollHeight;
       if (options.persist !== false) {
         pushHistory({ type: 'message', kind: kind === 'user' ? 'user' : 'bot', text: String(text || '') });
+      }
+    }
+
+    function appendFormattedBotText(container, text) {
+      if (!container) return;
+      const normalized = String(text || '').replace(/\r/g, '').trim();
+      if (!normalized) {
+        const empty = document.createElement('div');
+        empty.className = 'guest-chat-msg-paragraph';
+        empty.textContent = 'No response available.';
+        container.appendChild(empty);
+        return;
+      }
+      const lines = normalized.split('\n').map((line) => line.trim());
+      const isListLine = (line) => /^([-*]\s+|\d+\.\s+)/.test(line);
+      let listEl = null;
+      lines.forEach((line) => {
+        if (!line) {
+          listEl = null;
+          return;
+        }
+        if (isListLine(line)) {
+          if (!listEl) {
+            listEl = document.createElement('ul');
+            listEl.className = 'guest-chat-msg-list';
+            container.appendChild(listEl);
+          }
+          const item = document.createElement('li');
+          item.textContent = line.replace(/^([-*]\s+|\d+\.\s+)/, '').trim();
+          listEl.appendChild(item);
+          return;
+        }
+        listEl = null;
+        const para = document.createElement('div');
+        para.className = 'guest-chat-msg-paragraph';
+        para.textContent = line;
+        container.appendChild(para);
+      });
+      if (!container.children.length) {
+        const para = document.createElement('div');
+        para.className = 'guest-chat-msg-paragraph';
+        para.textContent = normalized;
+        container.appendChild(para);
       }
     }
 
@@ -796,7 +900,7 @@
         return;
       }
       const msg = document.createElement('div');
-      msg.className = 'guest-chat-msg bot';
+      msg.className = 'guest-chat-msg bot formal-response';
       const heading = document.createElement('div');
       heading.className = 'guest-chat-msg-heading';
       heading.textContent = safeTitle;
@@ -804,7 +908,7 @@
       if (safeText) {
         const body = document.createElement('div');
         body.className = 'guest-chat-msg-body';
-        body.textContent = safeText;
+        appendFormattedBotText(body, safeText);
         msg.appendChild(body);
       }
       messagesEl.appendChild(msg);
@@ -1247,7 +1351,15 @@
         || body.includes('pending means your tour booking')
         || body.includes('check your tour booking status')
       ) return 'tour_booking_status';
-      if (payload && (payload.billing_link || payload.map_action || payload.open_map)) return 'directions';
+      if (payload && (payload.map_action || payload.open_map)) return 'directions';
+      if (payload && payload.billing_link) {
+        const linkLabel = String(payload.billing_link_label || '').toLowerCase();
+        if (
+          linkLabel.includes('map')
+          || linkLabel.includes('direction')
+          || linkLabel.includes('location')
+        ) return 'directions';
+      }
       if (body.includes('direction') || body.includes('get directions') || body.includes('city map') || body.includes('current location')) return 'directions';
       if (body.includes('dining') || body.includes('restaurant') || body.includes('food') || body.includes('eat') || body.includes('mangaon') || body.includes('kaon')) return 'dining';
       if (body.includes('tourist spot') || body.includes('tourism place') || body.includes('landmark') || body.includes('places you can visit')) return 'tourism_places';
@@ -1264,6 +1376,7 @@
       if (responseType.includes('tour_booking_status')) return 'Tour Booking Status';
       if (responseType.includes('tour')) return 'Tour Package Recommendations';
       if (responseType.includes('room')) return 'Available Rooms';
+      if (responseType.includes('navigation_guidance')) return 'System Navigation';
       if (responseType.includes('accommodation_cost_preview') || responseType.includes('booking_preview')) return 'Accommodation Cost Preview';
       if (responseType.includes('accommodation') || responseType.includes('hotel')) return 'Accommodation Recommendations';
       if (responseType.includes('dining') || responseType.includes('food')) return 'Dining Places';
@@ -1358,6 +1471,10 @@
             btn.type = 'button';
             btn.className = `guest-chat-card-btn${a.primary ? ' primary' : ''}`;
             btn.textContent = a.label;
+            if (a.action === 'none' || (a.action === 'open' && !a.url) || (a.action === 'chat' && !a.value)) {
+              btn.disabled = true;
+              btn.setAttribute('aria-disabled', 'true');
+            }
             btn.addEventListener('click', function () {
               if (a.action === 'open' && a.url) {
                 const label = String(a.label || '').toLowerCase();
@@ -1529,7 +1646,11 @@
               ? 'Here are available tour schedules.'
               : (firstKind === 'tour'
                 ? 'I found these available tour packages you can check.'
-                : 'I found approved accommodations that match your request.'))
+                : ((firstKind === 'dining')
+                  ? 'Here are dining places you can explore.'
+                  : ((firstKind === 'tourism_place' || firstKind === 'map_place')
+                    ? 'Here are tourism places you can explore.'
+                    : 'I found approved accommodations that match your request.'))))
           appendMessage(intro, 'bot');
         } else {
           const shouldUseTitledMessage = responseHeading

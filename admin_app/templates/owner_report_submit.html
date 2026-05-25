@@ -31,11 +31,11 @@
     }
 
     .history-card {
-      order: 1;
+      order: 2;
     }
 
     .form-card {
-      order: 2;
+      order: 1;
     }
 
     .owner-form-toggle {
@@ -282,6 +282,188 @@
     .owner-report-table tbody tr:hover td {
       background: #fcfdff;
     }
+    .owner-report-history-list {
+      display: grid;
+      gap: 10px;
+    }
+    .owner-report-history-summary {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+    .owner-report-history-summary-card {
+      border: 1px solid #d9e5f7;
+      border-radius: 10px;
+      background: linear-gradient(180deg, #ffffff 0%, #f6faff 100%);
+      padding: 10px;
+    }
+    .owner-report-history-summary-label {
+      font-size: 0.72rem;
+      font-weight: 700;
+      color: #4f6382;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+    }
+    .owner-report-history-summary-value {
+      margin-top: 3px;
+      font-size: 1.18rem;
+      font-weight: 800;
+      color: #153b67;
+      line-height: 1.1;
+    }
+    .owner-report-history-toolbar {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      align-items: flex-end;
+      margin-bottom: 12px;
+    }
+    .owner-report-history-filter {
+      display: grid;
+      gap: 5px;
+      min-width: min(210px, 100%);
+      flex: 1 1 190px;
+    }
+    .owner-report-history-filter label {
+      font-size: 0.78rem;
+      font-weight: 700;
+      color: #334155;
+      letter-spacing: 0.01em;
+    }
+    .owner-report-history-filter select {
+      width: 100%;
+      min-height: 38px;
+      border: 1px solid #cfd8e6;
+      border-radius: 9px;
+      padding: 8px 10px;
+      font-size: 0.88rem;
+      color: #0f172a;
+      background: #fff;
+    }
+    .owner-report-history-actions {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+    .owner-report-history-link {
+      text-decoration: none;
+      border: 1px solid #d4deed;
+      border-radius: 8px;
+      padding: 8px 10px;
+      color: #1e3a8a;
+      background: #f8fbff;
+      font-weight: 700;
+      font-size: 0.82rem;
+    }
+    .owner-report-history-item {
+      border: 1px solid #dfe8f6;
+      border-radius: 12px;
+      background: #fff;
+      padding: 12px;
+      display: grid;
+      gap: 10px;
+    }
+    .owner-report-history-item details > summary {
+      cursor: pointer;
+      list-style: none;
+      font-weight: 800;
+      font-size: 0.95rem;
+      color: #163a63;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+    }
+    .owner-report-history-item details > summary::-webkit-details-marker {
+      display: none;
+    }
+    .owner-report-history-summary-left {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .owner-report-history-summary-right {
+      font-size: 0.8rem;
+      color: #4a5f7b;
+      font-weight: 700;
+    }
+    .owner-report-history-item details > summary::after {
+      content: "+";
+      font-size: 1rem;
+      color: #1a67d2;
+      font-weight: 900;
+    }
+    .owner-report-history-item details[open] > summary::after {
+      content: "-";
+    }
+    .owner-report-history-detail {
+      margin-top: 10px;
+      display: grid;
+      gap: 10px;
+    }
+    .owner-report-history-top {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 8px 12px;
+      font-size: 0.86rem;
+    }
+    .owner-report-history-top strong {
+      color: #0f172a;
+    }
+    .owner-report-history-kpis {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 8px;
+    }
+    .owner-report-history-kpi {
+      border: 1px solid #d8e5f8;
+      border-radius: 10px;
+      background: #f8fbff;
+      padding: 8px 10px;
+    }
+    .owner-report-history-kpi .k-label {
+      font-size: 0.72rem;
+      color: #4a5f7b;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.02em;
+    }
+    .owner-report-history-kpi .k-value {
+      margin-top: 2px;
+      font-size: 1rem;
+      font-weight: 800;
+      color: #1d3e68;
+    }
+    .owner-report-history-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+    }
+    .owner-report-history-box {
+      border: 1px solid #e1e9f6;
+      border-radius: 10px;
+      padding: 9px 10px;
+      background: #f8fbff;
+    }
+    .owner-report-history-box h4 {
+      margin: 0 0 6px;
+      font-size: 0.8rem;
+      font-weight: 800;
+      color: #334155;
+      text-transform: uppercase;
+      letter-spacing: 0.01em;
+    }
+    .owner-report-history-box p {
+      margin: 0;
+      font-size: 0.86rem;
+      line-height: 1.45;
+      color: #0f172a;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
 
     .owner-report-badge {
       display: inline-block;
@@ -348,12 +530,22 @@
       .owner-form-grid {
         grid-template-columns: repeat(2, minmax(0, 1fr));
       }
+      .owner-report-history-top {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+      .owner-report-history-grid {
+        grid-template-columns: 1fr;
+      }
     }
 
     @media (max-width: 768px) {
       .content {
         margin-left: 0;
         padding: 14px;
+      }
+
+      .owner-report-content {
+        gap: 12px;
       }
 
       .owner-report-card {
@@ -372,6 +564,68 @@
 
       .owner-report-btn {
         width: 100%;
+      }
+
+      .owner-form-toggle {
+        align-items: stretch;
+      }
+
+      .owner-form-toggle p {
+        font-size: 0.84rem;
+        line-height: 1.42;
+      }
+
+      .owner-report-history-item details > summary {
+        font-size: 0.9rem;
+        align-items: flex-start;
+      }
+
+      .owner-report-history-summary-right {
+        font-size: 0.75rem;
+        margin-top: 2px;
+      }
+
+      .owner-report-history-box p {
+        font-size: 0.82rem;
+      }
+
+      .owner-pagination {
+        justify-content: flex-start;
+      }
+      .owner-report-history-summary {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+      .owner-report-history-kpis {
+        grid-template-columns: 1fr;
+      }
+      .owner-report-history-top {
+        grid-template-columns: 1fr;
+      }
+      .owner-report-history-filter,
+      .owner-report-history-actions {
+        width: 100%;
+      }
+    }
+
+    @media (max-width: 480px) {
+      .owner-report-card {
+        padding: 12px;
+      }
+
+      .owner-report-title {
+        font-size: 1.12rem;
+      }
+
+      .owner-report-history-toolbar {
+        gap: 8px;
+      }
+
+      .owner-report-history-link {
+        width: 100%;
+        text-align: center;
+      }
+      .owner-report-history-summary {
+        grid-template-columns: 1fr;
       }
     }
   </style>
@@ -405,6 +659,8 @@
       <div class="owner-form-body" id="ownerReportFormBody">
       <form method="post">
         {% csrf_token %}
+        <input type="hidden" id="room_usage_notes_manual" name="room_usage_notes_manual" value="0">
+        <input type="hidden" id="nationality_breakdown_manual" name="nationality_breakdown_manual" value="0">
         <div class="owner-form-grid">
           <div class="field">
             <label for="accommodation_id">Accommodation</label>
@@ -542,6 +798,9 @@
           <div class="field field-wide">
             <label for="nationality_breakdown">Nationality Breakdown</label>
             <textarea id="nationality_breakdown" name="nationality_breakdown" placeholder="Example: Filipino 120, Foreign 24 (JP 8, KR 6, US 10)."></textarea>
+            <div style="margin-top:6px;">
+              <button class="owner-report-btn secondary" type="button" id="autofillNationalityBreakdown">Auto-fill Draft</button>
+            </div>
           </div>
 
           <div class="field field-full">
@@ -560,78 +819,110 @@
 
     <section class="owner-report-card history-card">
       <h2 class="owner-report-title">My Submitted Reports</h2>
-      <div class="owner-report-table-wrap">
-        <table class="owner-report-table">
-          <thead>
-            <tr>
-              <th>Period</th>
-              <th>Accommodation</th>
-              <th>Status</th>
-              <th>Check-ins</th>
-              <th>Check-outs</th>
-              <th>Rooms Used</th>
-              <th>Room-level</th>
-              <th>Room Usage Detail</th>
-              <th>Admin Review Notes</th>
-              <th>Reviewed By</th>
-              <th>Updated</th>
-            </tr>
-          </thead>
-          <tbody>
-            {% for row in report_rows %}
-            <tr>
-              <td>{{ row.reporting_period|date:"M Y" }}</td>
-              <td>{{ row.accommodation.company_name }}</td>
-              <td><span class="owner-report-badge {{ row.status }}">{{ row.status|title }}</span></td>
-              <td>{{ row.guests_checked_in }}</td>
-              <td>{{ row.guests_checked_out }}</td>
-              <td>{{ row.rooms_used }}</td>
-              <td>
-                {% if row.room_usage_rows.all %}
-                  Detailed
-                {% else %}
-                  Total-only (legacy)
-                {% endif %}
-              </td>
-              <td>
-                {% if row.room_usage_rows.all %}
-                  {% regroup row.room_usage_rows.all by room_name_snapshot as usage_groups %}
-                  {% for group in usage_groups %}
-                    <strong>{{ group.grouper }}</strong> (Total rooms: {{ group.list.0.total_rooms_snapshot|default:1 }})<br>
-                    {% for usage in group.list %}
-                      - Room {{ usage.selected_room_identifier|default:"Not specified" }}: {{ usage.check_ins }} in / {{ usage.check_outs }} out<br>
-                    {% endfor %}
-                  {% endfor %}
-                {% else %}
-                  -
-                {% endif %}
-              </td>
-              <td>{{ row.review_notes|default:"-" }}</td>
-              <td>
-                {% if row.reviewed_by %}
-                  {{ row.reviewed_by.first_name }} {{ row.reviewed_by.last_name }}
-                {% else %}
-                  -
-                {% endif %}
-              </td>
-              <td>{{ row.updated_at|date:"M d, Y" }}</td>
-            </tr>
-            {% empty %}
-            <tr>
-              <td colspan="11" class="owner-report-empty">No reports submitted yet.</td>
-            </tr>
+      <div class="owner-report-history-summary">
+        <div class="owner-report-history-summary-card">
+          <div class="owner-report-history-summary-label">Reports in View</div>
+          <div class="owner-report-history-summary-value">{{ owner_summary.total_reports|default:0 }}</div>
+        </div>
+        <div class="owner-report-history-summary-card">
+          <div class="owner-report-history-summary-label">Total Check-ins</div>
+          <div class="owner-report-history-summary-value">{{ owner_summary.total_checkins|default:0 }}</div>
+        </div>
+        <div class="owner-report-history-summary-card">
+          <div class="owner-report-history-summary-label">Total Check-outs</div>
+          <div class="owner-report-history-summary-value">{{ owner_summary.total_checkouts|default:0 }}</div>
+        </div>
+        <div class="owner-report-history-summary-card">
+          <div class="owner-report-history-summary-label">Rooms Used</div>
+          <div class="owner-report-history-summary-value">{{ owner_summary.total_rooms_used|default:0 }}</div>
+        </div>
+      </div>
+      <form method="get" class="owner-report-history-toolbar">
+        <div class="owner-report-history-filter">
+          <label for="report_status">Status</label>
+          <select id="report_status" name="report_status">
+            <option value="">All statuses</option>
+            <option value="submitted" {% if selected_report_status == 'submitted' %}selected{% endif %}>Submitted</option>
+            <option value="reviewed" {% if selected_report_status == 'reviewed' %}selected{% endif %}>Reviewed</option>
+            <option value="returned" {% if selected_report_status == 'returned' %}selected{% endif %}>Returned</option>
+            <option value="draft" {% if selected_report_status == 'draft' %}selected{% endif %}>Draft</option>
+          </select>
+        </div>
+        <div class="owner-report-history-filter">
+          <label for="report_period">Period</label>
+          <select id="report_period" name="report_period">
+            <option value="">All periods</option>
+            {% for period_item in period_choices %}
+            <option value="{{ period_item|date:'Y-m' }}" {% if selected_period == period_item|date:'Y-m' %}selected{% endif %}>
+              {{ period_item|date:"M Y" }}
+            </option>
             {% endfor %}
-          </tbody>
-        </table>
+          </select>
+        </div>
+        <div class="owner-report-history-filter">
+          <label for="room_level">Room-level</label>
+          <select id="room_level" name="room_level">
+            <option value="">All room-level types</option>
+            <option value="detailed" {% if selected_room_level == 'detailed' %}selected{% endif %}>Detailed</option>
+            <option value="legacy" {% if selected_room_level == 'legacy' %}selected{% endif %}>Total-only (legacy)</option>
+          </select>
+        </div>
+        <div class="owner-report-history-actions">
+          <button class="owner-report-btn secondary" type="submit">Apply Filters</button>
+          <a class="owner-report-history-link" href="{% url 'admin_app:owner_report_submit' %}">Reset</a>
+        </div>
+      </form>
+      <div class="owner-report-history-list">
+        {% for row in report_rows %}
+        <article class="owner-report-history-item">
+          <details {% if forloop.first %}open{% endif %}>
+            <summary>
+              <span class="owner-report-history-summary-left">
+                {{ row.reporting_period|date:"M Y" }} - {{ row.accommodation.company_name }}
+                <span class="owner-report-badge {{ row.status }}">{{ row.status|title }}</span>
+              </span>
+              <span class="owner-report-history-summary-right">{% if row.room_usage_rows.all %}Detailed{% else %}Total-only (legacy){% endif %}</span>
+            </summary>
+            <div class="owner-report-history-detail">
+              <div class="owner-report-history-top">
+                <div><strong>Period:</strong> {{ row.reporting_period|date:"M Y" }}</div>
+                <div><strong>Accommodation:</strong> {{ row.accommodation.company_name }}</div>
+                <div><strong>Reviewed By:</strong> {% if row.reviewed_by %}{{ row.reviewed_by.first_name }} {{ row.reviewed_by.last_name }}{% else %}-{% endif %}</div>
+                <div><strong>Updated:</strong> {{ row.updated_at|date:"M d, Y" }}</div>
+              </div>
+              <div class="owner-report-history-kpis">
+                <div class="owner-report-history-kpi"><div class="k-label">Check-ins</div><div class="k-value">{{ row.guests_checked_in }}</div></div>
+                <div class="owner-report-history-kpi"><div class="k-label">Check-outs</div><div class="k-value">{{ row.guests_checked_out }}</div></div>
+                <div class="owner-report-history-kpi"><div class="k-label">Rooms Used</div><div class="k-value">{{ row.rooms_used }}</div></div>
+              </div>
+              <div class="owner-report-history-grid">
+                <div class="owner-report-history-box">
+                  <h4>Room Usage Detail</h4>
+                  <p>{% if row.room_usage_rows.all %}{% regroup row.room_usage_rows.all by room_name_snapshot as usage_groups %}{% for group in usage_groups %}{{ group.grouper }} (Total rooms: {{ group.list.0.total_rooms_snapshot|default:1 }})
+{% for usage in group.list %}- Room {{ usage.selected_room_identifier|default:"Not specified" }}: {{ usage.check_ins }} in / {{ usage.check_outs }} out
+{% endfor %}{% if not forloop.last %}
+{% endif %}{% endfor %}{% else %}-{% endif %}</p>
+                </div>
+                <div class="owner-report-history-box">
+                  <h4>Admin Review Notes</h4>
+                  <p>{{ row.review_notes|default:"-" }}</p>
+                </div>
+              </div>
+            </div>
+          </details>
+        </article>
+        {% empty %}
+        <p class="owner-report-empty">No reports submitted yet.</p>
+        {% endfor %}
       </div>
       {% if report_rows.paginator.num_pages > 1 %}
       <div class="owner-pagination">
         <span>Page {{ report_rows.number }} of {{ report_rows.paginator.num_pages }}</span>
         {% if report_rows.has_previous %}
-        <a href="?page={{ report_rows.previous_page_number }}">Previous</a>
+        <a href="?{% if selected_report_status %}report_status={{ selected_report_status }}&{% endif %}{% if selected_period %}report_period={{ selected_period }}&{% endif %}{% if selected_room_level %}room_level={{ selected_room_level }}&{% endif %}page={{ report_rows.previous_page_number }}">Previous</a>
         {% endif %}
         {% if report_rows.has_next %}
-        <a href="?page={{ report_rows.next_page_number }}">Next</a>
+        <a href="?{% if selected_report_status %}report_status={{ selected_report_status }}&{% endif %}{% if selected_period %}report_period={{ selected_period }}&{% endif %}{% if selected_room_level %}room_level={{ selected_room_level }}&{% endif %}page={{ report_rows.next_page_number }}">Next</a>
         {% endif %}
       </div>
       {% endif %}
@@ -644,6 +935,14 @@
       const formBody = document.getElementById("ownerReportFormBody");
       const formToggle = document.getElementById("toggleOwnerReportForm");
       const accommodationSelect = document.getElementById("accommodation_id");
+      const guestsInInput = document.getElementById("guests_checked_in");
+      const guestsOutInput = document.getElementById("guests_checked_out");
+      const roomsUsedInput = document.getElementById("rooms_used");
+      const notesInput = document.getElementById("room_usage_notes");
+      const notesManualInput = document.getElementById("room_usage_notes_manual");
+      const nationalityInput = document.getElementById("nationality_breakdown");
+      const nationalityManualInput = document.getElementById("nationality_breakdown_manual");
+      const nationalityAutofillBtn = document.getElementById("autofillNationalityBreakdown");
       const groups = Array.from(document.querySelectorAll(".room-usage-group"));
       const emptyState = document.getElementById("room-usage-empty");
       if (formCard && formBody && formToggle) {
@@ -676,6 +975,108 @@
       }
       accommodationSelect.addEventListener("change", syncRoomGroup);
       syncRoomGroup();
+
+      function toNonNegativeInt(value) {
+        const num = parseInt(String(value || "").trim(), 10);
+        if (!Number.isFinite(num) || num < 0) return 0;
+        return num;
+      }
+
+      function buildAutoRoomUsageStatistics() {
+        const guestsIn = guestsInInput ? toNonNegativeInt(guestsInInput.value) : 0;
+        const guestsOut = guestsOutInput ? toNonNegativeInt(guestsOutInput.value) : 0;
+        let roomsUsed = roomsUsedInput ? toNonNegativeInt(roomsUsedInput.value) : 0;
+        const visibleGroups = groups.filter((group) => group.style.display !== "none");
+        const totalsByRoom = {};
+        let touchedRows = 0;
+        const seenRoomKeys = new Set();
+        visibleGroups.forEach((group) => {
+          group.querySelectorAll(".room-usage-type-card").forEach((card) => {
+            const roomName = String((card.querySelector("strong") && card.querySelector("strong").textContent) || "Room").trim() || "Room";
+            card.querySelectorAll(".room-usage-row").forEach((row) => {
+              const checkInEl = row.querySelector("input[name='room_usage_checkins']");
+              const checkOutEl = row.querySelector("input[name='room_usage_checkouts']");
+              const rowIn = toNonNegativeInt(checkInEl ? checkInEl.value : 0);
+              const rowOut = toNonNegativeInt(checkOutEl ? checkOutEl.value : 0);
+              const score = rowIn + rowOut;
+              if (score > 0) {
+                touchedRows += 1;
+                totalsByRoom[roomName] = (totalsByRoom[roomName] || 0) + score;
+                const idSelect = row.querySelector(".room-identifier-select");
+                const idManual = row.querySelector(".room-identifier-manual");
+                let rowIdentifier = idSelect ? String(idSelect.value || "").trim() : "";
+                if (rowIdentifier === "__manual__") {
+                  rowIdentifier = idManual ? String(idManual.value || "").trim() : "";
+                }
+                if (!rowIdentifier) rowIdentifier = "not-specified";
+                seenRoomKeys.add(`${roomName.toLowerCase()}::${rowIdentifier.toLowerCase()}`);
+              }
+            });
+          });
+        });
+        if (seenRoomKeys.size > 0) {
+          roomsUsed = seenRoomKeys.size;
+          if (roomsUsedInput) roomsUsedInput.value = String(roomsUsed);
+        }
+        let peakRoom = "";
+        let peakScore = -1;
+        Object.keys(totalsByRoom).forEach((roomName) => {
+          const score = toNonNegativeInt(totalsByRoom[roomName]);
+          if (score > peakScore) {
+            peakScore = score;
+            peakRoom = roomName;
+          }
+        });
+        const movement = guestsIn + guestsOut;
+        const balanceGap = Math.abs(guestsIn - guestsOut);
+        let trendText = "No room movement was reported for this period.";
+        if (movement > 0) {
+          if (balanceGap <= Math.max(2, Math.floor(movement * 0.1))) {
+            trendText = "Guest movement was balanced between check-ins and check-outs.";
+          } else if (guestsIn > guestsOut) {
+            trendText = "Check-ins were higher than check-outs, indicating increasing occupancy.";
+          } else {
+            trendText = "Check-outs were higher than check-ins, indicating turnover or reduced occupancy.";
+          }
+        }
+        const lines = [
+          `Total guest movement: ${movement} (${guestsIn} check-ins, ${guestsOut} check-outs).`,
+          `Rooms used/occupied: ${roomsUsed}.`,
+          trendText,
+        ];
+        if (peakRoom && peakScore > 0) {
+          lines.push(`Most active room type: ${peakRoom} (${peakScore} total movements).`);
+        }
+        if (touchedRows > 0) {
+          lines.push(`Room-level rows with activity: ${touchedRows}.`);
+        }
+        return lines.join(" ");
+      }
+
+      function refreshRoomUsageStatistics(force) {
+        if (!notesInput) return;
+        const isManual = notesManualInput && String(notesManualInput.value || "") === "1";
+        if (!force && isManual) return;
+        notesInput.value = buildAutoRoomUsageStatistics();
+        if (notesManualInput) notesManualInput.value = "0";
+      }
+
+      function buildAutoNationalityBreakdown() {
+        const guestsIn = guestsInInput ? toNonNegativeInt(guestsInInput.value) : 0;
+        const guestsOut = guestsOutInput ? toNonNegativeInt(guestsOutInput.value) : 0;
+        if (guestsIn <= 0 && guestsOut <= 0) {
+          return "No guest movement was reported for this period. If there were guest stays, please encode the verified nationality totals.";
+        }
+        return `Auto draft based on current totals: ${guestsIn} check-ins, ${guestsOut} check-outs. Please confirm and update with verified counts: Filipino ${guestsIn}, Foreign 0 (e.g., JP 0, KR 0, US 0).`;
+      }
+
+      function refreshNationalityBreakdown(force) {
+        if (!nationalityInput) return;
+        const isManual = nationalityManualInput && String(nationalityManualInput.value || "") === "1";
+        if (!force && isManual) return;
+        nationalityInput.value = buildAutoNationalityBreakdown();
+        if (nationalityManualInput) nationalityManualInput.value = "0";
+      }
 
       function bindIdentifierToggle(row) {
         const select = row.querySelector(".room-identifier-select");
@@ -718,10 +1119,20 @@
           <td><button type="button" class="owner-report-btn secondary room-usage-remove-row">Remove</button></td>
         `;
         bindIdentifierToggle(tr);
+        tr.querySelectorAll("input[name='room_usage_checkins'], input[name='room_usage_checkouts'], .room-identifier-manual, .room-identifier-select").forEach((el) => {
+          el.addEventListener("input", () => refreshRoomUsageStatistics(false));
+          el.addEventListener("change", () => refreshRoomUsageStatistics(false));
+        });
         return tr;
       }
 
-      document.querySelectorAll(".room-usage-row").forEach(bindIdentifierToggle);
+      document.querySelectorAll(".room-usage-row").forEach((row) => {
+        bindIdentifierToggle(row);
+        row.querySelectorAll("input[name='room_usage_checkins'], input[name='room_usage_checkouts'], .room-identifier-manual, .room-identifier-select").forEach((el) => {
+          el.addEventListener("input", () => refreshRoomUsageStatistics(false));
+          el.addEventListener("change", () => refreshRoomUsageStatistics(false));
+        });
+      });
       document.querySelectorAll(".room-usage-type-card").forEach((card) => {
         const rowsWrap = card.querySelector(".room-usage-rows");
         const addBtn = card.querySelector(".room-usage-add-row");
@@ -733,6 +1144,7 @@
           : [];
         addBtn.addEventListener("click", () => {
           rowsWrap.appendChild(buildUsageRow(roomId, knownIds));
+          refreshRoomUsageStatistics(false);
         });
         rowsWrap.addEventListener("click", (event) => {
           const target = event.target;
@@ -749,12 +1161,39 @@
             if (select && manual) {
               manual.classList.toggle("is-hidden", String(select.value || "") !== "__manual__");
             }
+            refreshRoomUsageStatistics(false);
             return;
           }
           const row = target.closest(".room-usage-row");
           if (row) row.remove();
+          refreshRoomUsageStatistics(false);
         });
       });
+
+      if (notesInput && notesManualInput) {
+        notesInput.addEventListener("input", () => {
+          notesManualInput.value = "1";
+        });
+      }
+      if (nationalityInput && nationalityManualInput) {
+        nationalityInput.addEventListener("input", () => {
+          nationalityManualInput.value = "1";
+        });
+      }
+      [guestsInInput, guestsOutInput, roomsUsedInput, accommodationSelect].forEach((el) => {
+        if (!el) return;
+        el.addEventListener("input", () => refreshRoomUsageStatistics(false));
+        el.addEventListener("change", () => refreshRoomUsageStatistics(false));
+        el.addEventListener("input", () => refreshNationalityBreakdown(false));
+        el.addEventListener("change", () => refreshNationalityBreakdown(false));
+      });
+      if (nationalityAutofillBtn) {
+        nationalityAutofillBtn.addEventListener("click", () => {
+          refreshNationalityBreakdown(true);
+        });
+      }
+      refreshRoomUsageStatistics(false);
+      refreshNationalityBreakdown(false);
     })();
   </script>
 </body>

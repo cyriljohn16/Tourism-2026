@@ -1333,6 +1333,10 @@ def recommend_tours(params: dict, limit: int = 3) -> List[RecommendationResult]:
 
 
 def recommend_accommodations(params: dict, limit: int = 3) -> List[RecommendationResult]:
+    # Keep public utility behavior room-level (no accommodation collapsing) so
+    # range filters can surface all matching rooms.
+    params = dict(params or {})
+    params.setdefault("collapse_by_accommodation", False)
     results, _diagnostics = recommend_accommodations_with_diagnostics(params, limit=limit)
     return results
 
@@ -1412,7 +1416,9 @@ def _build_accommodation_room_queryset(
 
 
 def _build_accommodation_results(room_qs, *, guests: int, params: dict) -> List[RecommendationResult]:
+    collapse_by_accommodation = _to_bool((params or {}).get("collapse_by_accommodation"), default=True)
     best_by_accom: dict[int, RecommendationResult] = {}
+    room_level_results: List[RecommendationResult] = []
     predicted_type = str(params.get("predicted_accommodation_type") or "").strip().lower()
     cnn_confidence = float(max(0.0, min(1.0, float(params.get("predicted_accommodation_confidence") or 0.0))))
 
@@ -1479,6 +1485,10 @@ def _build_accommodation_results(room_qs, *, guests: int, params: dict) -> List[
                 "scoring_mode": scoring_mode,
             },
         )
+        if not collapse_by_accommodation:
+            room_level_results.append(candidate)
+            continue
+
         accom_id = _to_int(getattr(accom, "accom_id", 0), default=0)
         existing = best_by_accom.get(accom_id)
         if existing is None:
@@ -1491,7 +1501,7 @@ def _build_accommodation_results(room_qs, *, guests: int, params: dict) -> List[
         elif abs(candidate.score - existing.score) <= 1e-9 and candidate_price < existing_price:
             best_by_accom[accom_id] = candidate
 
-    results = list(best_by_accom.values())
+    results = room_level_results if not collapse_by_accommodation else list(best_by_accom.values())
     results.sort(
         key=lambda item: (
             -item.score,

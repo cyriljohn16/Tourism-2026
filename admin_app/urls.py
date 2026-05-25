@@ -58,6 +58,7 @@ urlpatterns = [
     path('accommodation/create/', views.create_accommodation, name='create_accommodation'),
     path('accommodation/update/<int:pk>/', views.accommodation_update, name='accommodation_update'),
     path('accommodation/pending/', views.pending_accommodation, name='pending_accommodation'),
+    path('accommodation/reviews/', views.accommodation_reviews_moderation, name='accommodation_reviews_moderation'),
     path('accommodation/owners/pending/', views.pending_accommodation_owners, name='pending_accommodation_owners'),
     path('accommodation/owners/<str:user_id>/update/', views.accommodation_owner_update, name='accommodation_owner_update'),
     path('accommodation/bookings/', views.accommodation_bookings, name='accommodation_bookings'),

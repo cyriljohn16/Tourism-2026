@@ -140,7 +140,7 @@
       width: 100%;
       height: 100%;
       background: rgba(0,0,0,0.5);
-      z-index: 50;
+      z-index: 3000;
     }
     #bookingModal, #payablesModal, #itineraryModal, #confirmationDialog, #authModal {
       display: none;
@@ -151,7 +151,7 @@
       background: #fff;
       padding: 30px;
       border-radius: 8px;
-      z-index: 100;
+      z-index: 3010;
       box-shadow: 0 2px 8px rgba(0,0,0,0.2);
       max-width: 400px;
       width: 90%;
@@ -181,7 +181,7 @@
       font-weight: 700;
       color: #fff;
       background: #dc3545;
-      z-index: 30;
+      z-index: 3020;
       cursor: pointer;
       touch-action: manipulation;
       user-select: none;
@@ -372,7 +372,7 @@
       background-color: #d4edda;
       color: #155724;
       border: 1px solid #c3e6cb;
-      margin-top: 20px;
+      margin: 14px 0 18px;
       border-radius: 4px;
     }
     #slotWarning, #captchaError {
@@ -758,6 +758,9 @@
       <p id="tour-description">{{ tour.description }}</p>
     </div>
 
+    <!-- Booking Status / Notification (moved near top for visibility) -->
+    <div class="confirm-message" id="confirmMessage"></div>
+
     <!-- Schedule Listings -->
     {% for schedule in schedules %}
       <div class="schedule" data-schedule-id="{{ schedule.sched_id }}">
@@ -803,8 +806,6 @@
     </a>
     <button type="button" class="back-button" id="shareTourBtn">Share This Tour</button>
 
-    <!-- Confirmation Message -->
-    <div class="confirm-message" id="confirmMessage"></div>
   </div>
 
   <!-- Modal Overlay -->
@@ -1602,8 +1603,12 @@
             "padding": "15px",
             "margin-top": "20px",
             "text-align": "center",
-            "font-size": "16px"
+              "font-size": "16px"
           });
+        const confirmMessageEl = document.getElementById("confirmMessage");
+        if (confirmMessageEl) {
+          confirmMessageEl.scrollIntoView({ behavior: "smooth", block: "center" });
+        }
         
         // Get the reCAPTCHA response
         var captchaResponse = "";
@@ -1657,6 +1662,10 @@
                 "text-align": "center",
                 "font-size": "16px"
               });
+            const confirmMessageEl = document.getElementById("confirmMessage");
+            if (confirmMessageEl) {
+              confirmMessageEl.scrollIntoView({ behavior: "smooth", block: "center" });
+            }
             
             // Keep the handoff visible before reload.
             setTimeout(function() {
@@ -1680,6 +1689,10 @@
                 "text-align": "center",
                 "font-size": "16px"
               });
+            const confirmMessageEl = document.getElementById("confirmMessage");
+            if (confirmMessageEl) {
+              confirmMessageEl.scrollIntoView({ behavior: "smooth", block: "center" });
+            }
             
             // Re-enable confirmation dialog buttons
             $("#yesButton").prop('disabled', false).text('Yes, Book Now');

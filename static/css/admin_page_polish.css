@@ -1,6 +1,7 @@
 /* Final polish layer for large admin pages (safe visual overrides) */
 
 :root {
+  --ui-font-sans: "Poppins", "Segoe UI", Tahoma, Arial, sans-serif;
   --ui-bg: #f4f6fb;
   --ui-card: #ffffff;
   --ui-ink: #1f2937;
@@ -13,11 +14,32 @@
   --ui-radius: 14px;
 }
 
+@import url("https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800&display=swap");
+
 body.admin-dashboard-page,
 body.employee-dashboard-page,
 body.admin-map-page {
+  font-family: var(--ui-font-sans);
   background: radial-gradient(circle at top right, #efe7dc 0%, #f6f8fc 42%, #f3f5fa 100%);
   color: var(--ui-ink);
+}
+
+body.admin-dashboard-page :where(
+  h1, h2, h3, h4, h5, h6,
+  p, span, a, li, label, small, strong, em,
+  button, input, select, textarea, th, td
+),
+body.employee-dashboard-page :where(
+  h1, h2, h3, h4, h5, h6,
+  p, span, a, li, label, small, strong, em,
+  button, input, select, textarea, th, td
+),
+body.admin-map-page :where(
+  h1, h2, h3, h4, h5, h6,
+  p, span, a, li, label, small, strong, em,
+  button, input, select, textarea, th, td
+) {
+  font-family: var(--ui-font-sans);
 }
 
 /* Admin dashboard */
@@ -140,5 +162,19 @@ body.admin-map-page :where(a, button, input, select, textarea):focus-visible {
   body.employee-dashboard-page .content :where(.btn, button, a.btn) {
     max-width: 100%;
     white-space: normal;
+  }
+}
+
+/* Cross-page admin/owner mobile shell cleanup */
+@media (max-width: 768px) {
+  .dashboard-container {
+    display: block;
+  }
+
+  .content {
+    margin-left: 0 !important;
+    width: 100%;
+    max-width: 100%;
+    padding: 12px !important;
   }
 }

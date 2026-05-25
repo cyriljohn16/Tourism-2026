@@ -71,6 +71,25 @@
       padding: 14px;
       margin-bottom: 12px;
       background: #fff;
+      box-shadow: 0 6px 16px rgba(15, 23, 42, 0.04);
+    }
+
+    .owner-review-item-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      margin-bottom: 10px;
+      padding-bottom: 8px;
+      border-bottom: 1px dashed #dde6f5;
+    }
+
+    .owner-review-item-title {
+      margin: 0;
+      font-size: 0.9rem;
+      font-weight: 800;
+      color: #223a5a;
+      letter-spacing: 0.01em;
     }
 
     .owner-review-toolbar {
@@ -80,6 +99,32 @@
       align-items: flex-end;
       justify-content: space-between;
       margin-bottom: 12px;
+    }
+    .owner-review-summary {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 8px;
+      margin: 4px 0 14px;
+    }
+    .owner-review-summary-card {
+      border: 1px solid #d9e5f7;
+      border-radius: 10px;
+      background: linear-gradient(180deg, #ffffff 0%, #f6faff 100%);
+      padding: 10px;
+    }
+    .owner-review-summary-label {
+      font-size: 0.73rem;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+      color: #4f6382;
+      font-weight: 700;
+    }
+    .owner-review-summary-value {
+      margin-top: 3px;
+      font-size: 1.2rem;
+      font-weight: 800;
+      color: #143a66;
+      line-height: 1.1;
     }
 
     .owner-review-filter {
@@ -169,10 +214,35 @@
 
     .owner-review-meta {
       display: grid;
-      grid-template-columns: repeat(4, minmax(0, 1fr));
+      grid-template-columns: repeat(3, minmax(0, 1fr));
       gap: 8px 12px;
       margin-bottom: 10px;
       font-size: 0.88rem;
+    }
+    .owner-review-kpis {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 8px;
+      margin: 6px 0 12px;
+    }
+    .owner-review-kpi {
+      border: 1px solid #d7e3f7;
+      border-radius: 10px;
+      background: linear-gradient(180deg, rgba(255,255,255,0.96), rgba(244,249,255,0.94));
+      padding: 8px 10px;
+    }
+    .owner-review-kpi-label {
+      font-size: 0.72rem;
+      font-weight: 700;
+      color: #4a5f7b;
+      text-transform: uppercase;
+      letter-spacing: 0.02em;
+    }
+    .owner-review-kpi-value {
+      font-size: 1.05rem;
+      font-weight: 800;
+      color: #1d3e68;
+      margin-top: 2px;
     }
 
     .owner-review-meta strong {
@@ -239,6 +309,47 @@
       white-space: pre-wrap;
       word-break: break-word;
     }
+    .owner-review-room-usage-list {
+      margin: 0;
+      padding: 0;
+      display: grid;
+      gap: 8px;
+    }
+    .owner-review-room-usage-list details {
+      border: 1px solid #dbe6f8;
+      border-radius: 9px;
+      background: #fff;
+      padding: 7px 9px;
+    }
+    .owner-review-room-usage-list summary {
+      cursor: pointer;
+      font-size: 0.82rem;
+      font-weight: 800;
+      color: #1f3556;
+      list-style: none;
+    }
+    .owner-review-room-usage-list summary::-webkit-details-marker {
+      display: none;
+    }
+    .owner-review-room-usage-list summary::before {
+      content: "+ ";
+      color: #1a67d2;
+      font-weight: 900;
+    }
+    .owner-review-room-usage-list details[open] summary::before {
+      content: "- ";
+    }
+    .owner-review-room-usage-lines {
+      margin: 8px 0 0;
+      padding-left: 16px;
+      display: grid;
+      gap: 4px;
+    }
+    .owner-review-room-usage-lines li {
+      font-size: 0.82rem;
+      color: #2b3f58;
+      line-height: 1.35;
+    }
 
     .owner-review-form textarea {
       width: 100%;
@@ -264,6 +375,10 @@
       display: flex;
       gap: 10px;
       flex-wrap: wrap;
+      position: sticky;
+      bottom: 0;
+      background: linear-gradient(180deg, rgba(255,255,255,0), #fff 28%);
+      padding-top: 10px;
     }
 
     .owner-review-btn {
@@ -326,15 +441,24 @@
     }
 
     @media (max-width: 900px) {
+      .owner-review-summary {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
       .owner-review-meta {
         grid-template-columns: repeat(2, minmax(0, 1fr));
       }
       .owner-review-notes {
         grid-template-columns: 1fr;
       }
+      .owner-review-kpis {
+        grid-template-columns: 1fr;
+      }
     }
 
     @media (max-width: 768px) {
+      .owner-review-summary {
+        grid-template-columns: 1fr;
+      }
       .content {
         margin-left: 0;
         padding: 14px;
@@ -386,10 +510,37 @@
               </option>
             {% endfor %}
           </select>
+          <label for="report_period">Filter by period</label>
+          <select id="report_period" name="report_period" onchange="this.form.submit()">
+            <option value="">All periods</option>
+            {% for period_item in period_choices %}
+              <option value="{{ period_item|date:'Y-m' }}" {% if selected_period == period_item|date:'Y-m' %}selected{% endif %}>
+                {{ period_item|date:"M Y" }}
+              </option>
+            {% endfor %}
+          </select>
         </form>
         <div class="owner-review-toolbar-actions">
           <a class="owner-review-link-btn" href="{% url 'admin_app:owner_reports_review' %}">Reset Filter</a>
-          <a class="owner-review-link-btn primary" href="{% url 'admin_app:owner_reports_review' %}?{% if selected_accommodation_id %}accommodation_id={{ selected_accommodation_id }}&{% endif %}export=csv">Download CSV</a>
+          <a class="owner-review-link-btn primary" href="{% url 'admin_app:owner_reports_review' %}?{% if selected_accommodation_id %}accommodation_id={{ selected_accommodation_id }}&{% endif %}{% if selected_period %}report_period={{ selected_period }}&{% endif %}export=csv">Download CSV</a>
+        </div>
+      </div>
+      <div class="owner-review-summary">
+        <div class="owner-review-summary-card">
+          <div class="owner-review-summary-label">Reports in View</div>
+          <div class="owner-review-summary-value">{{ review_summary.total_reports|default:0 }}</div>
+        </div>
+        <div class="owner-review-summary-card">
+          <div class="owner-review-summary-label">Total Check-ins</div>
+          <div class="owner-review-summary-value">{{ review_summary.total_checkins|default:0 }}</div>
+        </div>
+        <div class="owner-review-summary-card">
+          <div class="owner-review-summary-label">Total Check-outs</div>
+          <div class="owner-review-summary-value">{{ review_summary.total_checkouts|default:0 }}</div>
+        </div>
+        <div class="owner-review-summary-card">
+          <div class="owner-review-summary-label">Rooms Used</div>
+          <div class="owner-review-summary-value">{{ review_summary.total_rooms_used|default:0 }}</div>
         </div>
       </div>
 
@@ -398,7 +549,7 @@
         {% for option in accommodation_choices %}
           <a
             class="owner-review-accommodation-pill {% if selected_accommodation_id == option.accommodation_id|stringformat:'s' %}active{% endif %}"
-            href="{% url 'admin_app:owner_reports_review' %}?accommodation_id={{ option.accommodation_id }}"
+            href="{% url 'admin_app:owner_reports_review' %}?accommodation_id={{ option.accommodation_id }}{% if selected_period %}&report_period={{ selected_period }}{% endif %}"
           >
             {{ option.accommodation__company_name }}<br>
             <small>{{ option.report_count }} report(s)</small>
@@ -413,16 +564,31 @@
 
       {% for row in report_rows %}
         <article class="owner-review-item">
+          <div class="owner-review-item-head">
+            <p class="owner-review-item-title">Submitted Report #{{ forloop.counter }}</p>
+            <span class="owner-review-badge {{ row.status }}">{{ row.status|title }}</span>
+          </div>
           <div class="owner-review-meta">
             <div><strong>Owner:</strong> {{ row.owner.username }}</div>
             <div><strong>Accommodation:</strong> {{ row.accommodation.company_name }}</div>
             <div><strong>Period:</strong> {{ row.reporting_period|date:"M Y" }}</div>
             <div><strong>Status:</strong> <span class="owner-review-badge {{ row.status }}">{{ row.status|title }}</span></div>
-            <div><strong>Check-ins:</strong> {{ row.guests_checked_in }}</div>
-            <div><strong>Check-outs:</strong> {{ row.guests_checked_out }}</div>
-            <div><strong>Rooms Used:</strong> {{ row.rooms_used }}</div>
             <div><strong>Room-level:</strong> {% if row.room_usage_rows.all %}Detailed{% else %}Total-only (legacy){% endif %}</div>
             <div><strong>Updated:</strong> {{ row.updated_at|date:"M d, Y" }}</div>
+          </div>
+          <div class="owner-review-kpis">
+            <div class="owner-review-kpi">
+              <div class="owner-review-kpi-label">Check-ins</div>
+              <div class="owner-review-kpi-value">{{ row.guests_checked_in }}</div>
+            </div>
+            <div class="owner-review-kpi">
+              <div class="owner-review-kpi-label">Check-outs</div>
+              <div class="owner-review-kpi-value">{{ row.guests_checked_out }}</div>
+            </div>
+            <div class="owner-review-kpi">
+              <div class="owner-review-kpi-label">Rooms Used</div>
+              <div class="owner-review-kpi-value">{{ row.rooms_used }}</div>
+            </div>
           </div>
 
           <div class="owner-review-notes">
@@ -440,20 +606,23 @@
             </div>
             <div class="owner-review-note-box">
               <h4>Room Usage by Type</h4>
-              <p>
+              <div class="owner-review-room-usage-list">
                 {% if row.room_usage_rows.all %}
                   {% regroup row.room_usage_rows.all by room_name_snapshot as usage_groups %}
                   {% for group in usage_groups %}
-                    {{ group.grouper }} (Total rooms: {{ group.list.0.total_rooms_snapshot|default:1 }}){% if not forloop.last %}&#10;{% endif %}
-                    {% for usage in group.list %}
-                      &#10;- Room {{ usage.selected_room_identifier|default:"Not specified" }}: {{ usage.check_ins }} in / {{ usage.check_outs }} out
-                    {% endfor %}
-                    {% if not forloop.last %}&#10;{% endif %}
+                    <details {% if forloop.first %}open{% endif %}>
+                      <summary>{{ group.grouper }} (Total rooms: {{ group.list.0.total_rooms_snapshot|default:1 }})</summary>
+                      <ul class="owner-review-room-usage-lines">
+                        {% for usage in group.list %}
+                          <li>Room {{ usage.selected_room_identifier|default:"Not specified" }}: {{ usage.check_ins }} in / {{ usage.check_outs }} out</li>
+                        {% endfor %}
+                      </ul>
+                    </details>
                   {% endfor %}
                 {% else %}
-                  Older report format: room-level details were not submitted. Only total rooms used is available.
+                  <p>Older report format: room-level details were not submitted. Only total rooms used is available.</p>
                 {% endif %}
-              </p>
+              </div>
             </div>
             <div class="owner-review-note-box">
               <h4>Current Review Notes</h4>
@@ -480,10 +649,10 @@
       <div class="owner-review-pagination">
         <span>Page {{ report_rows.number }} of {{ report_rows.paginator.num_pages }}</span>
         {% if report_rows.has_previous %}
-        <a href="?{% if selected_accommodation_id %}accommodation_id={{ selected_accommodation_id }}&{% endif %}page={{ report_rows.previous_page_number }}">Previous</a>
+        <a href="?{% if selected_accommodation_id %}accommodation_id={{ selected_accommodation_id }}&{% endif %}{% if selected_period %}report_period={{ selected_period }}&{% endif %}page={{ report_rows.previous_page_number }}">Previous</a>
         {% endif %}
         {% if report_rows.has_next %}
-        <a href="?{% if selected_accommodation_id %}accommodation_id={{ selected_accommodation_id }}&{% endif %}page={{ report_rows.next_page_number }}">Next</a>
+        <a href="?{% if selected_accommodation_id %}accommodation_id={{ selected_accommodation_id }}&{% endif %}{% if selected_period %}report_period={{ selected_period }}&{% endif %}page={{ report_rows.next_page_number }}">Next</a>
         {% endif %}
       </div>
       {% endif %}

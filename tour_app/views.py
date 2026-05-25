@@ -431,13 +431,19 @@ def pending_view(request):
             messages.error(request, f"Unexpected error: {e}")
             return redirect('tour_app:pending_view')
 
+    # Keep schedule status synchronized before showing booking action queues.
+    Tour_Schedule.get_tour_statistics()
+    now = timezone.now()
     base_qs = Pending.objects.select_related('guest_id', 'tour_id', 'sched_id')
     if not is_admin:
         assigned_schedule_ids = _assigned_schedule_ids_for_employee(employee)
         base_qs = base_qs.filter(sched_id_id__in=assigned_schedule_ids)
 
     # Fetch all pending, accepted, and declined bookings
-    pending_bookings = base_qs.filter(status__iexact="Pending").exclude(sched_id__status__iexact="cancelled")
+    pending_bookings = (
+        base_qs.filter(status__iexact="Pending", sched_id__end_time__gte=now)
+        .exclude(sched_id__status__iexact="cancelled")
+    )
     accepted_bookings = base_qs.filter(status__iexact="Accepted")
     declined_bookings = base_qs.filter(status__iexact="Declined")
     # Add cancelled bookings by users
@@ -537,12 +543,21 @@ class StatusUpdateView(UpdateView):
                 item_ref="tour_booking_declined",
             )
         
-        # Get email from hidden form field
-        guest_email = self.request.POST.get('guest_email')
-        guest_name = self.request.POST.get('guest_name')
+        # Resolve recipient from trusted persisted data first, then form fallback.
+        guest_email = (
+            str(getattr(instance.guest_id, "email", "") or "").strip()
+            or str(getattr(instance, "your_email", "") or "").strip()
+            or str(self.request.POST.get("guest_email") or "").strip()
+        )
+        guest_name = (
+            str(getattr(instance, "your_name", "") or "").strip()
+            or f"{getattr(instance.guest_id, 'first_name', '')} {getattr(instance.guest_id, 'last_name', '')}".strip()
+            or str(self.request.POST.get("guest_name") or "").strip()
+            or "Guest"
+        )
         
         # Handle email notifications
-        if instance.status == "Accepted":
+        if str(instance.status or "").strip().lower() == "accepted":
             # For accepted bookings, send confirmation email
             subject = f"Booking Confirmation: {instance.tour_id.tour_name}"
             payment_url = "https://bayawancity.gov.ph/payments/tour-booking"
@@ -572,6 +587,9 @@ class StatusUpdateView(UpdateView):
             plain_message = strip_tags(html_message)
             
             try:
+                if not guest_email:
+                    raise ValueError("Guest email is missing for accepted booking notification.")
+
                 email_message = EmailMultiAlternatives(
                     subject=subject,
                     body=plain_message,
@@ -606,7 +624,7 @@ class StatusUpdateView(UpdateView):
                     error_message=str(e),
                 )
                 
-        elif instance.status == "Declined":
+        elif str(instance.status or "").strip().lower() == "declined":
             # Send declined notification
             subject = f"Booking Update: {instance.tour_id.tour_name} - {instance.status}"
             
@@ -622,6 +640,9 @@ class StatusUpdateView(UpdateView):
             plain_message = strip_tags(html_message)
             
             try:
+                if not guest_email:
+                    raise ValueError("Guest email is missing for declined booking notification.")
+
                 send_mail(
                     subject,
                     plain_message,

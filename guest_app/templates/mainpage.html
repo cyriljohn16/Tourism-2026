@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-{% load static %}
+{% load static socialaccount %}
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -97,8 +97,11 @@
         
         .logo h1 {
             color: white;
-            font-size: 1rem;
-            font-weight: 600;
+            font-family: "BaraBara", "Bara Bara", "Poppins", sans-serif;
+            font-size: 1.08rem;
+            font-weight: 400;
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
             text-shadow: 1px 1px 3px rgba(0, 0, 0, 0.5);
         }
         
@@ -709,7 +712,7 @@
             }
             
             .logo h1 {
-                font-size: 1.5rem;
+                font-size: 1.05rem;
             }
             
             .nav-links {
@@ -4228,7 +4231,7 @@
             }
 
             .logo h1 {
-                font-size: 0.92rem;
+                font-size: 0.9rem;
             }
 
             .language-selector-nav {
@@ -4658,7 +4661,7 @@
             }
 
             .logo h1 {
-                font-size: 0.88rem;
+                font-size: 0.86rem;
                 line-height: 1.1;
             }
 
@@ -4845,7 +4848,7 @@
             <a href="{% url 'main-page' %}" class="brand-link" aria-label="Go to Ibayaw Tour homepage">
                 <img src="{% if active_logo_url %}{{ active_logo_url }}{% else %}{% static 'images/experience_bayawan.jpg' %}{% endif %}" alt="Ibayaw Tour Logo" onerror="this.style.display='none'; var fb=document.getElementById('ibayaw-logo-fallback'); if(fb){fb.style.display='inline-flex';}">
                 <span id="ibayaw-logo-fallback" class="logo-fallback" aria-hidden="true">IT</span>
-                <h1>Ibayaw Tour</h1>
+                <h1>Experience Bayawan</h1>
             </a>
         </div>
         <div class="nav-links">
@@ -8305,12 +8308,12 @@
 
                 <div class="social-divider">Or continue with</div>
                 <div class="social-login-row">
-                    <button type="button" class="social-btn" onclick="alert('Google signup is not enabled yet.')">
+                    <a class="social-btn" href="{% provider_login_url 'google' process='login' next='/guest_app/main-page/' %}">
                         <i class="fab fa-google"></i>Google
-                    </button>
-                    <button type="button" class="social-btn" onclick="alert('Facebook signup is not enabled yet.')">
+                    </a>
+                    <a class="social-btn" href="{% provider_login_url 'facebook' process='login' next='/guest_app/main-page/' %}">
                         <i class="fab fa-facebook"></i>Facebook
-                    </button>
+                    </a>
                 </div>
             </form>
             
@@ -8369,12 +8372,12 @@
 
                 <div class="social-divider">Or continue with</div>
                 <div class="social-login-row">
-                    <button type="button" class="social-btn" onclick="alert('Google login is not enabled yet.')">
+                    <a class="social-btn" href="{% provider_login_url 'google' process='login' next='/guest_app/main-page/' %}">
                         <i class="fab fa-google"></i>Google
-                    </button>
-                    <button type="button" class="social-btn" onclick="alert('Facebook login is not enabled yet.')">
+                    </a>
+                    <a class="social-btn" href="{% provider_login_url 'facebook' process='login' next='/guest_app/main-page/' %}">
                         <i class="fab fa-facebook"></i>Facebook
-                    </button>
+                    </a>
                 </div>
                 
                 <div class="login-link">
@@ -9967,7 +9970,7 @@
             // Logo text
             const logoText = document.querySelector('.logo h1');
             if (logoText) {
-                logoText.textContent = translations['ibayaw_tour'] || 'Ibayaw Tour';
+                logoText.textContent = translations['ibayaw_tour'] || 'Experience Bayawan';
             }
             
             // Navigation elements
@@ -11568,6 +11571,13 @@
 
         // Hide links that switch back to login while in owner-signup mode.
         document.querySelectorAll('.show-login, #show-signup').forEach(function(el) {
+            el.style.display = 'none';
+        });
+        // Hide social auth options in owner-signup intent mode so owners do not
+        // accidentally use guest social-login routes.
+        document.querySelectorAll(
+            '#signupModal .social-divider, #signupModal .social-login-row, #loginModal .social-divider, #loginModal .social-login-row'
+        ).forEach(function(el) {
             el.style.display = 'none';
         });
 

@@ -13,6 +13,7 @@ https://docs.djangoproject.com/en/5.1/ref/settings/
 from pathlib import Path
 import os
 from dotenv import load_dotenv
+from django.core.exceptions import ImproperlyConfigured
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 # Load environment variables from project-level .env file reliably.
@@ -41,11 +42,16 @@ def _env_list(name, default=None):
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.1/howto/deployment/checklist/
 
-# SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = os.environ.get("SECRET_KEY", "django-insecure-your-secret-key-here")
-
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = _env_bool("DEBUG", True)
+
+# SECURITY WARNING: keep the secret key used in production secret!
+SECRET_KEY = os.environ.get("SECRET_KEY", "").strip()
+if not SECRET_KEY:
+    if DEBUG:
+        SECRET_KEY = "django-insecure-dev-only-set-SECRET_KEY-in-env"
+    else:
+        raise ImproperlyConfigured("SECRET_KEY must be set when DEBUG=False.")
 
 ALLOWED_HOSTS = _env_list(
     "ALLOWED_HOSTS",
@@ -70,8 +76,14 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'django.contrib.sites',
     'mathfilters',
     'crispy_forms',
+    'allauth',
+    'allauth.account',
+    'allauth.socialaccount',
+    'allauth.socialaccount.providers.google',
+    'allauth.socialaccount.providers.facebook',
     'tour_app',
     'admin_app',
     'guest_app',
@@ -88,6 +100,7 @@ MIDDLEWARE = [
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
+    'allauth.account.middleware.AccountMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
@@ -148,7 +161,7 @@ else:
             "ENGINE": os.getenv("LOCAL_DB_ENGINE", "django.db.backends.mysql"),
             "NAME": os.getenv("LOCAL_DB_NAME", "project_db"),
             "USER": os.getenv("LOCAL_DB_USER", "root"),
-            "PASSWORD": os.getenv("LOCAL_DB_PASSWORD", os.getenv("MYSQL_PASSWORD", "september242023")),
+            "PASSWORD": os.getenv("LOCAL_DB_PASSWORD", os.getenv("MYSQL_PASSWORD", "")),
             "HOST": os.getenv("LOCAL_DB_HOST", "127.0.0.1"),
             "PORT": os.getenv("LOCAL_DB_PORT", "3307"),
             "OPTIONS": {
@@ -213,10 +226,11 @@ STORAGES = {
 
 SESSION_COOKIE_AGE = 1800  # Session expires after 30 minutes
 SESSION_EXPIRE_AT_BROWSER_CLOSE = True  # Session expires when the browser is closed
-SESSION_COOKIE_SECURE = not DEBUG
+SESSION_COOKIE_SECURE = _env_bool("SESSION_COOKIE_SECURE", not DEBUG)
 SESSION_ENGINE = 'django.contrib.sessions.backends.db'  # Store session in DB
 SESSION_COOKIE_NAME = 'sessionid'  # Default session cookie name
 SESSION_COOKIE_HTTPONLY = True  # Prevent JavaScript access to the session cookie
+SESSION_COOKIE_SAMESITE = os.getenv("SESSION_COOKIE_SAMESITE", "Lax")
 SESSION_SAVE_EVERY_REQUEST = True  # Save the session on every request
 # settings.py
 
@@ -225,6 +239,7 @@ LOGIN_URL = '/guest_app/login/'
 
 AUTHENTICATION_BACKENDS = [
     'guest_app.backends.GuestAuthenticationBackend',  # Add your custom backend here
+    'allauth.account.auth_backends.AuthenticationBackend',
     'django.contrib.auth.backends.ModelBackend',  # Keep the default backend (optional)
 ]
 
@@ -248,10 +263,18 @@ CSRF_TRUSTED_ORIGINS = _env_list(
     "CSRF_TRUSTED_ORIGINS",
     default=["http://localhost:8000", "http://127.0.0.1:8000"],
 )
-CSRF_COOKIE_SECURE = not DEBUG
+CSRF_COOKIE_SECURE = _env_bool("CSRF_COOKIE_SECURE", not DEBUG)
+CSRF_COOKIE_SAMESITE = os.getenv("CSRF_COOKIE_SAMESITE", "Lax")
 CSRF_USE_SESSIONS = True  # Store CSRF token in the session instead of cookie
 
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+SECURE_SSL_REDIRECT = _env_bool("SECURE_SSL_REDIRECT", not DEBUG)
+SECURE_HSTS_SECONDS = _env_int("SECURE_HSTS_SECONDS", 31536000 if not DEBUG else 0)
+SECURE_HSTS_INCLUDE_SUBDOMAINS = _env_bool("SECURE_HSTS_INCLUDE_SUBDOMAINS", not DEBUG)
+SECURE_HSTS_PRELOAD = _env_bool("SECURE_HSTS_PRELOAD", not DEBUG)
+SECURE_REFERRER_POLICY = os.getenv("SECURE_REFERRER_POLICY", "same-origin")
+SECURE_CONTENT_TYPE_NOSNIFF = _env_bool("SECURE_CONTENT_TYPE_NOSNIFF", True)
+X_FRAME_OPTIONS = os.getenv("X_FRAME_OPTIONS", "DENY")
 
 # If you're using Gmail, you may need to create an App Password:
 # 1. Go to your Google Account > Security
@@ -266,6 +289,36 @@ SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 AUTH_USER_MODEL = 'guest_app.Guest'  # Replace 'guest_app' with your app name
+
+SITE_ID = _env_int("SITE_ID", 1)
+LOGIN_REDIRECT_URL = "/guest_app/main-page/"
+ACCOUNT_LOGOUT_ON_GET = _env_bool("ACCOUNT_LOGOUT_ON_GET", False)
+ACCOUNT_SIGNUP_FIELDS = ["email*", "username*", "password1*", "password2*"]
+SOCIALACCOUNT_AUTO_SIGNUP = True
+SOCIALACCOUNT_LOGIN_ON_GET = True
+SOCIALACCOUNT_ADAPTER = "guest_app.social_adapter.GuestSocialAccountAdapter"
+SOCIALACCOUNT_PROVIDERS = {
+    "google": {
+        "APP": {
+            "client_id": os.getenv("GOOGLE_OAUTH_CLIENT_ID", ""),
+            "secret": os.getenv("GOOGLE_OAUTH_CLIENT_SECRET", ""),
+            "key": "",
+        },
+        "SCOPE": ["profile", "email"],
+        "AUTH_PARAMS": {"access_type": "online"},
+    },
+    "facebook": {
+        "APP": {
+            "client_id": os.getenv("FACEBOOK_OAUTH_APP_ID", ""),
+            "secret": os.getenv("FACEBOOK_OAUTH_APP_SECRET", ""),
+            "key": "",
+        },
+        "METHOD": "oauth2",
+        "SCOPE": ["email", "public_profile"],
+        "FIELDS": ["id", "email", "name", "first_name", "last_name"],
+        "VERIFIED_EMAIL": False,
+    },
+}
 
 # External payment/billing page used by chatbot booking responses.
 # Set in .env for production, e.g. TOURISM_OFFICE_BILLING_URL=https://billing.example.com/pay

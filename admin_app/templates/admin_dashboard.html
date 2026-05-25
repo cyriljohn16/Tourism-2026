@@ -185,6 +185,28 @@
     .view-itinerary-btn:hover {
       background-color: #755c4c;
     }
+
+    .view-booking-details-btn {
+      background-color: #8c6e5d;
+      color: white;
+      border: none;
+      padding: 5px 10px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: 500;
+      transition: background-color 0.3s;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .view-booking-details-btn:hover {
+      background-color: #755c4c;
+      color: white;
+      text-decoration: none;
+    }
     
     /* Assign Employee Button styles */
     .assign-employee-btn {
@@ -593,13 +615,17 @@
     
     .booking-bars {
       display: flex;
-      justify-content: space-between;
+      justify-content: flex-start;
       margin-top: 15px;
       gap: 15px;
+      overflow-x: auto;
+      overflow-y: hidden;
+      -webkit-overflow-scrolling: touch;
+      padding-bottom: 8px;
     }
     
     .booking-bar {
-      flex: 1;
+      flex: 0 0 115px;
       height: 180px;
       position: relative;
       display: flex;
@@ -642,6 +668,12 @@
       margin-top: 10px;
       font-weight: bold;
       color: #333;
+      text-align: center;
+      line-height: 1.25;
+      font-size: 13px;
+      max-width: 115px;
+      word-break: break-word;
+      overflow-wrap: anywhere;
     }
     
     .booking-bars-container {
@@ -808,6 +840,53 @@
       font-size: 16px;
       color: #333;
     }
+
+    .popular-pack-list {
+      display: grid;
+      gap: 10px;
+      max-width: 760px;
+      margin: 0 auto;
+    }
+
+    .popular-pack-row {
+      border: 1px solid #eadfce;
+      border-radius: 10px;
+      padding: 10px 12px;
+      background: #fffdfa;
+    }
+
+    .popular-pack-head {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      align-items: center;
+      margin-bottom: 7px;
+    }
+
+    .popular-pack-name {
+      font-weight: 700;
+      color: #2f2b27;
+      text-align: left;
+    }
+
+    .popular-pack-pct {
+      font-weight: 800;
+      color: #1f8f44;
+      white-space: nowrap;
+    }
+
+    .popular-pack-track {
+      height: 10px;
+      border-radius: 999px;
+      background: #ece6df;
+      overflow: hidden;
+    }
+
+    .popular-pack-fill {
+      height: 100%;
+      border-radius: 999px;
+      background: linear-gradient(90deg, #7f5a3c 0%, #d3a54f 100%);
+    }
     
     .legend-value {
       font-weight: bold;
@@ -904,11 +983,6 @@
       grid-template-columns: repeat(7, 1fr);
       gap: 8px;
       padding: 0 4px;
-    }
-    
-    /* Start offset for first week (days 1-4 in the image) */
-    .calendar-days-grid .calendar-day:nth-child(1) {
-      grid-column-start: 4;
     }
     
     .calendar-day:hover {
@@ -1427,186 +1501,6 @@
       padding: 7px 12px;
     }
     
-    /* Flip Calendar Styles */
-    .flip-calendar-container {
-      display: flex;
-      justify-content: center;
-      margin-top: 30px;
-      margin-bottom: 30px;
-    }
-    
-    .container .calendar {
-      width: 100%;
-      max-width: 600px;
-      height: 400px;
-      border-radius: 8px;
-      background-color: #fff;
-      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
-      position: relative;
-      perspective: 1000px;
-    }
-    
-    .front, .back {
-      position: absolute;
-      width: 100%;
-      height: 100%;
-      backface-visibility: hidden;
-      transition: transform 0.5s ease;
-      border-radius: 8px;
-      overflow: hidden;
-    }
-    
-    .front {
-      background-color: #fff;
-      transform: rotateY(0deg);
-    }
-    
-    .back {
-      background-color: #fff;
-      transform: rotateY(180deg);
-      padding: 20px;
-      box-sizing: border-box;
-    }
-    
-    .calendar.flipped .front {
-      transform: rotateY(180deg);
-    }
-    
-    .calendar.flipped .back {
-      transform: rotateY(0deg);
-    }
-    
-    .current-date {
-      background-color: #e99c59;
-      color: #fff;
-      padding: 20px;
-      text-align: center;
-    }
-    
-    .current-date h1 {
-      margin: 0;
-      font-size: 24px;
-      font-weight: 500;
-    }
-    
-    .week-days {
-      display: flex;
-      list-style: none;
-      padding: 0;
-      margin: 0;
-    }
-    
-    .week-days li {
-      flex: 1;
-      text-align: center;
-      color: #9e9e9e;
-      font-weight: 500;
-      padding: 10px 0;
-      font-size: 14px;
-    }
-    
-    .weeks {
-      padding: 0 10px;
-    }
-    
-    .weeks > div {
-      display: flex;
-      margin-bottom: 5px;
-    }
-    
-    .weeks span {
-      flex: 1;
-      text-align: center;
-      padding: 10px 0;
-      cursor: pointer;
-      border-radius: 50%;
-      margin: 2px;
-      font-size: 14px;
-      color: #555;
-    }
-    
-    .weeks span.last-month, .weeks span.next-month {
-      color: #ccc;
-    }
-    
-    .weeks span.active {
-      background-color: #e99c59;
-      color: #fff;
-      font-weight: bold;
-    }
-    
-    .weeks span.event {
-      position: relative;
-    }
-    
-    .weeks span.event::after {
-      content: '';
-      position: absolute;
-      bottom: 2px;
-      left: 50%;
-      transform: translateX(-50%);
-      width: 6px;
-      height: 6px;
-      border-radius: 50%;
-      background-color: #e99c59;
-    }
-    
-    .back input {
-      width: 100%;
-      padding: 15px;
-      margin-bottom: 20px;
-      border: 1px solid #ddd;
-      border-radius: 4px;
-      font-size: 16px;
-    }
-    
-    .info {
-      margin-bottom: 20px;
-    }
-    
-    .info p {
-      margin: 10px 0;
-      color: #555;
-      font-size: 14px;
-    }
-    
-    .info span {
-      color: #222;
-      font-weight: 500;
-    }
-    
-    .actions {
-      display: flex;
-      justify-content: space-between;
-      padding-top: 20px;
-      border-top: 1px solid #eee;
-    }
-    
-    .actions button {
-      padding: 10px 20px;
-      border: none;
-      border-radius: 4px;
-      cursor: pointer;
-      font-weight: 500;
-      display: flex;
-      align-items: center;
-      gap: 5px;
-    }
-    
-    .actions .save {
-      background-color: #e99c59;
-      color: white;
-    }
-    
-    .actions .dismiss {
-      background-color: #f1f1f1;
-      color: #555;
-    }
-    
-    .actions i {
-      font-size: 14px;
-    }
-    
     /* Day tabs styling */
     .itinerary-day-tabs {
       display: flex;
@@ -1956,7 +1850,7 @@
                   {{ all_time_growth.completed_tours|floatformat:1 }}%
                 </div>
                 <div class="stat-progress">
-                  <div class="progress-bar-completed"></div>
+                  <div class="progress-bar-completed" style="width: {{ all_time_card_widths.completed|default:0 }}%;"></div>
                 </div>
               </div>
               <div class="stat-icon icon-completed">✓</div>
@@ -1970,7 +1864,7 @@
                   {{ all_time_growth.active_tours|floatformat:1 }}%
                 </div>
                 <div class="stat-progress">
-                  <div class="progress-bar-active"></div>
+                  <div class="progress-bar-active" style="width: {{ all_time_card_widths.active|default:0 }}%;"></div>
                 </div>
               </div>
               <div class="stat-icon icon-active">🚶</div>
@@ -1984,7 +1878,7 @@
                   {{ all_time_growth.cancelled_tours|floatformat:1 }}%
                 </div>
                 <div class="stat-progress">
-                  <div class="progress-bar-cancelled"></div>
+                  <div class="progress-bar-cancelled" style="width: {{ all_time_card_widths.cancelled|default:0 }}%;"></div>
                 </div>
               </div>
               <div class="stat-icon icon-cancelled">✗</div>
@@ -1998,7 +1892,7 @@
                   {{ all_time_growth.total_revenue|floatformat:1 }}%
                 </div>
                 <div class="stat-progress">
-                  <div class="progress-bar-revenue"></div>
+                  <div class="progress-bar-revenue" style="width: {{ all_time_card_widths.revenue|default:0 }}%;"></div>
                 </div>
               </div>
               <div class="stat-icon icon-revenue">₱</div>
@@ -2017,7 +1911,7 @@
                   {{ weekly_growth.completed_tours|floatformat:1 }}%
                 </div>
                 <div class="stat-progress">
-                  <div class="progress-bar-completed" style="width: 35%;"></div>
+                  <div class="progress-bar-completed" style="width: {{ weekly_card_widths.completed|default:0 }}%;"></div>
                 </div>
               </div>
               <div class="stat-icon icon-completed">✓</div>
@@ -2031,7 +1925,7 @@
                   {{ weekly_growth.active_tours|floatformat:1 }}%
                 </div>
                 <div class="stat-progress">
-                  <div class="progress-bar-active" style="width: 55%;"></div>
+                  <div class="progress-bar-active" style="width: {{ weekly_card_widths.active|default:0 }}%;"></div>
                 </div>
               </div>
               <div class="stat-icon icon-active">🚶</div>
@@ -2045,7 +1939,7 @@
                   {{ weekly_growth.cancelled_tours|floatformat:1 }}%
                 </div>
                 <div class="stat-progress">
-                  <div class="progress-bar-cancelled" style="width: 15%;"></div>
+                  <div class="progress-bar-cancelled" style="width: {{ weekly_card_widths.cancelled|default:0 }}%;"></div>
                 </div>
               </div>
               <div class="stat-icon icon-cancelled">✗</div>
@@ -2059,7 +1953,7 @@
                   {{ weekly_growth.total_revenue|floatformat:1 }}%
                 </div>
                 <div class="stat-progress">
-                  <div class="progress-bar-revenue" style="width: 60%;"></div>
+                  <div class="progress-bar-revenue" style="width: {{ weekly_card_widths.revenue|default:0 }}%;"></div>
                 </div>
               </div>
               <div class="stat-icon icon-revenue">₱</div>
@@ -2078,7 +1972,7 @@
                   {{ monthly_growth.completed_tours|floatformat:1 }}%
                 </div>
                 <div class="stat-progress">
-                  <div class="progress-bar-completed" style="width: 40%;"></div>
+                  <div class="progress-bar-completed" style="width: {{ monthly_card_widths.completed|default:0 }}%;"></div>
                 </div>
               </div>
               <div class="stat-icon icon-completed">✓</div>
@@ -2092,7 +1986,7 @@
                   {{ monthly_growth.active_tours|floatformat:1 }}%
                 </div>
                 <div class="stat-progress">
-                  <div class="progress-bar-active" style="width: 60%;"></div>
+                  <div class="progress-bar-active" style="width: {{ monthly_card_widths.active|default:0 }}%;"></div>
                 </div>
               </div>
               <div class="stat-icon icon-active">🚶</div>
@@ -2106,7 +2000,7 @@
                   {{ monthly_growth.cancelled_tours|floatformat:1 }}%
                 </div>
                 <div class="stat-progress">
-                  <div class="progress-bar-cancelled" style="width: 18%;"></div>
+                  <div class="progress-bar-cancelled" style="width: {{ monthly_card_widths.cancelled|default:0 }}%;"></div>
                 </div>
               </div>
               <div class="stat-icon icon-cancelled">✗</div>
@@ -2120,7 +2014,7 @@
                   {{ monthly_growth.total_revenue|floatformat:1 }}%
                 </div>
                 <div class="stat-progress">
-                  <div class="progress-bar-revenue" style="width: 70%;"></div>
+                  <div class="progress-bar-revenue" style="width: {{ monthly_card_widths.revenue|default:0 }}%;"></div>
                 </div>
               </div>
               <div class="stat-icon icon-revenue">₱</div>
@@ -2139,7 +2033,7 @@
                   {{ yearly_growth.completed_tours|floatformat:1 }}%
                 </div>
                 <div class="stat-progress">
-                  <div class="progress-bar-completed" style="width: 45%;"></div>
+                  <div class="progress-bar-completed" style="width: {{ yearly_card_widths.completed|default:0 }}%;"></div>
                 </div>
               </div>
               <div class="stat-icon icon-completed">✓</div>
@@ -2153,7 +2047,7 @@
                   {{ yearly_growth.active_tours|floatformat:1 }}%
                 </div>
                 <div class="stat-progress">
-                  <div class="progress-bar-active" style="width: 65%;"></div>
+                  <div class="progress-bar-active" style="width: {{ yearly_card_widths.active|default:0 }}%;"></div>
                 </div>
               </div>
               <div class="stat-icon icon-active">🚶</div>
@@ -2167,7 +2061,7 @@
                   {{ yearly_growth.cancelled_tours|floatformat:1 }}%
                 </div>
                 <div class="stat-progress">
-                  <div class="progress-bar-cancelled" style="width: 20%;"></div>
+                  <div class="progress-bar-cancelled" style="width: {{ yearly_card_widths.cancelled|default:0 }}%;"></div>
                 </div>
               </div>
               <div class="stat-icon icon-cancelled">✗</div>
@@ -2181,7 +2075,7 @@
                   {{ yearly_growth.total_revenue|floatformat:1 }}%
                 </div>
                 <div class="stat-progress">
-                  <div class="progress-bar-revenue" style="width: 75%;"></div>
+                  <div class="progress-bar-revenue" style="width: {{ yearly_card_widths.revenue|default:0 }}%;"></div>
                 </div>
               </div>
               <div class="stat-icon icon-revenue">₱</div>
@@ -2189,30 +2083,80 @@
           </div>
         </div>
       </div>
-      
-      <!-- Total Survey Responses -->
-      <div class="stats-container">
-        <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; border:1px solid #d8e7ff; border-left:3px solid #2f80ed; border-radius:8px; background:#fff; padding:10px 12px;">
-          <div style="font-size:15px; font-weight:600; color:#1f2937;">Total Survey Responses</div>
-          <a href="{% url 'admin_app:survey_results_dashboard' %}" class="view-itinerary-btn survey-details-btn">View Details</a>
-        </div>
-      </div>
 
-      <!-- Additional cards can be added for different statistics -->
-      <div class="stat-card" style="background-color: #f8f9fa; border-left: 4px solid #3498db;">
-        <div class="stat-info">
-          <h3>User Activity Tracking</h3>
-          <p class="stat-value">
-            <a href="{% url 'admin_app:activity_tracker' %}" style="text-decoration: none; color: #3498db;">
-              View Activity Logs
-            </a>
-          </p>
-          <span class="growth-indicator" style="background-color: #e3f2fd; color: #2196f3;">
-            <i class="fas fa-chart-line"></i> Monitor employee activity
-          </span>
+      <!-- Tourist Influx Dashboard Card (Owner Monthly Reports) -->
+      <div class="stats-container">
+        <div class="header-with-filter">
+          <h2>Tourist Influx Dashboard - {{ tourist_influx_summary.month_label }}</h2>
+          <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+            <form method="get" style="margin:0;">
+              <select name="influx_period" class="period-select" onchange="this.form.submit()">
+                {% for period_item in tourist_influx_summary.period_choices %}
+                  <option value="{{ period_item|date:'Y-m' }}" {% if tourist_influx_summary.selected_period == period_item|date:'Y-m' %}selected{% endif %}>
+                    {{ period_item|date:"M Y" }}
+                  </option>
+                {% empty %}
+                  <option value="{{ tourist_influx_summary.selected_period }}">{{ tourist_influx_summary.month_label }}</option>
+                {% endfor %}
+              </select>
+            </form>
+            <a href="{% url 'admin_app:owner_reports_review' %}?report_period={{ tourist_influx_summary.selected_period }}" class="view-booking-details-btn">Open Owner Reports Review</a>
+          </div>
         </div>
-        <div class="stat-icon">
-          <i class="fas fa-user-clock" style="font-size: 48px; color: #3498db;"></i>
+        <div class="stats-grid">
+          <div class="stat-card">
+            <div class="stat-info">
+              <h3>Submitted Reports</h3>
+              <p class="stat-value">{{ tourist_influx_summary.report_count }}</p>
+              <div class="growth-indicator {% if tourist_influx_summary.growth_reports >= 0 %}growth-positive{% else %}growth-negative{% endif %}">
+                {{ tourist_influx_summary.growth_reports|floatformat:1 }}% vs previous month
+              </div>
+            </div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-info">
+              <h3>Total Check-ins</h3>
+              <p class="stat-value">{{ tourist_influx_summary.checkins }}</p>
+              <div class="growth-indicator {% if tourist_influx_summary.growth_checkins >= 0 %}growth-positive{% else %}growth-negative{% endif %}">
+                {{ tourist_influx_summary.growth_checkins|floatformat:1 }}% vs previous month
+              </div>
+            </div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-info">
+              <h3>Total Check-outs</h3>
+              <p class="stat-value">{{ tourist_influx_summary.checkouts }}</p>
+              <div class="growth-indicator {% if tourist_influx_summary.growth_checkouts >= 0 %}growth-positive{% else %}growth-negative{% endif %}">
+                {{ tourist_influx_summary.growth_checkouts|floatformat:1 }}% vs previous month
+              </div>
+            </div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-info">
+              <h3>Rooms Used</h3>
+              <p class="stat-value">{{ tourist_influx_summary.rooms_used }}</p>
+              <div class="growth-indicator growth-positive">
+                All-time reports: {{ tourist_influx_summary.all_time_reports }}
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="insights-container" style="margin-top: 16px;">
+          <div class="insight-card">
+            <h3>Top Accommodations by Check-ins ({{ tourist_influx_summary.month_label }})</h3>
+            <ul style="margin: 0; padding-left: 18px;">
+              {% for row in tourist_influx_summary.top_accommodations %}
+                <li>{{ row.accommodation__company_name }} - {{ row.total_checkins|default:0 }} in / {{ row.total_checkouts|default:0 }} out</li>
+              {% empty %}
+                <li>No monthly owner report data yet for this period.</li>
+              {% endfor %}
+            </ul>
+          </div>
+          <div class="insight-card">
+            <h3>All-time Influx Totals</h3>
+            <p style="margin:0;">Check-ins: <strong>{{ tourist_influx_summary.all_time_checkins }}</strong></p>
+            <p style="margin:6px 0 0;">Check-outs: <strong>{{ tourist_influx_summary.all_time_checkouts }}</strong></p>
+          </div>
         </div>
       </div>
       
@@ -2221,7 +2165,7 @@
         <div class="header-with-filter">
           <h2>Tour Booking Status</h2>
           <div style="display:flex; gap:10px; align-items:center;">
-            <a href="{% url 'tour_app:pending_view' %}" class="view-itinerary-btn">Show Details</a>
+            <a href="{% url 'tour_app:pending_view' %}" class="view-booking-details-btn">Open Tour Bookings</a>
             <select id="booking-period-filter" class="period-select">
               <option value="all-time">All Tours</option>
               <option value="low">Low Booking</option>
@@ -2256,14 +2200,6 @@
               <div class="bar-label">{{ booking.tour.tour_name }}</div>
             </div>
             {% empty %}
-            <!-- Fallback if no tours are available -->
-            <div class="booking-bar">
-              <div class="bar-outer">
-                <div class="bar-inner" style="height: 0%;"></div>
-                <div class="bar-percentage">0%</div>
-              </div>
-              <div class="bar-label">No Tours</div>
-            </div>
             {% endfor %}
           </div>
         </div>
@@ -2327,62 +2263,20 @@
           <h2>POPULAR TOUR PACK</h2>
         </div>
         
-        <div class="tour-pack-container" style="background-color: #f9f8f6; border-radius: 20px; padding: 30px; box-shadow: 0 2px 15px rgba(0,0,0,0.05);">
-          <!-- Modern circular visualization -->
-          <div style="max-width: 500px; margin: 0 auto;">
-            <svg viewBox="0 0 400 400" style="width: 100%; height: auto;">
-              <!-- Main circular segments -->
-              <circle cx="200" cy="200" r="150" fill="transparent" stroke="#000" stroke-width="30" stroke-dasharray="236.5 707.5" stroke-dashoffset="0" transform="rotate(-90 200 200)" />
-              <circle cx="200" cy="200" r="150" fill="transparent" stroke="#777" stroke-width="30" stroke-dasharray="236.5 707.5" stroke-dashoffset="236.5" transform="rotate(-90 200 200)" />
-              <circle cx="200" cy="200" r="150" fill="transparent" stroke="#e6c672" stroke-width="30" stroke-dasharray="251.5 692.5" stroke-dashoffset="473" transform="rotate(-90 200 200)" />
-              <circle cx="200" cy="200" r="150" fill="transparent" stroke="#999" stroke-width="30" stroke-dasharray="125.7 818.3" stroke-dashoffset="724.5" transform="rotate(-90 200 200)" />
-              
-              <!-- Center circle with airplane icon -->
-              <circle cx="200" cy="200" r="100" fill="#e6c672" />
-              <text x="200" y="200" text-anchor="middle" dominant-baseline="middle" font-size="40">&#9992;&#65039;</text>
-            </svg>
-          </div>
-          
-          <!-- Tour Legend -->
-          <div style="max-width: 400px; margin: 30px auto 0; display: flex; flex-direction: column; gap: 15px;">
-            {% for booking in tour_bookings|slice:":4" %}
-              <div style="display: flex; justify-content: space-between; align-items: center;">
-                <div style="display: flex; align-items: center; gap: 10px;">
-                  <div style="width: 20px; height: 20px; border-radius: 4px; background-color: {% if forloop.counter == 1 %}#000{% elif forloop.counter == 2 %}#777{% elif forloop.counter == 3 %}#e6c672{% else %}#999{% endif %};"></div>
-                  <span style="font-weight: bold; color: #333;">{{ booking.tour.tour_name }}</span>
+        <div class="tour-pack-container" style="background-color: #f9f8f6; border-radius: 20px; padding: 22px; box-shadow: 0 2px 15px rgba(0,0,0,0.05);">
+          <div class="popular-pack-list">
+            {% for booking in tour_bookings|slice:":6" %}
+              <div class="popular-pack-row">
+                <div class="popular-pack-head">
+                  <div class="popular-pack-name">{{ booking.tour.tour_name }}</div>
+                  <div class="popular-pack-pct">{{ booking.percentage }}%</div>
                 </div>
-                <span style="font-weight: bold; color: #333;">{{ booking.percentage }}%</span>
+                <div class="popular-pack-track">
+                  <div class="popular-pack-fill" style="width: {{ booking.percentage }}%;"></div>
+                </div>
               </div>
             {% empty %}
-              <!-- Fallback for no tour data -->
-              <div style="display: flex; justify-content: space-between; align-items: center;">
-                <div style="display: flex; align-items: center; gap: 10px;">
-                  <div style="width: 20px; height: 20px; border-radius: 4px; background-color: #000;"></div>
-                  <span style="font-weight: bold; color: #333;">Tour 1</span>
-                </div>
-                <span style="font-weight: bold; color: #333;">38%</span>
-              </div>
-              <div style="display: flex; justify-content: space-between; align-items: center;">
-                <div style="display: flex; align-items: center; gap: 10px;">
-                  <div style="width: 20px; height: 20px; border-radius: 4px; background-color: #777;"></div>
-                  <span style="font-weight: bold; color: #333;">Tour 2</span>
-                </div>
-                <span style="font-weight: bold; color: #333;">38%</span>
-              </div>
-              <div style="display: flex; justify-content: space-between; align-items: center;">
-                <div style="display: flex; align-items: center; gap: 10px;">
-                  <div style="width: 20px; height: 20px; border-radius: 4px; background-color: #e6c672;"></div>
-                  <span style="font-weight: bold; color: #333;">Tour 3</span>
-                </div>
-                <span style="font-weight: bold; color: #333;">40%</span>
-              </div>
-              <div style="display: flex; justify-content: space-between; align-items: center;">
-                <div style="display: flex; align-items: center; gap: 10px;">
-                  <div style="width: 20px; height: 20px; border-radius: 4px; background-color: #999;"></div>
-                  <span style="font-weight: bold; color: #333;">Tour 4</span>
-                </div>
-                <span style="font-weight: bold; color: #333;">20%</span>
-              </div>
+              <div class="no-data">No active tour booking data yet.</div>
             {% endfor %}
           </div>
         </div>
@@ -2808,13 +2702,13 @@
             </div>
             
             <div class="days-header calendar-grid">
-              <div class="calendar-day-header">Sunday</div>
-              <div class="calendar-day-header">Monday</div>
-              <div class="calendar-day-header">Tuesday</div>
-              <div class="calendar-day-header">Wednesday</div>
-              <div class="calendar-day-header">Thursday</div>
-              <div class="calendar-day-header">Friday</div>
-              <div class="calendar-day-header">Saturday</div>
+              <div class="calendar-day-header">Sun</div>
+              <div class="calendar-day-header">Mon</div>
+              <div class="calendar-day-header">Tue</div>
+              <div class="calendar-day-header">Wed</div>
+              <div class="calendar-day-header">Thu</div>
+              <div class="calendar-day-header">Fri</div>
+              <div class="calendar-day-header">Sat</div>
             </div>
             
             <!-- Days will be generated by JavaScript -->
@@ -2824,7 +2718,7 @@
           <!-- Tour List Container -->
           <div class="tour-list-container">
             <div class="tour-list-header">
-              <span id="selected-date">Tours for March 1, 2023</span>
+              <span id="selected-date">Select a date to view available tours.</span>
             </div>
             
             <div id="tour-list" class="tour-list">
@@ -3780,48 +3674,46 @@
           }
         });
       });
-      
-      // Get tour data from Django context
-      const tourData = {
+      // Get tour data from Django context keyed by full date (YYYY-MM-DD)
+      const tourData = {};
+      [
         {% for schedule in active_tours %}
-          "{{ schedule.start_time|date:'j' }}": [
-            {
-              "tourName": "{{ schedule.tour.tour_name }}",
-              "start": "{{ schedule.start_time|date:'Y-m-d' }}",
-              "end": "{{ schedule.end_time|date:'Y-m-d' }}",
-              "price": "₱{{ schedule.price|floatformat:2 }}",
-              "confirmedBookings": {{ schedule.slots_booked }},
-              "color": "#875a34",
-              "description": "{{ schedule.tour.description|truncatechars:100|escapejs }}",
-              "sched_id": "{{ schedule.sched_id }}",
-              "slots_available": {{ schedule.slots_available }},
-              "slots_booked": {{ schedule.slots_booked }}
-            }
-          ]{% if not forloop.last %},{% endif %}
-        {% empty %}
-          // Sample data if no tours are available in the database
-          "1": [
-            {
-              "tourName": "Sample Tour",
-              "start": "2023-03-01",
-              "end": "2023-03-01",
-              "price": "₱500.00",
-              "confirmedBookings": 20,
-              "color": "green",
-              "description": "Sample tour data since no actual tours found in database",
-              "sched_id": "Sample",
-              "slots_available": 100,
-              "slots_booked": 20
-            }
-          ]
+          {
+            "tourName": "{{ schedule.tour.tour_name|escapejs }}",
+            "start": "{{ schedule.start_time|date:'Y-m-d' }}",
+            "end": "{{ schedule.end_time|date:'Y-m-d' }}",
+            "price": "PHP {{ schedule.price|floatformat:2 }}",
+            "confirmedBookings": {{ schedule.slots_booked }},
+            "color": "#875a34",
+            "description": "{{ schedule.tour.description|truncatechars:100|escapejs }}",
+            "sched_id": "{{ schedule.sched_id }}",
+            "slots_available": {{ schedule.slots_available }},
+            "slots_booked": {{ schedule.slots_booked }}
+          }{% if not forloop.last %},{% endif %}
         {% endfor %}
-      };
+      ].forEach((tour) => {
+        const key = tour.start;
+        if (!key) return;
+        if (!tourData[key]) tourData[key] = [];
+        tourData[key].push(tour);
+      });
       
       // Calendar variables
-      let currentDate = new Date(2025, 3, 1); // April 1, 2025 (months are 0-based, so 3 = April)
+      let currentDate = new Date();
       let selectedDate = null;
       let selectedTour = null;
       let highlightedDates = [];
+      const activeTourStartDates = [
+        {% for schedule in active_tours %}
+          "{{ schedule.start_time|date:'Y-m-d' }}"{% if not forloop.last %},{% endif %}
+        {% endfor %}
+      ].filter(Boolean);
+      if (activeTourStartDates.length) {
+        const earliestStart = new Date(activeTourStartDates.sort()[0] + "T00:00:00");
+        if (!Number.isNaN(earliestStart.getTime())) {
+          currentDate = earliestStart;
+        }
+      }
       
       // DOM elements
       const calendarDays = document.getElementById('calendar-days');
@@ -3880,12 +3772,15 @@
           dayNumber.textContent = day;
           dayCell.appendChild(dayNumber);
           
+          // Build full date key once per cell
+          const dateStr = `${currentDate.getFullYear()}-${(currentDate.getMonth() + 1).toString().padStart(2, '0')}-${day.toString().padStart(2, '0')}`;
+
           // Add tour dots if there are tours on this day
-          if (tourData[day]) {
+          if (tourData[dateStr]) {
             const dayDots = document.createElement('div');
             dayDots.classList.add('day-dots');
             
-            tourData[day].forEach(tour => {
+            tourData[dateStr].forEach(tour => {
               const tourDot = document.createElement('span');
               tourDot.classList.add('tour-dot');
               tourDot.style.backgroundColor = tour.color || "#875a34";
@@ -3896,7 +3791,6 @@
           }
           
           // Highlight dates in the range if applicable
-          const dateStr = `${currentDate.getFullYear()}-${(currentDate.getMonth() + 1).toString().padStart(2, '0')}-${day.toString().padStart(2, '0')}`;
           if (highlightedDates.includes(dateStr)) {
             dayCell.classList.add('highlighted');
           }
@@ -3930,7 +3824,7 @@
         document.addEventListener('click', function(event) {
           const dayCell = event.target.closest('.calendar-day:not(.empty)');
           if (dayCell) {
-            const day = parseInt(dayCell.dataset.day);
+            const selectedDateKey = dayCell.dataset.date;
             
             // Remove selection from previously selected day
             const previouslySelected = document.querySelector('.calendar-day.selected');
@@ -3942,10 +3836,10 @@
             dayCell.classList.add('selected');
             
             // Update selected date
-            selectedDate = new Date(currentDate.getFullYear(), currentDate.getMonth(), day);
+            selectedDate = new Date(`${selectedDateKey}T00:00:00`);
             
             // Update the tour list for the selected date
-            updateTourList(day);
+            updateTourList(selectedDateKey);
           }
         });
         
@@ -3981,7 +3875,7 @@
           { label: 'Start Date', value: formatDate(tour.start) },
           { label: 'End Date', value: formatDate(tour.end) },
           { label: 'Price', value: tour.price },
-          { label: 'Bookings', value: `${tour.confirmedBookings}/${tour.slots_available}` }
+          { label: 'Bookings', value: `${tour.confirmedBookings}/${tour.totalCapacity}` }
         ];
         
         tourDetailItems.forEach(item => {
@@ -4055,7 +3949,7 @@
       }
       
       // Update the tour list when a date is selected
-      function updateTourList(day) {
+      function updateTourList(selectedDateKey) {
         // Format the date for display
         const options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
         const formattedDate = selectedDate.toLocaleDateString('en-US', options);
@@ -4065,7 +3959,7 @@
         tourList.innerHTML = '';
         
         // Get tours for the selected day
-        const tours = tourData[day] || [];
+        const tours = tourData[selectedDateKey] || [];
         
         if (tours.length === 0) {
           const noTours = document.createElement('div');
@@ -4104,7 +3998,7 @@
           
           const tourBookings = document.createElement('div');
           tourBookings.classList.add('tour-bookings');
-          tourBookings.textContent = `${tour.confirmedBookings}/${tour.slots_available} slots booked`;
+          tourBookings.textContent = `${tour.confirmedBookings}/${tour.totalCapacity} slots booked`;
           
           const tourAction = document.createElement('button');
           tourAction.classList.add('tour-action');
@@ -4191,7 +4085,7 @@
       console.log("DOM loaded, setting up itinerary buttons");
       
       // Add event listeners to View Itinerary buttons
-      const itineraryButtons = document.querySelectorAll('.view-itinerary-btn');
+      const itineraryButtons = document.querySelectorAll('.view-itinerary-btn[data-tour-id]');
       const itineraryModal = document.getElementById('itinerary-modal');
       const itineraryClose = document.querySelector('.itinerary-close');
       const itineraryTourName = document.getElementById('itinerary-tour-name');
@@ -4416,414 +4310,6 @@
     });
   </script>
   
-  <!-- Flip Calendar -->
-  <div class="stats-container">
-    <h2>Calendar Overview</h2>
-    <div class="flip-calendar-container">
-      <div class="container">
-        <div class="calendar">
-          <div class="front">
-            <div class="current-date">
-              <h1 id="flip-calendar-day"></h1>
-              <h1 id="flip-calendar-month-year"></h1> 
-            </div>
-
-            <div class="current-month">
-              <ul class="week-days">
-                <li>MON</li>
-                <li>TUE</li>
-                <li>WED</li>
-                <li>THU</li>
-                <li>FRI</li>
-                <li>SAT</li>
-                <li>SUN</li>
-              </ul>
-
-              <div class="weeks" id="flip-calendar-weeks">
-                <!-- Calendar weeks will be dynamically generated -->
-              </div>
-            </div>
-          </div>
-
-          <div class="back">
-            <input placeholder="What's the event?">
-            <div class="info">
-              <div class="date">
-                <p class="info-date">
-                Date: <span id="event-date"></span>
-                </p>
-                <p class="info-time">
-                  Time: <span id="event-time"></span>
-                </p>
-              </div>
-              <div class="address">
-                <p>
-                  Address: <span id="event-address">Bayawan City, Negros Oriental</span>
-                </p>
-              </div>
-              <div class="observations">
-                <p>
-                  Observations: <span id="event-observations">Tour details will appear here</span>
-                </p>
-              </div>
-            </div>
-
-            <div class="actions">
-              <button class="save">
-                Save <i class="ion-checkmark"></i>
-              </button>
-              <button class="dismiss">
-                Dismiss <i class="ion-android-close"></i>
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <style>
-    /* Flip Calendar Styles */
-    .flip-calendar-container {
-      display: flex;
-      justify-content: center;
-      margin-top: 30px;
-      margin-bottom: 30px;
-    }
-    
-    .container .calendar {
-      width: 100%;
-      max-width: 600px;
-      height: 400px;
-      border-radius: 8px;
-      background-color: #fff;
-      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
-      position: relative;
-      perspective: 1000px;
-    }
-    
-    .front, .back {
-      position: absolute;
-      width: 100%;
-      height: 100%;
-      backface-visibility: hidden;
-      transition: transform 0.5s ease;
-      border-radius: 8px;
-      overflow: hidden;
-    }
-    
-    .front {
-      background-color: #fff;
-      transform: rotateY(0deg);
-    }
-    
-    .back {
-      background-color: #fff;
-      transform: rotateY(180deg);
-      padding: 20px;
-      box-sizing: border-box;
-    }
-    
-    .calendar.flipped .front {
-      transform: rotateY(180deg);
-    }
-    
-    .calendar.flipped .back {
-      transform: rotateY(0deg);
-    }
-    
-    .current-date {
-      background-color: #e99c59;
-      color: #fff;
-      padding: 20px;
-      text-align: center;
-    }
-    
-    .current-date h1 {
-      margin: 0;
-      font-size: 24px;
-      font-weight: 500;
-    }
-    
-    .week-days {
-      display: flex;
-      list-style: none;
-      padding: 0;
-      margin: 0;
-    }
-    
-    .week-days li {
-      flex: 1;
-      text-align: center;
-      color: #9e9e9e;
-      font-weight: 500;
-      padding: 10px 0;
-      font-size: 14px;
-    }
-    
-    .weeks {
-      padding: 0 10px;
-    }
-    
-    .weeks > div {
-      display: flex;
-      margin-bottom: 5px;
-    }
-    
-    .weeks span {
-      flex: 1;
-      text-align: center;
-      padding: 10px 0;
-      cursor: pointer;
-      border-radius: 50%;
-      margin: 2px;
-      font-size: 14px;
-      color: #555;
-    }
-    
-    .weeks span.last-month, .weeks span.next-month {
-      color: #ccc;
-    }
-    
-    .weeks span.active {
-      background-color: #e99c59;
-      color: #fff;
-      font-weight: bold;
-    }
-    
-    .weeks span.event {
-      position: relative;
-    }
-    
-    .weeks span.event::after {
-      content: '';
-      position: absolute;
-      bottom: 2px;
-      left: 50%;
-      transform: translateX(-50%);
-      width: 6px;
-      height: 6px;
-      border-radius: 50%;
-      background-color: #e99c59;
-    }
-    
-    .back input {
-      width: 100%;
-      padding: 15px;
-      margin-bottom: 20px;
-      border: 1px solid #ddd;
-      border-radius: 4px;
-      font-size: 16px;
-    }
-    
-    .info {
-      margin-bottom: 20px;
-    }
-    
-    .info p {
-      margin: 10px 0;
-      color: #555;
-      font-size: 14px;
-    }
-    
-    .info span {
-      color: #222;
-      font-weight: 500;
-    }
-    
-    .actions {
-      display: flex;
-      justify-content: space-between;
-      padding-top: 20px;
-      border-top: 1px solid #eee;
-    }
-    
-    .actions button {
-      padding: 10px 20px;
-      border: none;
-      border-radius: 4px;
-      cursor: pointer;
-      font-weight: 500;
-      display: flex;
-      align-items: center;
-      gap: 5px;
-    }
-    
-    .actions .save {
-      background-color: #e99c59;
-      color: white;
-    }
-    
-    .actions .dismiss {
-      background-color: #f1f1f1;
-      color: #555;
-    }
-    
-    .actions i {
-      font-size: 14px;
-    }
-  </style>
-
-  <script>
-    document.addEventListener('DOMContentLoaded', function() {
-      // Flip Calendar JavaScript
-      const calendarElement = document.querySelector('.calendar');
-      const dayDisplay = document.getElementById('flip-calendar-day');
-      const monthYearDisplay = document.getElementById('flip-calendar-month-year');
-      const weeksContainer = document.getElementById('flip-calendar-weeks');
-      const eventDateDisplay = document.getElementById('event-date');
-      const eventTimeDisplay = document.getElementById('event-time');
-      
-      // Initialize with current date
-      const today = new Date();
-      const monthNames = [
-        'January', 'February', 'March', 'April', 'May', 'June',
-        'July', 'August', 'September', 'October', 'November', 'December'
-      ];
-      const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-      
-      // Format date display
-      const formatDay = (date) => {
-        const day = date.getDate();
-        const suffix = getDaySuffix(day);
-        return `${dayNames[date.getDay()]} ${day}${suffix}`;
-      };
-      
-      const getDaySuffix = (day) => {
-        if (day > 3 && day < 21) return 'th';
-        switch (day % 10) {
-          case 1: return 'st';
-          case 2: return 'nd';
-          case 3: return 'rd';
-          default: return 'th';
-        }
-      };
-      
-      // Update calendar header
-      dayDisplay.textContent = formatDay(today);
-      monthYearDisplay.textContent = `${monthNames[today.getMonth()]} ${today.getFullYear()}`;
-      
-      // Generate calendar days
-      function generateCalendar(date) {
-        weeksContainer.innerHTML = '';
-        
-        const year = date.getFullYear();
-        const month = date.getMonth();
-        
-        // First day of month
-        const firstDay = new Date(year, month, 1);
-        const lastDay = new Date(year, month + 1, 0);
-        
-        // Calculate days from previous month
-        let dayOfWeek = firstDay.getDay() || 7; // Convert Sunday (0) to 7
-        dayOfWeek--; // Adjust to start week on Monday
-        
-        // Create weeks
-        const weeks = [
-          document.createElement('div'),
-          document.createElement('div'),
-          document.createElement('div'),
-          document.createElement('div'),
-          document.createElement('div'),
-          document.createElement('div')
-        ];
-        
-        // Add previous month days
-        const prevMonthLastDay = new Date(year, month, 0).getDate();
-        for (let i = 0; i < dayOfWeek; i++) {
-          const daySpan = document.createElement('span');
-          daySpan.textContent = prevMonthLastDay - dayOfWeek + i + 1;
-          daySpan.classList.add('last-month');
-          weeks[0].appendChild(daySpan);
-        }
-        
-        // Add current month days
-        let weekIndex = 0;
-        for (let day = 1; day <= lastDay.getDate(); day++) {
-          // Check if we need to move to next week
-          if ((day + dayOfWeek - 1) % 7 === 0 && day !== 1) {
-            weekIndex++;
-          }
-          
-          const daySpan = document.createElement('span');
-          daySpan.textContent = day < 10 ? `0${day}` : day;
-          
-          // Mark current day
-          if (day === today.getDate() && month === today.getMonth() && year === today.getFullYear()) {
-            daySpan.classList.add('active');
-          }
-          
-          // Add event indicators (you can modify this to use your tour data)
-          if (tourData && tourData[day] && tourData[day].length > 0) {
-            daySpan.classList.add('event');
-          }
-          
-          // Add click event for days
-          daySpan.addEventListener('click', function() {
-            // Remove active class from all days
-            document.querySelectorAll('.weeks span').forEach(span => {
-              span.classList.remove('active');
-            });
-            
-            // Add active class to clicked day
-            daySpan.classList.add('active');
-            
-            // Update event details
-            const selectedDate = new Date(year, month, day);
-            eventDateDisplay.textContent = `${monthNames[month]} ${day}${getDaySuffix(day)}, ${year}`;
-            eventTimeDisplay.textContent = '9:00 AM';
-            
-            // Show tour details if available
-            if (tourData && tourData[day] && tourData[day].length > 0) {
-              const tour = tourData[day][0];
-              document.getElementById('event-observations').textContent = tour.description || 'Tour details not available';
-            } else {
-              document.getElementById('event-observations').textContent = 'No tours scheduled for this day';
-            }
-            
-            // Flip the calendar
-            calendarElement.classList.add('flipped');
-          });
-          
-          weeks[weekIndex].appendChild(daySpan);
-        }
-        
-        // Fill remaining days with next month
-        let remainingDays = 7 - (weeks[weekIndex].children.length % 7);
-        if (remainingDays < 7) {
-          for (let i = 1; i <= remainingDays; i++) {
-            const daySpan = document.createElement('span');
-            daySpan.textContent = i < 10 ? `0${i}` : i;
-            daySpan.classList.add('next-month');
-            weeks[weekIndex].appendChild(daySpan);
-          }
-        }
-        
-        // Append weeks to container
-        weeks.forEach(week => {
-          if (week.children.length > 0) {
-            weeksContainer.appendChild(week);
-          }
-        });
-      }
-      
-      // Generate calendar for current month
-      generateCalendar(today);
-      
-      // Add event listener for dismiss button
-      document.querySelector('.dismiss').addEventListener('click', function() {
-        calendarElement.classList.remove('flipped');
-      });
-      
-      // Add event listener for save button
-      document.querySelector('.save').addEventListener('click', function() {
-        // Here you can add functionality to save the event
-        alert('Event saved!');
-        calendarElement.classList.remove('flipped');
-      });
-    });
-  </script>
-
   <!-- Add navigation handling script at the end of the body -->
   <script>
     document.addEventListener('DOMContentLoaded', function() {
@@ -5165,6 +4651,7 @@
     }
 
     .view-itinerary-btn,
+    .view-booking-details-btn,
     .assign-employee-btn {
       border-radius: 8px;
       font-weight: 600;
@@ -5191,9 +4678,103 @@
         width: 100%;
       }
     }
+
+    @media (max-width: 760px) {
+      .content {
+        padding: 12px;
+      }
+
+      .dashboard-header {
+        padding: 14px 16px;
+        margin-bottom: 14px;
+      }
+
+      .dashboard-header h1 {
+        font-size: clamp(1.8rem, 9vw, 2.3rem);
+      }
+
+      .stats-container,
+      .tour-pack-container {
+        padding: 12px;
+        margin-bottom: 14px;
+      }
+
+      .header-with-filter {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 10px;
+      }
+
+      .header-with-filter h2 {
+        font-size: 1.15rem;
+      }
+
+      .period-select {
+        width: 100%;
+      }
+
+      .stats-grid,
+      .insights-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .booking-viz-container,
+      .booking-overview,
+      .booking-bars,
+      .booking-bars-container {
+        min-width: 0;
+      }
+
+      .booking-overview {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 10px;
+      }
+
+      .booking-overview > * {
+        width: 100% !important;
+      }
+
+      .booking-bars {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        padding-bottom: 6px;
+      }
+
+      .booking-bar {
+        min-width: 76px;
+      }
+
+      .forecast-tour {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 4px;
+      }
+
+      .forecast-values {
+        width: 100%;
+      }
+
+      .ongoing-tours-container {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+      }
+
+      .ongoing-tour-card {
+        min-width: 290px;
+      }
+
+      .itinerary-modal-content {
+        width: 94%;
+        padding: 16px;
+        margin: 8% auto;
+      }
+    }
   </style>
 </body>
 </html>
+
+
 
 
 

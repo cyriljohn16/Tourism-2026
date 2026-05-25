@@ -1,0 +1,25 @@
+{
+  "name": "Ibayaw Tour",
+  "short_name": "Ibayaw",
+  "description": "Bayawan tourism guide for tour packages, approved stays, maps, directions, and trip planning.",
+  "start_url": "/guest_app/main-page/",
+  "scope": "/guest_app/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "theme_color": "#12335e",
+  "background_color": "#ffffff",
+  "icons": [
+    {
+      "src": "/static/images/image.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/static/images/image.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

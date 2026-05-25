@@ -14,8 +14,8 @@
       --detail-border: #d6e3f2;
       --detail-accent: #1f66d0;
       --detail-accent-soft: #edf4ff;
-      --detail-warm: #6f4e37;
-      --detail-warm-soft: #b1743f;
+      --detail-warm: #ffffff;
+      --detail-warm-soft: #f7fbff;
       --detail-radius: 18px;
     }
 
@@ -76,9 +76,12 @@
     .detail-hero {
       border-radius: 22px;
       padding: clamp(14px, 2.4vw, 22px);
-      background: linear-gradient(135deg, var(--detail-warm), var(--detail-warm-soft));
-      color: #fff;
-      box-shadow: 0 16px 34px rgba(45, 36, 31, 0.24);
+      background:
+        radial-gradient(circle at 92% 4%, rgba(31, 102, 208, 0.08), transparent 30%),
+        linear-gradient(180deg, var(--detail-warm), var(--detail-warm-soft));
+      color: var(--detail-text);
+      border: 1px solid var(--detail-border);
+      box-shadow: 0 14px 30px rgba(20, 48, 80, 0.1);
       display: grid;
       gap: 10px;
     }
@@ -89,20 +92,21 @@
       letter-spacing: 0.06em;
       text-transform: uppercase;
       font-weight: 700;
-      color: rgba(248, 250, 255, 0.9);
+      color: #1f66d0;
     }
 
     .detail-title {
       margin: 0;
       font-size: clamp(1.4rem, 1.1vw + 1rem, 2rem);
       line-height: 1.18;
+      color: #173f6d;
     }
 
     .detail-subtitle {
       margin: 0;
       font-size: 0.92rem;
       line-height: 1.45;
-      color: rgba(248, 250, 255, 0.94);
+      color: var(--detail-muted);
       max-width: 780px;
     }
 
@@ -138,6 +142,145 @@
       background: linear-gradient(135deg, #1f66d0, #1ba0bc);
       color: #fff;
       border-color: transparent;
+    }
+
+    .detail-auth-modal {
+      position: fixed;
+      inset: 0;
+      z-index: 3000;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 18px;
+      background: rgba(10, 22, 36, 0.58);
+    }
+
+    .detail-auth-modal.open {
+      display: flex;
+    }
+
+    .detail-auth-card {
+      width: min(540px, 100%);
+      max-height: min(86vh, 760px);
+      overflow: auto;
+      border-radius: 20px;
+      border: 1px solid var(--detail-border);
+      background: #fff;
+      box-shadow: 0 24px 58px rgba(10, 31, 58, 0.28);
+      padding: 18px;
+    }
+
+    .detail-auth-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+
+    .detail-auth-head h2 {
+      margin: 0;
+      color: #173f6d;
+      font-size: 1.3rem;
+    }
+
+    .detail-auth-close {
+      width: 34px;
+      height: 34px;
+      border-radius: 999px;
+      border: 1px solid var(--detail-border);
+      background: #f4f8fd;
+      color: #21364f;
+      cursor: pointer;
+      font-weight: 800;
+    }
+
+    .detail-auth-tabs {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+
+    .detail-auth-tab {
+      border: 1px solid #c8d8ee;
+      border-radius: 999px;
+      background: #f7fbff;
+      color: #174377;
+      min-height: 38px;
+      cursor: pointer;
+      font-weight: 800;
+    }
+
+    .detail-auth-tab.active {
+      border-color: transparent;
+      background: linear-gradient(135deg, #1f66d0, #1ba0bc);
+      color: #fff;
+    }
+
+    .detail-auth-panel[hidden] {
+      display: none;
+    }
+
+    .detail-auth-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+    }
+
+    .detail-auth-field.full {
+      grid-column: 1 / -1;
+    }
+
+    .detail-auth-field label {
+      display: block;
+      margin-bottom: 5px;
+      color: #334155;
+      font-size: 0.82rem;
+      font-weight: 800;
+    }
+
+    .detail-auth-field input,
+    .detail-auth-field select {
+      width: 100%;
+      border: 1px solid #cbd6e8;
+      border-radius: 10px;
+      padding: 10px;
+      font: inherit;
+    }
+
+    .detail-auth-submit {
+      width: 100%;
+      min-height: 42px;
+      margin-top: 12px;
+      border: 0;
+      border-radius: 999px;
+      background: linear-gradient(135deg, #1f66d0, #1ba0bc);
+      color: #fff;
+      cursor: pointer;
+      font-weight: 800;
+    }
+
+    .detail-auth-feedback {
+      display: none;
+      margin: 10px 0;
+      border-radius: 12px;
+      padding: 10px 12px;
+      font-size: 0.86rem;
+    }
+
+    .detail-auth-feedback.error {
+      display: block;
+      background: #fff0f0;
+      color: #9b1c1c;
+      border: 1px solid #ffc9c9;
+    }
+
+    .detail-auth-feedback.success {
+      display: block;
+      background: #edf9f0;
+      color: #176331;
+      border: 1px solid #b9ebc5;
     }
 
     .detail-notice {
@@ -345,6 +488,84 @@
       margin-top: 4px;
     }
 
+    .detail-messages {
+      display: grid;
+      gap: 8px;
+    }
+
+    .detail-message {
+      border-radius: 12px;
+      padding: 10px 12px;
+      background: #edf7ff;
+      border: 1px solid #cfe2f5;
+      color: #1f4d7a;
+      font-size: 0.82rem;
+      font-weight: 700;
+      line-height: 1.45;
+    }
+
+    .detail-reviews {
+      display: grid;
+      gap: 10px;
+    }
+
+    .detail-review-card,
+    .detail-review-form {
+      border: 1px solid #dce8f5;
+      border-radius: 14px;
+      background: #f8fbff;
+      padding: 12px;
+      display: grid;
+      gap: 8px;
+    }
+
+    .detail-review-head {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .detail-review-name,
+    .detail-review-rating {
+      margin: 0;
+      font-size: 0.86rem;
+      font-weight: 800;
+      color: #1f3656;
+    }
+
+    .detail-review-date,
+    .detail-review-copy,
+    .detail-review-help {
+      margin: 0;
+      font-size: 0.8rem;
+      line-height: 1.45;
+      color: var(--detail-muted);
+    }
+
+    .detail-review-form label {
+      font-size: 0.78rem;
+      font-weight: 800;
+      color: #26486b;
+    }
+
+    .detail-review-form select,
+    .detail-review-form textarea {
+      width: 100%;
+      border: 1px solid #d3e2f2;
+      border-radius: 12px;
+      padding: 10px;
+      font: inherit;
+      color: var(--detail-text);
+      background: #fff;
+    }
+
+    .detail-review-form textarea {
+      min-height: 96px;
+      resize: vertical;
+    }
+
     @media (max-width: 768px) {
       .detail-wrap {
         padding: 14px 12px 22px;
@@ -393,10 +614,66 @@
         aspect-ratio: 4 / 3;
       }
     }
+    @media (max-width: 768px) {
+      .detail-wrap {
+        padding: 14px 10px 96px;
+      }
+
+      .detail-topbar,
+      .detail-back-links,
+      .detail-actions,
+      .room-actions,
+      .review-form-actions {
+        display: grid;
+        grid-template-columns: 1fr;
+        width: 100%;
+      }
+
+      .detail-back-link,
+      .detail-btn,
+      .room-action-btn,
+      .review-submit-btn {
+        width: 100%;
+        min-height: 44px;
+        text-align: center;
+      }
+
+      .detail-hero,
+      .detail-panel {
+        border-radius: 16px;
+      }
+
+      .detail-gallery-thumbs {
+        grid-auto-columns: minmax(82px, 34vw);
+      }
+
+      .room-card,
+      .review-card {
+        min-width: 0;
+      }
+
+      .detail-auth-grid {
+        grid-template-columns: 1fr;
+      }
+
+      input,
+      select,
+      textarea {
+        max-width: 100%;
+      }
+    }
   </style>
 </head>
 <body>
   <main class="detail-wrap">
+    {% if messages %}
+    <div class="detail-messages" aria-live="polite">
+      {% for message in messages %}
+      <div class="detail-message">{{ message }}</div>
+      {% endfor %}
+    </div>
+    {% endif %}
+
     <div class="detail-topbar">
       <div class="detail-back-links">
         <a class="detail-back-link" href="{% url 'main-page' %}#approved-stays">Back to Main Page</a>
@@ -410,17 +687,22 @@
       <p class="detail-subtitle">{{ accommodation.location }}</p>
       <div class="detail-actions">
         <a href="#" class="detail-btn open-chat-query" data-query="create booking preview for {{ accommodation.company_name|escape }}">Create Booking Preview</a>
-        {% if official_page_url %}
-        <a href="{{ official_page_url }}" target="_blank" rel="noopener noreferrer" class="detail-btn primary">Open Official Page</a>
-        {% endif %}
         {% if facebook_url %}
-        <a href="{{ facebook_url }}" target="_blank" rel="noopener noreferrer" class="detail-btn">View Facebook</a>
+        <a href="{{ facebook_url }}" target="_blank" rel="noopener noreferrer" class="detail-btn primary">Open Official Facebook Page</a>
+        {% elif contact_channel_url %}
+        <a href="{{ contact_channel_url }}" target="_blank" rel="noopener noreferrer" class="detail-btn primary">Contact Accommodation Provider</a>
+        {% else %}
+        <span class="detail-btn">No verified provider link yet</span>
         {% endif %}
+        <button type="button" class="detail-btn" id="shareAccommodationBtn">Share</button>
       </div>
     </section>
 
     <div class="detail-notice">
-      This system provides booking previews only. Final booking is completed directly with the accommodation.
+      This is a cost preview and tourism information page only. Final accommodation arrangements are completed through the accommodation's official Facebook page or verified contact channel when available. The system does not process accommodation bookings or payments.
+      {% if not has_verified_provider_link %}
+      No verified provider link is available yet. Please contact the Tourism Office or the accommodation directly for updated details.
+      {% endif %}
     </div>
 
     <section class="detail-panel">
@@ -467,6 +749,10 @@
             {% endif %}
           </p>
         </article>
+        <article class="detail-meta-box">
+          <p class="detail-meta-label">Guest Rating</p>
+          <p class="detail-meta-value">{{ rating_label }}</p>
+        </article>
       </div>
       <p class="detail-room-line">{{ accommodation.description|default:"No detailed description available yet." }}</p>
       <div class="detail-amenities">
@@ -480,8 +766,62 @@
       </div>
     </section>
 
-    <section class="detail-panel">
-      <h2 class="detail-panel-head">Room Options</h2>
+    <section class="detail-panel" id="guest-reviews">
+      <h2 class="detail-panel-head">Guest Ratings & Reviews</h2>
+      <p class="detail-room-line">{{ rating_label }}. Only Tourism Office-reviewed guest feedback is shown publicly.</p>
+
+      <div class="detail-reviews">
+        {% for review in review_rows %}
+        <article class="detail-review-card">
+          <div class="detail-review-head">
+            <p class="detail-review-name">{{ review.display_name }}</p>
+            <p class="detail-review-rating">★ {{ review.rating }} / 5</p>
+          </div>
+          {% if review.comment %}
+          <p class="detail-review-copy">{{ review.comment }}</p>
+          {% endif %}
+          <p class="detail-review-date">{{ review.created_at|date:"M d, Y" }}</p>
+        </article>
+        {% empty %}
+        <article class="detail-review-card">
+          <p class="detail-review-copy">No approved guest reviews yet.</p>
+        </article>
+        {% endfor %}
+      </div>
+
+      {% if user.is_authenticated %}
+      <form class="detail-review-form" method="post" action="{% url 'submit_accommodation_review' accom_id=accommodation.accom_id %}">
+        {% csrf_token %}
+        <label for="review-rating">Your rating</label>
+        <select id="review-rating" name="rating" required>
+          <option value="">Select rating</option>
+          <option value="5" {% if user_review.rating == 5 %}selected{% endif %}>5 - Excellent</option>
+          <option value="4" {% if user_review.rating == 4 %}selected{% endif %}>4 - Very good</option>
+          <option value="3" {% if user_review.rating == 3 %}selected{% endif %}>3 - Good</option>
+          <option value="2" {% if user_review.rating == 2 %}selected{% endif %}>2 - Fair</option>
+          <option value="1" {% if user_review.rating == 1 %}selected{% endif %}>1 - Needs improvement</option>
+        </select>
+        <label for="review-comment">Comment optional</label>
+        <textarea id="review-comment" name="comment" maxlength="1500" placeholder="Share a short, helpful note for future visitors.">{{ user_review.comment|default_if_none:"" }}</textarea>
+        <p class="detail-review-help">
+          {% if user_review %}
+            Your current review status is {{ user_review.status|title }}. Submitting again sends it back for review.
+          {% else %}
+            Your review will be pending until reviewed by Tourism Office staff.
+          {% endif %}
+        </p>
+        <button class="detail-btn primary" type="submit">Submit Review</button>
+      </form>
+      {% else %}
+      <div class="detail-review-card">
+        <p class="detail-review-copy">Log in to submit a review. You can still browse accommodation details and approved reviews without an account.</p>
+        <button type="button" class="detail-btn primary" data-detail-auth-open="login">Log In to Review</button>
+      </div>
+      {% endif %}
+    </section>
+
+    <section class="detail-panel" id="cost-preview">
+      <h2 class="detail-panel-head">Room Options & Cost Preview</h2>
       <div class="detail-rooms">
         {% for room in room_rows %}
         <article class="detail-room-card">
@@ -516,22 +856,298 @@
     </section>
   </main>
 
+  {% if not user.is_authenticated %}
+  <div class="detail-auth-modal" id="detailAuthModal" aria-label="Login or sign up">
+    <div class="detail-auth-card">
+      <div class="detail-auth-head">
+        <h2>Continue on This Page</h2>
+        <button type="button" class="detail-auth-close" id="detailAuthClose" aria-label="Close login dialog">&times;</button>
+      </div>
+      <div class="detail-auth-tabs" role="tablist" aria-label="Authentication options">
+        <button type="button" class="detail-auth-tab active" data-detail-auth-tab="login">Log In</button>
+        <button type="button" class="detail-auth-tab" data-detail-auth-tab="signup">Sign Up</button>
+      </div>
+      <div class="detail-auth-feedback" id="detailAuthFeedback" aria-live="polite"></div>
+
+      <form id="detailLoginForm" class="detail-auth-panel" data-detail-auth-panel="login">
+        {% csrf_token %}
+        <input type="hidden" name="next" value="{{ request.path }}">
+        <div class="detail-auth-grid">
+          <div class="detail-auth-field full">
+            <label for="detail-login-email">Email</label>
+            <input type="email" id="detail-login-email" name="email" autocomplete="email" required>
+          </div>
+          <div class="detail-auth-field full">
+            <label for="detail-login-password">Password</label>
+            <input type="password" id="detail-login-password" name="password" autocomplete="current-password" required>
+          </div>
+        </div>
+        <button type="submit" class="detail-auth-submit">Log In and Continue</button>
+      </form>
+
+      <form id="detailSignupForm" class="detail-auth-panel" data-detail-auth-panel="signup" enctype="multipart/form-data" hidden>
+        {% csrf_token %}
+        <input type="hidden" name="next" value="{{ request.path }}">
+        <input type="hidden" name="username" value="">
+        <input type="hidden" name="owner_signup_intent" value="0">
+        <input type="hidden" name="register_as_accommodation_owner" value="0">
+        <div class="detail-auth-grid">
+          <div class="detail-auth-field">
+            <label for="detail-signup-first-name">First Name</label>
+            <input type="text" id="detail-signup-first-name" name="first_name" required>
+          </div>
+          <div class="detail-auth-field">
+            <label for="detail-signup-last-name">Last Name</label>
+            <input type="text" id="detail-signup-last-name" name="last_name" required>
+          </div>
+          <div class="detail-auth-field">
+            <label for="detail-signup-middle">Middle Initial</label>
+            <input type="text" id="detail-signup-middle" name="middle_initial" maxlength="1">
+          </div>
+          <div class="detail-auth-field">
+            <label for="detail-signup-age">Age</label>
+            <input type="number" id="detail-signup-age" name="age" min="18" required>
+          </div>
+          <div class="detail-auth-field">
+            <label for="detail-signup-country">Country</label>
+            <input type="text" id="detail-signup-country" name="country_of_origin" required>
+          </div>
+          <div class="detail-auth-field">
+            <label for="detail-signup-city">City</label>
+            <input type="text" id="detail-signup-city" name="city" required>
+          </div>
+          <div class="detail-auth-field">
+            <label for="detail-signup-phone">Phone Number</label>
+            <input type="tel" id="detail-signup-phone" name="phone_number" required>
+          </div>
+          <div class="detail-auth-field">
+            <label for="detail-signup-sex">Sex</label>
+            <select id="detail-signup-sex" name="sex" required>
+              <option value="">Select</option>
+              <option value="M">Male</option>
+              <option value="F">Female</option>
+            </select>
+          </div>
+          <div class="detail-auth-field full">
+            <label for="detail-signup-email">Email</label>
+            <input type="email" id="detail-signup-email" name="email" autocomplete="email" required>
+          </div>
+          <div class="detail-auth-field">
+            <label for="detail-signup-password">Password</label>
+            <input type="password" id="detail-signup-password" name="password" autocomplete="new-password" required>
+          </div>
+          <div class="detail-auth-field">
+            <label for="detail-signup-confirm-password">Confirm Password</label>
+            <input type="password" id="detail-signup-confirm-password" name="confirm_password" autocomplete="new-password" required>
+          </div>
+          <div class="detail-auth-field full">
+            <label for="detail-signup-picture">Profile Picture</label>
+            <input type="file" id="detail-signup-picture" name="picture" accept="image/*" required>
+          </div>
+          <div class="detail-auth-field full">
+            <label for="detail-signup-company">Company Name (Optional)</label>
+            <input type="text" id="detail-signup-company" name="company_name">
+          </div>
+        </div>
+        <button type="submit" class="detail-auth-submit">Create Account and Continue</button>
+      </form>
+    </div>
+  </div>
+  {% endif %}
+
   {% include "components/guest_chat_widget.html" %}
   <script>
     (function() {
+      const modal = document.getElementById('detailAuthModal');
+      if (!modal) return;
+      const feedback = document.getElementById('detailAuthFeedback');
+      const loginForm = document.getElementById('detailLoginForm');
+      const signupForm = document.getElementById('detailSignupForm');
+
+      function getCookie(name) {
+        const value = `; ${document.cookie}`;
+        const parts = value.split(`; ${name}=`);
+        if (parts.length === 2) return parts.pop().split(';').shift();
+        return '';
+      }
+
+      function setFeedback(message, type) {
+        if (!feedback) return;
+        feedback.className = `detail-auth-feedback ${type === 'success' ? 'success' : 'error'}`;
+        feedback.textContent = message || '';
+      }
+
+      function clearFeedback() {
+        if (!feedback) return;
+        feedback.className = 'detail-auth-feedback';
+        feedback.textContent = '';
+      }
+
+      function showPanel(panel) {
+        const target = panel === 'signup' ? 'signup' : 'login';
+        clearFeedback();
+        document.querySelectorAll('[data-detail-auth-tab]').forEach((tab) => {
+          tab.classList.toggle('active', tab.getAttribute('data-detail-auth-tab') === target);
+        });
+        document.querySelectorAll('[data-detail-auth-panel]').forEach((entry) => {
+          if (entry.getAttribute('data-detail-auth-panel') === target) {
+            entry.removeAttribute('hidden');
+          } else {
+            entry.setAttribute('hidden', 'hidden');
+          }
+        });
+      }
+
+      function openAuth(panel) {
+        showPanel(panel);
+        modal.classList.add('open');
+        setTimeout(() => {
+          const firstInput = modal.querySelector('[data-detail-auth-panel]:not([hidden]) input:not([type="hidden"])');
+          if (firstInput) firstInput.focus();
+        }, 50);
+      }
+
+      function closeAuth() {
+        modal.classList.remove('open');
+      }
+
+      async function postAuthForm(url, formEl) {
+        const response = await fetch(url, {
+          method: 'POST',
+          body: new FormData(formEl),
+          credentials: 'same-origin',
+          headers: {
+            'X-Requested-With': 'XMLHttpRequest',
+            'X-CSRFToken': getCookie('csrftoken'),
+          },
+        });
+        const contentType = (response.headers.get('content-type') || '').toLowerCase();
+        const data = contentType.includes('application/json')
+          ? await response.json()
+          : { success: response.ok, redirect_url: response.url || '' };
+        if (!response.ok) {
+          throw new Error(data.message || 'Please check your details and try again.');
+        }
+        return data;
+      }
+
+      window.IbayawOpenAuthModal = openAuth;
+
+      document.querySelectorAll('[data-detail-auth-open]').forEach((btn) => {
+        btn.addEventListener('click', function() {
+          openAuth(btn.getAttribute('data-detail-auth-open') || 'login');
+        });
+      });
+      document.querySelectorAll('[data-detail-auth-tab]').forEach((tab) => {
+        tab.addEventListener('click', function() {
+          showPanel(tab.getAttribute('data-detail-auth-tab') || 'login');
+        });
+      });
+      document.getElementById('detailAuthClose')?.addEventListener('click', closeAuth);
+      modal.addEventListener('click', function(event) {
+        if (event.target === modal) closeAuth();
+      });
+
+      loginForm?.addEventListener('submit', async function(event) {
+        event.preventDefault();
+        const submit = loginForm.querySelector('.detail-auth-submit');
+        if (submit) {
+          submit.disabled = true;
+          submit.textContent = 'Logging in...';
+        }
+        try {
+          const data = await postAuthForm("{% url 'login' %}", loginForm);
+          if (!data.success) throw new Error(data.message || 'Invalid email or password.');
+          setFeedback('Login successful. Reloading this page...', 'success');
+          window.location.href = data.redirect_url || window.location.pathname;
+        } catch (error) {
+          setFeedback(error.message || 'Login failed. Please try again.', 'error');
+        } finally {
+          if (submit) {
+            submit.disabled = false;
+            submit.textContent = 'Log In and Continue';
+          }
+        }
+      });
+
+      signupForm?.addEventListener('submit', async function(event) {
+        event.preventDefault();
+        const password = String(document.getElementById('detail-signup-password')?.value || '');
+        const confirmPassword = String(document.getElementById('detail-signup-confirm-password')?.value || '');
+        if (password !== confirmPassword) {
+          setFeedback('Passwords do not match.', 'error');
+          return;
+        }
+        const submit = signupForm.querySelector('.detail-auth-submit');
+        if (submit) {
+          submit.disabled = true;
+          submit.textContent = 'Creating account...';
+        }
+        try {
+          const signupData = await postAuthForm("{% url 'register' %}", signupForm);
+          if (!signupData.success) throw new Error(signupData.message || 'Registration failed.');
+          setFeedback('Account created. Logging you in...', 'success');
+          const loginData = new FormData();
+          loginData.append('email', String(document.getElementById('detail-signup-email')?.value || ''));
+          loginData.append('password', password);
+          loginData.append('next', window.location.pathname);
+          loginData.append('csrfmiddlewaretoken', getCookie('csrftoken'));
+          const response = await fetch("{% url 'login' %}", {
+            method: 'POST',
+            body: loginData,
+            credentials: 'same-origin',
+            headers: {
+              'X-Requested-With': 'XMLHttpRequest',
+              'X-CSRFToken': getCookie('csrftoken'),
+            },
+          });
+          const data = await response.json();
+          if (!response.ok || !data.success) throw new Error(data.message || 'Account created, but login failed. Please log in manually.');
+          window.location.href = data.redirect_url || window.location.pathname;
+        } catch (error) {
+          setFeedback(error.message || 'Registration failed. Please try again.', 'error');
+        } finally {
+          if (submit) {
+            submit.disabled = false;
+            submit.textContent = 'Create Account and Continue';
+          }
+        }
+      });
+    })();
+
+    (function() {
       const mainImage = document.getElementById('detailGalleryMainImage');
       const thumbs = Array.from(document.querySelectorAll('[data-gallery-thumb="1"]'));
-      if (!mainImage || thumbs.length <= 1) return;
-      thumbs.forEach((btn) => {
-        btn.addEventListener('click', function() {
-          const imageUrl = String(btn.getAttribute('data-gallery-url') || '').trim();
-          const imageAlt = String(btn.getAttribute('data-gallery-alt') || '').trim();
-          if (!imageUrl) return;
-          mainImage.src = imageUrl;
-          if (imageAlt) mainImage.alt = imageAlt;
-          thumbs.forEach((entry) => entry.classList.remove('is-active'));
-          btn.classList.add('is-active');
+      if (mainImage && thumbs.length > 1) {
+        thumbs.forEach((btn) => {
+          btn.addEventListener('click', function() {
+            const imageUrl = String(btn.getAttribute('data-gallery-url') || '').trim();
+            const imageAlt = String(btn.getAttribute('data-gallery-alt') || '').trim();
+            if (!imageUrl) return;
+            mainImage.src = imageUrl;
+            if (imageAlt) mainImage.alt = imageAlt;
+            thumbs.forEach((entry) => entry.classList.remove('is-active'));
+            btn.classList.add('is-active');
+          });
         });
+      }
+      const shareBtn = document.getElementById('shareAccommodationBtn');
+      if (!shareBtn) return;
+      shareBtn.addEventListener('click', async function () {
+        const title = "{{ accommodation.company_name|escapejs }}";
+        const url = window.location.href;
+        if (navigator.share) {
+          try {
+            await navigator.share({ title, url });
+            return;
+          } catch (e) {}
+        }
+        try {
+          await navigator.clipboard.writeText(url);
+          alert('Link copied to clipboard.');
+        } catch (e) {
+          prompt('Copy this link:', url);
+        }
       });
     })();
   </script>

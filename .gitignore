@@ -64,3 +64,21 @@ artifacts/text_cnn_intent/baseline_before_boost/
 
 # Database dumps
 *.sql
+
+# Post-defense generated import/validation artifacts
+artifacts/import_reports/
+artifacts/validation/*.json
+artifacts/validation/*.csv
+artifacts/validation/*_report.*
+
+# Local/raw training datasets (not needed for deployment commits)
+thesis_image_dataset/
+raw_openimages/
+raw_image_training/
+raw_training_images/
+
+# Temporary screenshots and browser test artifacts
+screenshots/
+tmp_screenshots/
+test_artifacts/
+browser_test_artifacts/
